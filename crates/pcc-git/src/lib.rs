@@ -457,9 +457,17 @@ impl Repo {
     }
 }
 
+/// Compares paths textually, then through the filesystem so that 8.3 short
+/// names (`RUNNER~1`) and long names refer to the same folder.
 fn same_path(a: &str, b: &str) -> bool {
     let n = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_ascii_lowercase();
-    n(a) == n(b)
+    if n(a) == n(b) {
+        return true;
+    }
+    match (Path::new(a).canonicalize(), Path::new(b).canonicalize()) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
 }
 
 fn env_or(k: &str, d: &str) -> String {
