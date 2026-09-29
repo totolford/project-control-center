@@ -71,6 +71,10 @@ impl Layout {
     pub fn snapshots_dir(&self) -> PathBuf {
         self.dir.join("snapshots")
     }
+    /// UI workspace layout (tabs and panel tree), owned by the UI.
+    pub fn workspace_json(&self) -> PathBuf {
+        self.dir.join("settings").join("workspace.json")
+    }
     pub fn worktrees_dir(&self) -> PathBuf {
         self.dir.join("worktrees")
     }

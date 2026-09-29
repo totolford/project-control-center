@@ -44,6 +44,8 @@ pub struct ProjectSnapshot {
 #[serde(rename_all = "camelCase", default)]
 pub struct AgentSpec {
     pub id: Option<String>,
+    /// Provider id; defaults to Claude Code.
+    pub provider: Option<String>,
     pub name: String,
     pub role: String,
     pub instructions: Option<String>,

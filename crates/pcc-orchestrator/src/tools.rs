@@ -246,6 +246,7 @@ fn call_central(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<St
             let a = e.create_agent(
                 AgentSpec {
                     id: s(args, "id").map(str::to_string),
+                    provider: None,
                     name: req(args, "name")?.to_string(),
                     role: req(args, "role")?.to_string(),
                     instructions: s(args, "instructions").map(str::to_string),

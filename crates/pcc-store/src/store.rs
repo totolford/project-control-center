@@ -752,6 +752,26 @@ impl ProjectStore {
         memory::list(&self.layout, &agents)
     }
 
+    /// The saved workspace layout, if any.
+    pub fn load_workspace(&self) -> Result<Option<serde_json::Value>> {
+        match fs::read_to_string(self.layout.workspace_json()) {
+            Ok(s) => Ok(Some(serde_json::from_str(&s)?)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn save_workspace(&self, layout: &serde_json::Value) -> Result<()> {
+        if !layout.is_object() {
+            return Err(Error::invalid("the workspace layout must be a JSON object"));
+        }
+        let text = serde_json::to_string_pretty(layout)?;
+        if text.len() > 1_000_000 {
+            return Err(Error::invalid("the workspace layout is too large"));
+        }
+        crate::layout::write_atomic(&self.layout.workspace_json(), text.as_bytes())
+    }
+
     pub fn snapshots_file(&self) -> PathBuf {
         self.layout.snapshots_dir().join("snapshots.json")
     }
@@ -920,6 +940,18 @@ mod tests {
     }
 
     #[test]
+    fn workspace_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = ProjectStore::open_ephemeral(tmp.path(), "t").unwrap();
+        assert_eq!(s.load_workspace().unwrap(), None);
+        let w = serde_json::json!({"version": 1, "tabs": []});
+        s.save_workspace(&w).unwrap();
+        assert_eq!(s.load_workspace().unwrap(), Some(w));
+        assert!(tmp.path().join(".agent-project/settings/workspace.json").is_file());
+        assert!(s.save_workspace(&serde_json::json!([1])).is_err());
+    }
+
+    #[test]
     fn agents_sorted_central_first() {
         let tmp = tempfile::tempdir().unwrap();
         let s = ProjectStore::open_ephemeral(tmp.path(), "t").unwrap();
@@ -927,6 +959,7 @@ mod tests {
             id: id.into(),
             name: id.into(),
             kind,
+            provider: pcc_core::CLAUDE_CODE_PROVIDER.into(),
             role: "r".into(),
             instructions: String::new(),
             status: AgentStatus::Offline,

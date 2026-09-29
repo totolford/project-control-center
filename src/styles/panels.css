@@ -1,0 +1,388 @@
+/* ------------------------------------------------------------------ panel content */
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.pad-sm {
+  padding: 8px 10px;
+}
+.pad-md {
+  padding: 12px 14px;
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.strong {
+  font-weight: 600;
+}
+.panel-scroll .section-label:first-child {
+  margin-top: 2px;
+}
+.kv-mini {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.action-list li {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  min-width: 0;
+}
+.action-list li .mono:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-btn {
+  border: none;
+  cursor: pointer;
+}
+
+/* agent terminal panel */
+.agent-term {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.terminal-wrap.dense {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  min-height: 60px;
+}
+.terminal-wrap.dense .log {
+  padding: 1px 10px;
+}
+.agent-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+.agent-foot-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.agent-foot-action {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.agent-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--border);
+}
+.agent-input input {
+  flex: 1;
+  height: 26px;
+  padding: 3px 8px;
+  font-size: 12px;
+  background: var(--bg);
+}
+
+/* transcript symbols */
+.log-dim {
+  color: var(--dim);
+}
+.log-args {
+  font-size: 11px;
+}
+
+/* central panel */
+.central-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.central-mission {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+.central-mission .progress {
+  width: 45%;
+}
+.central-latest {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.worker-list {
+  display: flex;
+  flex-direction: column;
+}
+.worker-row {
+  display: grid;
+  grid-template-columns: 12px minmax(70px, 140px) minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.worker-row:hover {
+  background: var(--hover);
+}
+.worker-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-action {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* mission */
+.mission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mission-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.checklist-tasks {
+  display: flex;
+  flex-direction: column;
+}
+.check-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.check-task:hover {
+  background: var(--hover);
+}
+.check-mark {
+  width: 14px;
+  text-align: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.tone-grey-fg {
+  color: var(--grey);
+}
+.tone-blue-fg {
+  color: var(--blue);
+}
+.tone-orange-fg {
+  color: var(--orange);
+}
+.tone-dim-fg {
+  color: var(--dim);
+}
+.check-agent {
+  max-width: 35%;
+}
+
+/* connections / roblox */
+.conn-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.studio-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: var(--bg);
+}
+.studio-agent {
+  padding: 4px 0 8px;
+}
+
+/* task board */
+.board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  overflow-x: auto;
+}
+.board-col {
+  flex: 1 0 150px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.board-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.board-col-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+}
+.task-card:hover {
+  border-color: var(--border-strong);
+}
+.task-card.prio-high {
+  border-left-color: var(--amber);
+}
+.task-card.prio-critical {
+  border-left-color: var(--red);
+}
+.task-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* memory / activity / review */
+.memory-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.memory-panel .memory-textarea {
+  min-height: 120px;
+}
+.activity-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.activity-panel .event-scroll {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+}
+.activity-panel .drawer {
+  width: 300px;
+  border-radius: 0;
+  border-width: 0 0 0 1px;
+}
+.review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.review-summary {
+  max-height: 90px;
+  overflow-y: auto;
+}
+.review-changes textarea {
+  width: 100%;
+}
+
+/* swarm overview */
+.swarm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  padding: 4px;
+}
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  min-width: 0;
+}
+.agent-card.retired {
+  opacity: 0.5;
+}
+.agent-card-action {
+  font-size: 11.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.provider-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.provider-list li:last-child {
+  border-bottom: none;
+}
+.provider-list li.unavailable {
+  opacity: 0.6;
+}
+.state-label {
+  transition: color 0.25s;
+}

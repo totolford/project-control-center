@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- NEXUS branding and swarm workspace UI: tiling agent panels with live terminals, Central panel, workspace tabs, notifications, command bar, mission composer.
+- Agent provider registry (Claude Code adapter; other runtimes detected but unavailable).
+- Per-project workspace layout persisted in `.agent-project/settings/workspace.json`.
+- "Show in Explorer" for project paths.
+
 ## 0.1.0
 
 First public version.

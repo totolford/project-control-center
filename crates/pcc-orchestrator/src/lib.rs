@@ -8,6 +8,7 @@
 //! * `policy`  – tool-call permission decisions.
 //! * `launch`  – Claude Code launch specification per agent.
 //! * `prompts` – system prompts and session input formatting.
+//! * `providers` – agent runtimes (Claude Code adapter, detected others).
 //! * `dto`     – shapes shared with the UI.
 
 mod connections;
@@ -17,6 +18,7 @@ mod gitops;
 pub mod launch;
 pub mod policy;
 pub mod prompts;
+pub mod providers;
 pub mod tools;
 mod work;
 

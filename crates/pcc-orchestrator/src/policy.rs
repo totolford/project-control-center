@@ -142,6 +142,7 @@ mod tests {
             id: "movement".into(),
             name: "Movement".into(),
             kind: AgentKind::Worker,
+            provider: pcc_core::CLAUDE_CODE_PROVIDER.into(),
             role: "r".into(),
             instructions: String::new(),
             status: AgentStatus::Working,

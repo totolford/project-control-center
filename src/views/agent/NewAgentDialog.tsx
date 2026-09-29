@@ -3,6 +3,9 @@ import { api } from "../../lib/api";
 import { attempt } from "../../lib/toast";
 import type { AgentSpec } from "../../lib/types";
 import { useStore } from "../../store";
+import { useProviderName } from "../../workspace/hooks";
+import { addPanelToActive } from "../../workspace/layout";
+import { useWorkspace } from "../../workspace/store";
 import { Modal } from "../../components/Modal";
 import { Field } from "../../components/Common";
 import { Segmented } from "../../components/Tabs";
@@ -15,9 +18,10 @@ const ISOLATION: { value: IsolationChoice; label: string }[] = [
   { value: "worktree", label: "Own worktree" },
 ];
 
-export function NewAgentDialog({ onClose }: { onClose: () => void }) {
+export function NewAgentDialog({ onClose, provider }: { onClose: () => void; provider: string }) {
+  const providerName = useProviderName(provider);
   const upsertAgent = useStore((s) => s.upsertAgent);
-  const openAgent = useStore((s) => s.openAgent);
+  const update = useWorkspace((s) => s.update);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -30,6 +34,7 @@ export function NewAgentDialog({ onClose }: { onClose: () => void }) {
     const agent = await attempt(
       () =>
         api.createAgent({
+          provider,
           name: name.trim(),
           role: role.trim(),
           instructions: instructions.trim() || undefined,
@@ -42,13 +47,13 @@ export function NewAgentDialog({ onClose }: { onClose: () => void }) {
     if (agent) {
       upsertAgent(agent);
       onClose();
-      openAgent(agent.id);
+      update((ws) => addPanelToActive(ws, { type: "AgentTerminal", agentId: agent.id }));
     }
   };
 
   return (
     <Modal
-      title="New agent"
+      title={`New ${providerName} agent`}
       onClose={onClose}
       locked={busy}
       width={560}

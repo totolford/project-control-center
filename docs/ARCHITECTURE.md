@@ -1,6 +1,6 @@
 # Architecture
 
-Project Control Center (PCC) is a Tauri 2 desktop application. The UI is React +
+NEXUS (codename Project Control Center, "PCC") is a Tauri 2 desktop application. The UI is React +
 TypeScript; everything else is Rust, split into focused crates.
 
 ```
@@ -62,6 +62,20 @@ Processes are placed in a Windows job object with *kill on close*, so no session
 survives the application. Authentication is the user's existing Claude Code login;
 the application never reads or stores Claude credentials.
 
+## Providers
+
+Every agent has a `provider` (runtime adapter). `pcc-orchestrator/src/providers.rs`
+defines the `AgentProvider` trait and a registry: `claude-code` has an adapter; Codex
+CLI, generic CLIs and MCP workers are detected/listed but not selectable until an
+adapter is written. The engine refuses to start an agent whose provider has no adapter.
+
+## Workspace layout
+
+The UI's tiling layout (tabs, split tree, panels) is UI-owned JSON persisted per
+project in `.agent-project/settings/workspace.json` through `load_workspace` /
+`save_workspace`; the UI validates and migrates it on load and drops panels that
+reference deleted agents or connections.
+
 ## Coordination
 
 Agents act only through the `pcc` MCP tools (see `tools.rs`):
@@ -115,6 +129,7 @@ ones). Central can create workers only within `maxWorkerPermissions`.
 
 ```
 project.json, settings.json       project identity and settings
+settings/workspace.json           UI workspace layout (tabs and panels)
 state.db                          SQLite (WAL): agents, tasks, missions, messages,
                                   sessions, logs, events, permission rules, connections
 memory/*.md, agents/<id>/memory.md  curated memory injected into prompts (budgeted)

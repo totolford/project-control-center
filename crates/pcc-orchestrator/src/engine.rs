@@ -198,6 +198,7 @@ impl Engine {
             id: CENTRAL_ID.into(),
             name: "Central".into(),
             kind: AgentKind::Central,
+            provider: pcc_core::CLAUDE_CODE_PROVIDER.into(),
             role: "Orchestrator: plans missions, creates agents and tasks, coordinates and reviews".into(),
             instructions: String::new(),
             status: AgentStatus::Offline,
@@ -382,6 +383,7 @@ impl Engine {
         if agent.status == AgentStatus::Retired {
             return Err(Error::invalid(format!("{} is retired", agent.name)));
         }
+        crate::providers::ensure_supported(&agent.provider)?;
         let notes = launch::ensure_workdir(&self.store, self.repo.as_ref(), &mut agent);
         let connections = self.store.list_connections()?;
         let branch = self.repo.as_ref().and_then(Repo::current_branch);

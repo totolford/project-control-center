@@ -16,14 +16,13 @@ import type {
 import { addLiveMessage, applyEvent, fromSnapshot, removeById, upsertById, type ProjectData } from "./state/reducer";
 
 export type ViewName =
-  | "overview"
+  | "swarm"
   | "missions"
-  | "agents"
+  | "memory"
+  | "connections"
+  | "activity"
   | "agent"
   | "tasks"
-  | "connections"
-  | "memory"
-  | "activity"
   | "git"
   | "settings";
 
@@ -38,6 +37,9 @@ export interface View {
 interface AppState {
   project: ProjectData | null;
   view: View;
+  /** Agents whose last finished turn ended in an error (from their live logs). */
+  turnErrors: Record<string, boolean>;
+  setTurnError: (agentId: string, error: boolean) => void;
   loadSnapshot: (snap: ProjectSnapshot) => void;
   applyEvent: (e: PccEvent) => void;
   closeProject: () => void;
@@ -62,10 +64,13 @@ function patchProject(state: AppState, fn: (p: ProjectData) => ProjectData): Par
 
 export const useStore = create<AppState>((set, get) => ({
   project: null,
-  view: { name: "overview" },
+  view: { name: "swarm" },
+  turnErrors: {},
+  setTurnError: (agentId, error) =>
+    set((s) => (Boolean(s.turnErrors[agentId]) === error ? {} : { turnErrors: { ...s.turnErrors, [agentId]: error } })),
   loadSnapshot: (snap) => set((s) => ({ project: fromSnapshot(snap, s.project) })),
   applyEvent: (e) => set((s) => patchProject(s, (p) => applyEvent(p, e))),
-  closeProject: () => set({ project: null, view: { name: "overview" } }),
+  closeProject: () => set({ project: null, view: { name: "swarm" }, turnErrors: {} }),
   navigate: (view) => set({ view }),
   openAgent: (agentId) => set({ view: { name: "agent", agentId } }),
   openTask: (taskId) => set({ view: { name: "tasks", taskId } }),
@@ -108,3 +113,18 @@ export const useAgent = (id: string | null | undefined) =>
   useStore((s) => (id ? s.project?.agents.find((a) => a.id === id) : undefined));
 export const useTask = (id: string | null | undefined) =>
   useStore((s) => (id ? s.project?.tasks.find((t) => t.id === id) : undefined));
+
+/** Central first, then by creation order. */
+export function sortAgents(agents: Agent[]): Agent[] {
+  return [...agents].sort((a, b) => (a.kind === "central" ? -1 : b.kind === "central" ? 1 : a.createdAt.localeCompare(b.createdAt)));
+}
+
+/** "#n" creation-order number of an agent among all agents (1-based). */
+export function useAgentNumber(id: string): number {
+  return useStore((s) => {
+    const agents = s.project?.agents ?? NO_AGENTS;
+    const me = agents.find((a) => a.id === id);
+    if (!me) return 0;
+    return agents.filter((a) => a.createdAt < me.createdAt || (a.createdAt === me.createdAt && a.id <= me.id)).length;
+  });
+}

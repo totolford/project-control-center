@@ -1,6 +1,6 @@
 //! Tauri commands. One-to-one with `src/lib/api.ts`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::Serialize;
 use serde_json::json;
@@ -100,7 +100,7 @@ async fn activate(app: &AppHandle, state: &AppState, store: ProjectStore) -> Cmd
     *state.project.write().await = Some(OpenProject::new(app, orch));
     recent::touch(&state.recent_file(), &name, &root.to_string_lossy())?;
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.set_title(&format!("{name} — Project Control Center"));
+        let _ = w.set_title(&format!("{name} — {}", crate::APP_NAME));
     }
     tracing::info!("project opened: {}", root.display());
     Ok(snapshot)
@@ -143,7 +143,7 @@ pub async fn open_project(app: AppHandle, state: State<'_, AppState>, path: Stri
 pub async fn close_project(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     state.close_project().await;
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.set_title("Project Control Center");
+        let _ = w.set_title(crate::APP_NAME);
     }
     Ok(())
 }
@@ -478,16 +478,44 @@ pub async fn create_pull_request(
     Ok(url)
 }
 
-// ---------------------------------------------------------------- misc
+// ---------------------------------------------------------------- workspace / providers
 
 #[tauri::command]
-pub async fn open_path(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
-    let p = Path::new(&path);
-    // Only folders/files of the open project (including .agent-project) can be opened.
+pub async fn load_workspace(state: State<'_, AppState>) -> CmdResult<Option<serde_json::Value>> {
+    state.orch().await?.store.load_workspace()
+}
+
+#[tauri::command]
+pub async fn save_workspace(state: State<'_, AppState>, layout: serde_json::Value) -> CmdResult<()> {
+    state.orch().await?.store.save_workspace(&layout)
+}
+
+#[tauri::command]
+pub async fn list_agent_providers() -> CmdResult<Vec<pcc_orchestrator::providers::ProviderInfo>> {
+    blocking(pcc_orchestrator::providers::list).await
+}
+
+// ---------------------------------------------------------------- misc
+
+/// Only folders/files of the open project (including .agent-project) can be opened.
+async fn project_path(state: &AppState, path: &str) -> CmdResult<PathBuf> {
+    let p = PathBuf::from(path);
     let root = state.orch().await?.store.root().to_path_buf();
-    let inside = pcc_core::permissions::normalize_path(p).starts_with(pcc_core::permissions::normalize_path(&root));
+    let inside = pcc_core::permissions::normalize_path(&p).starts_with(pcc_core::permissions::normalize_path(&root));
     if !inside {
         return Err(Error::Denied("only paths inside the project can be opened".into()));
     }
-    app.opener().open_path(path, None::<&str>).map_err(|e| Error::Process(e.to_string()))
+    Ok(p)
+}
+
+#[tauri::command]
+pub async fn open_path(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    let p = project_path(&state, &path).await?;
+    app.opener().open_path(p.to_string_lossy(), None::<&str>).map_err(|e| Error::Process(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn reveal_path(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    let p = project_path(&state, &path).await?;
+    app.opener().reveal_item_in_dir(p).map_err(|e| Error::Process(e.to_string()))
 }

@@ -9,7 +9,6 @@ import {
   parseKeyValueLines,
   parseLines,
   ratio,
-  truncate,
 } from "./format";
 import { mergeLogs } from "./logBus";
 import type { LogEntry } from "./types";
@@ -36,12 +35,6 @@ describe("format helpers", () => {
     expect(formatDuration("2026-01-01T00:00:00Z", "2026-01-01T00:00:42Z")).toBe("42s");
     expect(formatDuration("2026-01-01T00:00:00Z", "2026-01-01T00:04:12Z")).toBe("4m 12s");
     expect(formatDuration("2026-01-01T00:00:00Z", "2026-01-01T02:05:00Z")).toBe("2h 5m");
-  });
-
-  it("truncates and collapses whitespace", () => {
-    expect(truncate("hello   world", 50)).toBe("hello world");
-    expect(truncate("abcdefghij", 5)).toBe("abcd…");
-    expect(truncate(null, 5)).toBe("");
   });
 
   it("formats costs and sizes", () => {

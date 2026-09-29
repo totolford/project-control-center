@@ -119,6 +119,9 @@ pub struct Agent {
     pub id: String,
     pub name: String,
     pub kind: AgentKind,
+    /// Agent provider (runtime adapter) id, e.g. `claude-code`.
+    #[serde(default = "default_provider")]
+    pub provider: String,
     pub role: String,
     pub instructions: String,
     pub status: AgentStatus,
@@ -139,6 +142,13 @@ pub struct Agent {
     pub created_by: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// The provider every agent used before providers existed, and the default.
+pub const CLAUDE_CODE_PROVIDER: &str = "claude-code";
+
+fn default_provider() -> String {
+    CLAUDE_CODE_PROVIDER.to_string()
 }
 
 // ---------------------------------------------------------------- tasks

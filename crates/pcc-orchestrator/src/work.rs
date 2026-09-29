@@ -27,6 +27,9 @@ impl Engine {
             None => ids::slugify(name),
         };
         valid_agent_id(&id)?;
+        if let Some(p) = &spec.provider {
+            crate::providers::ensure_supported(p)?;
+        }
         if self.store.get_agent(&id)?.is_some() {
             return Err(Error::Conflict(format!("an agent with id `{id}` already exists")));
         }
@@ -63,6 +66,7 @@ impl Engine {
             id: id.clone(),
             name: name.to_string(),
             kind: AgentKind::Worker,
+            provider: spec.provider.clone().unwrap_or_else(|| pcc_core::CLAUDE_CODE_PROVIDER.into()),
             role: spec.role.trim().to_string(),
             instructions: spec.instructions.unwrap_or_default().trim().to_string(),
             status: AgentStatus::Offline,

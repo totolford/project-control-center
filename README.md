@@ -1,6 +1,8 @@
-# Project Control Center
+# NEXUS — Multi-Agent Project Control Center
 
-**A Windows control center for multi-agent vibe coding with Claude Code.**
+**A Windows mission control for multi-agent vibe coding with Claude Code.**
+
+> NEXUS is the working name of the app (repository: `project-control-center`).
 
 Pick a project folder, give a mission in plain language, and a permanent **Central
 agent** plans it, creates specialised worker agents, splits the work into tasks with
@@ -8,11 +10,20 @@ dependencies, routes messages between agents, reviews results and keeps the
 project's memory up to date. Every agent is a real Claude Code session; every task,
 message and file change is real and persisted.
 
-It is not an IDE. It is centred on projects, missions, agents, tasks, connections,
-memory and results — use your usual editor alongside it.
+It is not an IDE with a chatbot: it is a control center where you watch a swarm of
+agents work on your project live — tiled agent panels with their real terminals, the
+Central agent's coordination view, connections such as Roblox Studio, missions,
+memory and a timeline. Use your usual editor alongside it.
 
 ## Features
 
+- **Swarm workspace** — a tiling workspace of panels (agent terminals, Central,
+  missions, task board, Roblox Studio / connection panels, diffs, memory, activity):
+  drag & drop, resize, maximize, minimize, pin, open in a new tab. Several workspace
+  tabs per project; the layout is saved in `.agent-project/settings/workspace.json`.
+- **Agent providers** — agents run on providers (adapters). Claude Code is supported;
+  other runtimes (e.g. Codex CLI) are detected and shown as unavailable until an
+  adapter exists — nothing is faked.
 - **Projects as folders** — the app creates `.agent-project/` in your folder: the
   persistent brain of the project (settings, memory, agents, tasks, messages,
   sessions, logs, plans, snapshots). Close the app, reboot, reopen: the state is there.

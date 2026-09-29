@@ -8,6 +8,7 @@ import { Field, PageHeader, Section, Spinner } from "../components/Common";
 import { PermissionEditor } from "../components/PermissionEditor";
 import { ClaudeStatus, useClaudeInfo } from "../components/ClaudeStatus";
 import { UpdatePanel } from "./settings/UpdatePanel";
+import { WorkspaceSettings } from "./settings/WorkspaceSettings";
 
 function numberOrNull(v: string): number | null {
   const n = Number(v);
@@ -114,6 +115,8 @@ export function Settings() {
           </dl>
         )}
       </Section>
+
+      <WorkspaceSettings />
 
       <UpdatePanel />
     </div>

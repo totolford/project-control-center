@@ -55,6 +55,8 @@ export interface Agent {
   id: string;
   name: string;
   kind: AgentKind;
+  /** Provider (runtime adapter) id, e.g. "claude-code". */
+  provider: string;
   role: string;
   instructions: string;
   status: AgentStatus;
@@ -416,6 +418,8 @@ export interface ProjectSnapshot {
 
 export interface AgentSpec {
   id?: string;
+  /** Provider id from listAgentProviders(); only `available` providers are accepted. Defaults to "claude-code". */
+  provider?: string;
   name: string;
   role: string;
   instructions?: string;
@@ -465,4 +469,16 @@ export interface AppInfo {
   version: string;
   dataDir: string;
   logDir: string;
+}
+
+/** A runtime an agent can run on. Only `available` ones can be selected. */
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  /** An adapter exists and the runtime is installed. */
+  available: boolean;
+  /** The runtime was found on this machine (may still lack an adapter). */
+  installed: boolean;
+  detail: string;
 }

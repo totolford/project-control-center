@@ -117,8 +117,8 @@ export function AgentDetail({ agentId }: { agentId: string }) {
     return (
       <div className="page">
         <EmptyState title="Agent not found">
-          <button className="btn" onClick={() => navigate({ name: "agents" })}>
-            Back to agents
+          <button className="btn" onClick={() => navigate({ name: "swarm" })}>
+            Back to swarm
           </button>
         </EmptyState>
       </div>
@@ -129,7 +129,7 @@ export function AgentDetail({ agentId }: { agentId: string }) {
   return (
     <div className="page page-fill agent-detail">
       <div className="agent-header">
-        <button className="icon-btn" onClick={() => navigate({ name: "agents" })} aria-label="Back to agents">
+        <button className="icon-btn" onClick={() => navigate({ name: "swarm" })} aria-label="Back to swarm">
           <ArrowLeft size={16} />
         </button>
         <div className="grow">

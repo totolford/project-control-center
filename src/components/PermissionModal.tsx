@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { api } from "../lib/api";
 import { run } from "../lib/toast";
 import { formatClock } from "../lib/format";
 import type { PermissionDecision } from "../lib/types";
 import { useAgent, usePendingPermissions, useStore } from "../store";
+import { useUi } from "../state/ui";
 import { Modal } from "./Modal";
 import { JsonView } from "./Common";
 
@@ -15,7 +16,16 @@ export function PermissionModal() {
   const agent = useAgent(req?.agentId);
   const refresh = useStore((s) => s.refresh);
   const [busy, setBusy] = useState(false);
-  if (!req) return null;
+  const deferred = useUi((s) => s.permissionsDeferred);
+  const setDeferred = useUi((s) => s.setPermissionsDeferred);
+  const newestId = queue[queue.length - 1]?.id;
+
+  // A new request brings the prompt back even if it was put aside.
+  useEffect(() => {
+    if (newestId) setDeferred(false);
+  }, [newestId, setDeferred]);
+
+  if (!req || deferred) return null;
 
   const decide = async (decision: PermissionDecision) => {
     setBusy(true);
@@ -40,6 +50,9 @@ export function PermissionModal() {
         <>
           <button className="btn danger" onClick={() => void decide("reject")} disabled={busy} autoFocus>
             Reject
+          </button>
+          <button className="btn ghost" onClick={() => setDeferred(true)} disabled={busy} title="Hide until a new request arrives (status bar shows pending count)">
+            Later
           </button>
           <div className="spacer" />
           <button className="btn" onClick={() => void decide("allow_once")} disabled={busy}>

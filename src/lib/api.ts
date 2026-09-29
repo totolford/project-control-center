@@ -97,8 +97,17 @@ export const api = {
   createPullRequest: (agentId: string, title: string, body: string) =>
     invoke<string>("create_pull_request", { agentId, title, body }),
 
+  // ---------------------------------------------------------------- workspace / providers
+  /** UI-owned layout JSON stored in .agent-project/settings/workspace.json (null if never saved). */
+  loadWorkspace: () => invoke<unknown | null>("load_workspace"),
+  saveWorkspace: (layout: object) => invoke<void>("save_workspace", { layout }),
+  listAgentProviders: () => invoke<T.ProviderInfo[]>("list_agent_providers"),
+
   // ---------------------------------------------------------------- misc
+  /** Opens a file/folder of the project with the default app (folders open in Explorer). */
   openPath: (path: string) => invoke<void>("open_path", { path }),
+  /** Shows the item selected in Windows Explorer. */
+  revealPath: (path: string) => invoke<void>("reveal_path", { path }),
 };
 
 export function onEvent(cb: (e: T.PccEvent) => void): Promise<UnlistenFn> {

@@ -8,6 +8,9 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use state::AppState;
 
+/// Display name. Provisional branding: also change `productName` in tauri.conf.json and `src/lib/brand.ts`.
+pub const APP_NAME: &str = "NEXUS";
+
 fn init_logging(log_dir: &std::path::Path) -> Option<tracing_appender::non_blocking::WorkerGuard> {
     std::fs::create_dir_all(log_dir).ok()?;
     let file = tracing_appender::rolling::daily(log_dir, "app.log");
@@ -43,7 +46,7 @@ pub fn run() {
                 // Flushes the file logger when the app exits.
                 app.manage(guard);
             }
-            tracing::info!("Project Control Center {} starting", app.package_info().version);
+            tracing::info!("{} {} starting", APP_NAME, app.package_info().version);
             app.manage(AppState::new(data_dir, log_dir));
             Ok(())
         })
@@ -101,17 +104,21 @@ pub fn run() {
             commands::github_status,
             commands::github_overview,
             commands::create_pull_request,
+            commands::load_workspace,
+            commands::save_workspace,
+            commands::list_agent_providers,
             commands::open_path,
+            commands::reveal_path,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Project Control Center");
+        .expect("error while building the application");
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
             // Stop every agent session and mark them for recovery on next start.
             let state = handle.state::<AppState>();
             tauri::async_runtime::block_on(state.close_project());
-            tracing::info!("Project Control Center exited");
+            tracing::info!("{APP_NAME} exited");
         }
     });
 }

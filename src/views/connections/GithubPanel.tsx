@@ -41,7 +41,8 @@ function ItemList({ items, empty }: { items: GhItem[]; empty: string }) {
   );
 }
 
-export function GithubPanel() {
+/** GitHub status and repository overview. `bare` renders without the page Section (for workspace panels). */
+export function GithubPanel({ bare }: { bare?: boolean }) {
   const [status, setStatus] = useState<GithubStatus | null>(null);
   const [overview, setOverview] = useState<GithubOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,15 +66,13 @@ export function GithubPanel() {
     void load();
   }, [load]);
 
-  return (
-    <Section
-      title="GitHub"
-      actions={
-        <button className="btn ghost" onClick={() => void load()} disabled={loading} aria-label="Refresh GitHub">
-          {loading ? <Spinner size={12} /> : <RefreshCw size={13} />}
-        </button>
-      }
-    >
+  const refresh = (
+    <button className="btn ghost" onClick={() => void load()} disabled={loading} aria-label="Refresh GitHub">
+      {loading ? <Spinner size={12} /> : <RefreshCw size={13} />}
+    </button>
+  );
+  const content = (
+    <>
       {error && <div className="notice notice-error">{error}</div>}
       {status && (
         <div className="gh-status">
@@ -136,6 +135,19 @@ export function GithubPanel() {
           </div>
         </div>
       )}
+    </>
+  );
+  if (bare) {
+    return (
+      <div className="panel-scroll pad-sm">
+        <div className="row-end">{refresh}</div>
+        {content}
+      </div>
+    );
+  }
+  return (
+    <Section title="GitHub" actions={refresh}>
+      {content}
     </Section>
   );
 }

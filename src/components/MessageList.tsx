@@ -5,6 +5,7 @@ import { attempt } from "../lib/toast";
 import { formatClock } from "../lib/format";
 import type { Agent, Message } from "../lib/types";
 import { useAgents, useLiveMessages, useStore } from "../store";
+import { useUi } from "../state/ui";
 import { Loading } from "./Common";
 
 /** Message history for one agent (or all when null), merged with live AgentMessage events. Newest first. */
@@ -40,7 +41,13 @@ const Party = memo(function Party({ id, agents }: { id: string; agents: Agent[] 
   const known = agents.some((a) => a.id === id);
   if (!known) return <span className="msg-party">{nameOf(agents, id)}</span>;
   return (
-    <button className="msg-party link-btn" onClick={() => openAgent(id)}>
+    <button
+      className="msg-party link-btn"
+      onClick={(e) => {
+        e.stopPropagation();
+        openAgent(id);
+      }}
+    >
       {nameOf(agents, id)}
     </button>
   );
@@ -48,8 +55,15 @@ const Party = memo(function Party({ id, agents }: { id: string; agents: Agent[] 
 
 export const MessageRow = memo(function MessageRow({ msg, agents, compact }: { msg: Message; agents: Agent[]; compact?: boolean }) {
   const openTask = useStore((s) => s.openTask);
+  const openMessage = useUi((s) => s.openMessage);
   return (
-    <div className={`msg${compact ? " compact" : ""}`}>
+    <div
+      className={`msg${compact ? " compact" : ""}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => openMessage(msg)}
+      onKeyDown={(e) => e.key === "Enter" && openMessage(msg)}
+    >
       <div className="msg-head">
         <span className="muted mono small">{formatClock(msg.createdAt)}</span>
         <Party id={msg.from} agents={agents} />
@@ -59,7 +73,13 @@ export const MessageRow = memo(function MessageRow({ msg, agents, compact }: { m
         {msg.subject && <span className="msg-subject">{msg.subject}</span>}
         <span className="spacer" />
         {msg.taskId && (
-          <button className="link-btn small" onClick={() => openTask(msg.taskId!)}>
+          <button
+            className="link-btn small"
+            onClick={(e) => {
+              e.stopPropagation();
+              openTask(msg.taskId!);
+            }}
+          >
             task
           </button>
         )}

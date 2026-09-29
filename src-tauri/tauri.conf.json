@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Project Control Center",
+  "productName": "NEXUS",
   "mainBinaryName": "ProjectControlCenter",
   "version": "../package.json",
   "identifier": "io.github.totolford.projectcontrolcenter",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Project Control Center",
+        "title": "NEXUS",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
@@ -31,11 +31,11 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "publisher": "Project Control Center contributors",
+    "publisher": "NEXUS contributors",
     "copyright": "MIT License",
     "category": "DeveloperTool",
-    "shortDescription": "Orchestrate Claude Code agents on your projects",
-    "longDescription": "Project Control Center runs a Central agent and specialised Claude Code workers on a project folder, with tasks, inter-agent messages, persistent memory, git worktrees and permission control.",
+    "shortDescription": "NEXUS — Multi-Agent Project Control Center",
+    "longDescription": "NEXUS runs a Central agent and specialised Claude Code workers on a project folder, with tasks, inter-agent messages, persistent memory, git worktrees and permission control.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

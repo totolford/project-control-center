@@ -1,76 +1,17 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import { api } from "../../lib/api";
 import { mergeLogs, subscribeLogs } from "../../lib/logBus";
 import { toast } from "../../lib/toast";
-import { formatClock } from "../../lib/format";
-import type { LogEntry, LogKind } from "../../lib/types";
+import type { LogEntry } from "../../lib/types";
 import { Loading, Spinner } from "../../components/Common";
+import { LogLine } from "./LogLine";
 
 const PAGE = 200;
-const COLLAPSE_LINES = 6;
-const COLLAPSE_CHARS = 600;
-
-const PREFIX: Record<LogKind, string> = {
-  input: "›",
-  assistant_text: "●",
-  thinking: "∴",
-  tool_use: "⚙",
-  tool_result: "↳",
-  system: "·",
-  result: "✓",
-  stderr: "!",
-  error: "✗",
-};
-
-const LogLine = memo(function LogLine({
-  entry,
-  newSession,
-  expanded,
-  onToggle,
-}: {
-  entry: LogEntry;
-  newSession: boolean;
-  expanded: boolean;
-  onToggle: (id: number) => void;
-}) {
-  let text = entry.text;
-  let hidden = 0;
-  if (entry.kind === "tool_result" && !expanded) {
-    const lines = text.split("\n");
-    if (lines.length > COLLAPSE_LINES) {
-      hidden = lines.length - 3;
-      text = lines.slice(0, 3).join("\n");
-    } else if (text.length > COLLAPSE_CHARS) {
-      hidden = -1;
-      text = `${text.slice(0, 300)}…`;
-    }
-  }
-  const collapsible = entry.kind === "tool_result" && (hidden !== 0 || expanded);
-  return (
-    <>
-      {newSession && <div className="log-session">session #{entry.sessionId}</div>}
-      <div className={`log log-${entry.kind}`}>
-        <span className="log-time">{formatClock(entry.ts)}</span>
-        <span className="log-prefix" aria-hidden="true">
-          {PREFIX[entry.kind] ?? "·"}
-        </span>
-        <div className="log-text">
-          {text}
-          {collapsible && (
-            <button className="log-toggle" onClick={() => onToggle(entry.id)}>
-              {expanded ? "collapse" : hidden > 0 ? `show ${hidden} more lines` : "show all"}
-            </button>
-          )}
-        </div>
-      </div>
-    </>
-  );
-});
 
 /** Real session transcript: paginated backwards, appended live, virtualized. */
-export function Terminal({ agentId }: { agentId: string }) {
+export function Terminal({ agentId, dense }: { agentId: string; dense?: boolean }) {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
@@ -184,13 +125,15 @@ export function Terminal({ agentId }: { agentId: string }) {
   if (loading) return <Loading text="Loading transcript…" />;
 
   return (
-    <div className="terminal-wrap">
-      <div className="terminal-top muted small">
-        {loadingOlder ? <Spinner size={12} /> : entries.length === 0 ? "" : hasMore ? "Scroll up to load older lines" : "Beginning of transcript"}
-      </div>
+    <div className={`terminal-wrap${dense ? " dense" : ""}`}>
+      {(!dense || loadingOlder) && (
+        <div className="terminal-top muted small">
+          {loadingOlder ? <Spinner size={12} /> : entries.length === 0 ? "" : hasMore ? "Scroll up to load older lines" : "Beginning of transcript"}
+        </div>
+      )}
       <div className="terminal" ref={scrollRef} onScroll={onScroll} tabIndex={0} aria-label="Agent session transcript">
         {entries.length === 0 ? (
-          <div className="muted pad">No session output yet. Logs appear here as soon as the agent runs.</div>
+          <div className="muted pad">No session output yet.</div>
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((item) => {
@@ -209,6 +152,7 @@ export function Terminal({ agentId }: { agentId: string }) {
                     newSession={prev !== undefined && prev.sessionId !== entry.sessionId}
                     expanded={expanded.has(entry.id)}
                     onToggle={toggle}
+                    showTime={!dense}
                   />
                 </div>
               );
@@ -221,7 +165,7 @@ export function Terminal({ agentId }: { agentId: string }) {
           <ArrowDown size={13} /> Latest
         </button>
       )}
-      <div className="terminal-footer muted small">{entries.length.toLocaleString()} lines loaded</div>
+      {!dense && <div className="terminal-footer muted small">{entries.length.toLocaleString()} lines loaded</div>}
     </div>
   );
 }

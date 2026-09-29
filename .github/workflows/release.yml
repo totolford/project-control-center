@@ -52,7 +52,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: Project Control Center ${{ github.ref_name }}
+          releaseName: NEXUS ${{ github.ref_name }}
           releaseBody: |
             Windows installer: download `ProjectControlCenter-${{ github.ref_name }}-setup.exe` below.
             Requires Claude Code (https://docs.anthropic.com/en/docs/claude-code/setup), signed in with `claude auth login`.

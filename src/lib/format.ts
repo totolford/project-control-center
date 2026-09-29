@@ -53,12 +53,6 @@ export function formatDuration(startIso: string, endIso: string | null, now: num
   return `${s}s`;
 }
 
-export function truncate(text: string | null | undefined, max: number): string {
-  if (!text) return "";
-  const single = text.replace(/\s+/g, " ").trim();
-  return single.length > max ? `${single.slice(0, Math.max(0, max - 1))}…` : single;
-}
-
 export function formatCost(usd: number | null | undefined): string {
   if (usd == null) return "—";
   if (usd === 0) return "$0.00";

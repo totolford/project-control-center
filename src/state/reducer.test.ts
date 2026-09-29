@@ -9,6 +9,7 @@ function agent(id: string, patch: Partial<Agent> = {}): Agent {
     id,
     name: id,
     kind: id === "central" ? "central" : "worker",
+    provider: "claude-code",
     role: "r",
     instructions: "",
     status: "offline",
