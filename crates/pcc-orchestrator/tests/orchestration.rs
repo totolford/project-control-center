@@ -1,0 +1,220 @@
+//! End-to-end orchestration against a scripted Claude Code double
+//! (`examples/fake_claude.rs`): real processes, real stdin/stdout protocol,
+//! real persistence.
+
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use pcc_core::{AgentStatus, EventBus, LogKind, MissionStatus, PermissionDecision, TaskStatus};
+use pcc_orchestrator::Orchestrator;
+use pcc_store::{ProjectStore, TaskFilter};
+
+fn fake_claude() -> PathBuf {
+    let exe = std::env::current_exe().unwrap();
+    let dir = exe.parent().unwrap().parent().unwrap().join("examples");
+    let name = if cfg!(windows) { "fake_claude.exe" } else { "fake_claude" };
+    let p = dir.join(name);
+    assert!(p.is_file(), "build examples first: {}", p.display());
+    p
+}
+
+async fn wait_for<F: FnMut() -> bool>(what: &str, mut f: F) {
+    let start = Instant::now();
+    while !f() {
+        if start.elapsed() > Duration::from_secs(30) {
+            panic!("timed out waiting for {what}");
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+fn open(tmp: &tempfile::TempDir) -> Orchestrator {
+    let store = ProjectStore::create(tmp.path(), "Test").unwrap();
+    Orchestrator::open(store, EventBus::new(), Some(fake_claude()), vec!["generic".into()]).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mission_runs_through_central_and_worker() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    let mut events = o.bus.subscribe();
+
+    o.lock().await.create_mission("Build the thing", None).unwrap();
+
+    wait_for("mission completion", || {
+        store.get_mission("M-0001").unwrap().map(|m| m.status) == Some(MissionStatus::Completed)
+    })
+    .await;
+
+    let tasks = store.list_tasks(&TaskFilter::default()).unwrap();
+    assert_eq!(tasks.len(), 2);
+    assert!(tasks.iter().all(|t| t.status == TaskStatus::Completed));
+    assert_eq!(tasks[1].dependencies, vec!["TASK-0001".to_string()]);
+    // The dependent task started only after the first one completed.
+    assert!(tasks[1].started_at.as_deref().unwrap() >= tasks[0].completed_at.as_deref().unwrap());
+    assert_eq!(tasks[0].result.as_ref().unwrap().summary, "done TASK-0001");
+    assert_eq!(tasks[0].mission_id.as_deref(), Some("M-0001"));
+
+    let builder = store.agent("builder").unwrap();
+    assert_eq!(builder.created_by, "central");
+    assert!(builder.total_cost_usd > 0.0);
+
+    // Messages really went through the sessions.
+    let msgs = store.list_messages(None, 100).unwrap();
+    assert!(msgs.iter().any(|m| m.to == "central" && m.body.contains("TASK-0001") && m.delivered_at.is_some()));
+
+    // The worker transcript contains what we sent and what it did.
+    let logs = store.list_logs("builder", None, 500).unwrap();
+    assert!(logs.iter().any(|l| l.kind == LogKind::Input && l.text.contains("[TASK TASK-0002]")));
+    assert!(logs.iter().any(|l| l.kind == LogKind::AssistantText && l.text.contains("permission allow")));
+    assert!(logs.iter().any(|l| l.kind == LogKind::ToolUse && l.text.contains("complete_task")));
+
+    // Files mirrored in .agent-project.
+    let dir = tmp.path().join(".agent-project");
+    assert!(dir.join("tasks/completed/TASK-0002.md").is_file());
+    assert!(std::fs::read_to_string(dir.join("plans/M-0001.md")).unwrap().contains("All done"));
+
+    // Timeline events were published.
+    let mut kinds = Vec::new();
+    while let Ok(e) = events.try_recv() {
+        kinds.push(e.kind);
+    }
+    for k in [
+        pcc_core::EventKind::MissionCreated,
+        pcc_core::EventKind::AgentCreated,
+        pcc_core::EventKind::TaskCompleted,
+        pcc_core::EventKind::MissionCompleted,
+    ] {
+        assert!(kinds.contains(&k), "missing {k:?}");
+    }
+    o.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn destructive_command_waits_for_user_and_stop_is_real() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    {
+        let mut e = o.lock().await;
+        e.create_agent(
+            pcc_orchestrator::dto::AgentSpec {
+                name: "Ops".into(),
+                role: "Operations".into(),
+                isolation: Some("shared".into()),
+                ..Default::default()
+            },
+            "user",
+        )
+        .unwrap();
+        e.send_user_message("ops", "DANGER: clean the build").unwrap();
+    }
+    // The session is really blocked on the permission prompt.
+    let mut perm_id = None;
+    let start = Instant::now();
+    while perm_id.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(30), "no permission request");
+        let snap = o.lock().await.snapshot().unwrap();
+        perm_id = snap.pending_permissions.first().map(|p| {
+            assert_eq!(p.agent_id, "ops");
+            assert!(p.summary.contains("rm -rf build"));
+            p.id.clone()
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(store.agent("ops").unwrap().status, AgentStatus::AwaitingPermission);
+    o.lock().await.resolve_permission(&perm_id.unwrap(), PermissionDecision::Reject).unwrap();
+    wait_for("decision reaches the session", || {
+        store.list_logs("ops", None, 100).unwrap().iter().any(|l| l.text.contains("dangerous command deny"))
+    })
+    .await;
+    wait_for("idle", || store.agent("ops").unwrap().status == AgentStatus::Waiting).await;
+
+    o.lock().await.stop_agent("ops").unwrap();
+    wait_for("stopped", || store.agent("ops").unwrap().status == AgentStatus::Stopped).await;
+    let sessions = store.list_sessions("ops").unwrap();
+    assert_eq!(sessions[0].state, "stopped");
+    o.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reopening_after_crash_offers_recovery() {
+    let tmp = tempfile::tempdir().unwrap();
+    {
+        let o = open(&tmp);
+        o.lock().await.send_user_message("central", "hello").unwrap();
+        let store = o.store.clone();
+        wait_for("central idle", || store.agent("central").unwrap().status == AgentStatus::Waiting).await;
+        // Simulate a crash: drop without shutdown, leaving the session marked running.
+    }
+    let store = ProjectStore::open(tmp.path()).unwrap();
+    let o = Orchestrator::open(store, EventBus::new(), Some(fake_claude()), vec![]).unwrap();
+    let snap = o.lock().await.snapshot().unwrap();
+    let rec = snap.recovery.expect("recovery offered");
+    assert_eq!(rec.agents[0].agent_id, "central");
+    assert_eq!(o.store.agent("central").unwrap().status, AgentStatus::Disconnected);
+    o.lock().await.recover().unwrap();
+    let s = o.store.clone();
+    wait_for("central resumed", || {
+        s.list_logs("central", None, 200).unwrap().iter().any(|l| l.text.contains("Session resumed"))
+    })
+    .await;
+    o.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn worker_slots_are_reclaimed_and_stopped_central_is_woken() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    let mut settings = store.settings();
+    settings.max_parallel_workers = 1;
+    store.save_settings(settings).unwrap();
+    {
+        let mut e = o.lock().await;
+        for name in ["Alpha", "Beta"] {
+            e.create_agent(
+                pcc_orchestrator::dto::AgentSpec {
+                    name: name.into(),
+                    role: "worker".into(),
+                    isolation: Some("shared".into()),
+                    ..Default::default()
+                },
+                "user",
+            )
+            .unwrap();
+        }
+        for agent in ["alpha", "beta"] {
+            e.create_task(
+                pcc_orchestrator::dto::TaskSpec {
+                    title: format!("work for {agent}"),
+                    agent: Some(agent.into()),
+                    ..Default::default()
+                },
+                "user",
+            )
+            .unwrap();
+        }
+    }
+    // Only one worker may run at a time: the idle one must be stopped for the other to start.
+    wait_for("both tasks completed", || {
+        store.list_tasks(&TaskFilter::default()).unwrap().iter().all(|t| t.status == TaskStatus::Completed)
+    })
+    .await;
+    let alpha = store.list_logs("alpha", None, 200).unwrap();
+    let beta = store.list_logs("beta", None, 200).unwrap();
+    assert!(alpha.iter().chain(beta.iter()).any(|l| l.text.contains("free a worker slot")));
+
+    // A mission while Central is stopped starts Central again.
+    wait_for("central idle", || {
+        !store.agent("central").unwrap().status.is_live()
+            || store.agent("central").unwrap().status == AgentStatus::Waiting
+    })
+    .await;
+    o.lock().await.stop_agent("central").unwrap();
+    wait_for("central stopped", || store.agent("central").unwrap().status == AgentStatus::Stopped).await;
+    o.lock().await.create_mission("Build the thing", None).unwrap();
+    wait_for("central restarted", || store.agent("central").unwrap().status.is_live()).await;
+    o.close().await;
+}

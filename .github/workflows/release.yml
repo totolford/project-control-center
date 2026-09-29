@@ -1,0 +1,73 @@
+name: Release
+
+# Push a tag like `v1.0.0` to build, test and publish the Windows installer.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag does not match package.json version $pkg (run: node scripts/set-version.mjs $tag)"
+            exit 1
+          fi
+
+      - name: Tests
+        run: |
+          npm run typecheck
+          npm test
+          cargo test --workspace
+
+      - name: Build installer and create release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Project Control Center ${{ github.ref_name }}
+          releaseBody: |
+            Windows installer: download `ProjectControlCenter-${{ github.ref_name }}-setup.exe` below.
+            Requires Claude Code (https://docs.anthropic.com/en/docs/claude-code/setup), signed in with `claude auth login`.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --config src-tauri/tauri.release.conf.json
+
+      - name: Upload installer with a stable name
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          src=$(ls target/release/bundle/nsis/*-setup.exe | head -n1)
+          dst="ProjectControlCenter-${GITHUB_REF_NAME}-setup.exe"
+          cp "$src" "$dst"
+          gh release upload "$GITHUB_REF_NAME" "$dst" --clobber

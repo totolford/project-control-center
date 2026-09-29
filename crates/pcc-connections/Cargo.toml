@@ -1,0 +1,20 @@
+[package]
+name = "pcc-connections"
+description = "Project connections (SSH, MCP, Roblox Studio, GitHub, Docker), secrets and environment detection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pcc-core.workspace = true
+pcc-claude.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+keyring = { version = "3", features = ["windows-native"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

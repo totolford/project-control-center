@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/pcc-core",
+  "crates/pcc-store",
+  "crates/pcc-claude",
+  "crates/pcc-git",
+  "crates/pcc-connections",
+  "crates/pcc-orchestrator",
+  "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/totolford/project-control-center"
+rust-version = "1.85"
+
+[workspace.dependencies]
+pcc-core = { path = "crates/pcc-core" }
+pcc-store = { path = "crates/pcc-store" }
+pcc-claude = { path = "crates/pcc-claude" }
+pcc-git = { path = "crates/pcc-git" }
+pcc-connections = { path = "crates/pcc-connections" }
+pcc-orchestrator = { path = "crates/pcc-orchestrator" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "io-util", "time", "fs"] }
+tracing = "0.1"
+rusqlite = { version = "0.37", features = ["bundled"] }
+regex = "1"
+parking_lot = "0.12"
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "unwind"
+strip = true

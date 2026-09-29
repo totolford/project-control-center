@@ -1,0 +1,10 @@
+node_modules/
+dist/
+target/
+src-tauri/gen/schemas/
+dist-installer/
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+*.tsbuildinfo

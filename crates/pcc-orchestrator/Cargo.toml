@@ -1,0 +1,22 @@
+[package]
+name = "pcc-orchestrator"
+description = "Agent orchestration: Central/worker sessions, tasks, messages, permissions and agent tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pcc-core.workspace = true
+pcc-store.workspace = true
+pcc-claude.workspace = true
+pcc-git.workspace = true
+pcc-connections.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }

@@ -1,0 +1,15 @@
+[package]
+name = "pcc-git"
+description = "Git integration: repository inspection, agent worktrees, merges and snapshots"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pcc-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
