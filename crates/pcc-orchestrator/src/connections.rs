@@ -85,7 +85,7 @@ impl Engine {
             status_detail: None,
             last_checked: None,
             created_at: pcc_core::now(),
-            enabled: true,
+            enabled: input.enabled.unwrap_or(true),
             last_used: None,
         };
         self.store.upsert_connection(&c)?;
@@ -101,6 +101,8 @@ impl Engine {
         }
         let config = if input.config.is_null() { json!({}) } else { input.config };
         kinds::validate(c.kind, &config)?;
+        // The last health check stays valid unless the target or its credentials change.
+        let changed = c.config != config || input.secrets.as_ref().is_some_and(|s| !s.is_empty());
         if let Some(values) = input.secrets.filter(|s| !s.is_empty()) {
             let r = c.credential_ref.clone().unwrap_or_else(secrets::new_ref);
             let mut merged = secrets::get(&r)?;
@@ -110,8 +112,13 @@ impl Engine {
         }
         c.name = input.name.trim().to_string();
         c.config = config;
-        c.status = ConnectionStatus::Unknown;
-        c.status_detail = None;
+        if let Some(enabled) = input.enabled {
+            c.enabled = enabled;
+        }
+        if changed {
+            c.status = ConnectionStatus::Unknown;
+            c.status_detail = None;
+        }
         self.store.upsert_connection(&c)?;
         self.emit(Event::new(EventKind::ConnectionChanged, format!("Connection {} updated", c.name), json!(c)));
         Ok(c)
@@ -188,6 +195,7 @@ mod tests {
                 kind: ConnectionKind::Ssh,
                 config: json!({"host": "10.0.0.5", "user": "admin", "auth": "key"}),
                 secrets: None,
+                enabled: None,
             })
             .unwrap();
         assert_eq!(c.id, "prod-server");
@@ -197,6 +205,7 @@ mod tests {
                 kind: ConnectionKind::Ssh,
                 config: json!({"host": "10.0.0.6", "user": "admin", "auth": "key"}),
                 secrets: None,
+                enabled: None,
             })
             .unwrap();
         assert_eq!(dup.id, "prod-server-2");
@@ -205,9 +214,45 @@ mod tests {
                 name: "Bad".into(),
                 kind: ConnectionKind::Ssh,
                 config: json!({"host": "", "user": "x"}),
-                secrets: None
+                secrets: None,
+                enabled: None,
             })
             .is_err());
+
+        // Toggling keeps the last health check; changing the target resets it.
+        e.record_check(
+            &c.id,
+            pcc_connections::CheckResult { status: ConnectionStatus::Connected, detail: "ok".into() },
+        )
+        .unwrap();
+        let toggled = e
+            .update_connection(
+                &c.id,
+                ConnectionInput {
+                    name: c.name.clone(),
+                    kind: c.kind,
+                    config: c.config.clone(),
+                    secrets: None,
+                    enabled: Some(false),
+                },
+            )
+            .unwrap();
+        assert!(!toggled.enabled);
+        assert_eq!(toggled.status, ConnectionStatus::Connected);
+        let moved = e
+            .update_connection(
+                &c.id,
+                ConnectionInput {
+                    name: c.name.clone(),
+                    kind: c.kind,
+                    config: json!({"host": "10.0.0.9", "user": "admin", "auth": "key"}),
+                    secrets: None,
+                    enabled: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(moved.status, ConnectionStatus::Unknown);
+        assert!(!moved.enabled, "enabled kept when not provided");
 
         let agent = e
             .create_agent(

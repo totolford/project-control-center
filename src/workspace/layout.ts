@@ -14,7 +14,8 @@ export type PanelType =
   | "Diff"
   | "Review"
   | "Activity"
-  | "SwarmOverview";
+  | "SwarmOverview"
+  | "RawTerminal";
 
 export const PANEL_TYPES: PanelType[] = [
   "AgentTerminal",
@@ -30,6 +31,7 @@ export const PANEL_TYPES: PanelType[] = [
   "Review",
   "Activity",
   "SwarmOverview",
+  "RawTerminal",
 ];
 
 export interface PanelSpec {

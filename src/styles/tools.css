@@ -1,0 +1,288 @@
+/* MCP Manager, Skills Manager and Connection Manager styles (owned by ui-tools). */
+
+/* ------------------------------------------------------------------ shared list / detail */
+.tools-list {
+  width: 270px;
+  padding-right: 4px;
+}
+.tools-list-wide {
+  width: 340px;
+}
+.tools-list .section-label:first-child {
+  margin-top: 0;
+}
+.tools-list .list-item {
+  align-items: center;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
+  width: 100%;
+}
+.tools-list .list-item.is-off {
+  opacity: 0.6;
+}
+.tools-item-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+.tools-scope {
+  font-size: 11px;
+  color: var(--dim);
+  padding: 6px 10px 2px;
+}
+.tools-gap {
+  margin-top: 18px;
+}
+.tools-pad {
+  padding: 4px 10px;
+}
+.tools-nowrap {
+  white-space: nowrap;
+}
+.tools-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+.tools-detail-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tools-detail-head .grow {
+  min-width: 260px;
+}
+.tools-desc {
+  margin-top: 4px;
+  color: var(--text);
+}
+.tools-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tools-table td {
+  padding: 5px 10px;
+}
+.tools-path {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.tools-cli {
+  align-items: flex-start;
+}
+.tools-cli pre {
+  max-height: 200px;
+}
+
+/* ------------------------------------------------------------------ MCP probe / wizard */
+.tools-items li {
+  padding: 2px 0;
+}
+.tools-probe .kv {
+  margin-bottom: 4px;
+}
+.tools-grant {
+  padding: 2px 0;
+}
+.tools-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+  list-style: none;
+}
+.tools-stepper .link-btn {
+  color: var(--dim);
+  font-size: 12px;
+}
+.tools-stepper li.done .link-btn {
+  color: var(--muted);
+}
+.tools-stepper li.active .link-btn {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tools-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.tools-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.tools-option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.tools-option input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+.tools-var {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tools-var > input:first-child {
+  width: 200px;
+}
+.tools-var .checkbox {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ skills */
+.tools-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.tools-skill .row {
+  gap: 6px;
+  min-width: 0;
+}
+.tools-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tools-skill-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  align-items: center;
+}
+.tools-skill-meta svg {
+  vertical-align: -2px;
+}
+.tools-req {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.tools-problems {
+  align-items: flex-start;
+}
+.tools-problems ul,
+.tools-detail .notice ul {
+  list-style: disc;
+  padding-left: 18px;
+}
+.tools-files li {
+  padding: 2px 0;
+}
+.tools-files .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tools-diff,
+.tools-file {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 0;
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre;
+}
+.tools-file {
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tools-diff > div {
+  padding: 0 10px;
+}
+.tools-diff-add {
+  background: rgba(63, 185, 80, 0.12);
+  color: var(--green);
+}
+.tools-diff-del {
+  background: rgba(248, 81, 73, 0.12);
+  color: var(--red);
+}
+.tools-diff-hunk {
+  color: var(--blue);
+}
+.tools-diff-meta {
+  color: var(--muted);
+}
+.tools-editor {
+  width: 100%;
+  min-height: 52vh;
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+.tools-wizard-split {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.tools-wizard-split > .grow {
+  min-width: 0;
+}
+.tools-preview {
+  width: 380px;
+  flex-shrink: 0;
+}
+.tools-preview .tools-file {
+  max-height: 62vh;
+}
+.tools-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+
+/* ------------------------------------------------------------------ connections */
+.tools-conn {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.tools-conn:last-child {
+  border-bottom: none;
+}
+.tools-conn .conn-row {
+  border-bottom: none;
+  padding-bottom: 6px;
+}
+.tools-conn-kv {
+  margin: 0 14px 4px 60px;
+  font-size: 12px;
+}
+.tools-conn > .link-btn {
+  margin-left: 50px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tools-conn-agents {
+  margin: 4px 14px 4px 60px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}

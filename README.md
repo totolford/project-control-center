@@ -21,6 +21,18 @@ memory and a timeline. Use your usual editor alongside it.
   missions, task board, Roblox Studio / connection panels, diffs, memory, activity):
   drag & drop, resize, maximize, minimize, pin, open in a new tab. Several workspace
   tabs per project; the layout is saved in `.agent-project/settings/workspace.json`.
+- **Claude Control Center** — everything your installed Claude Code really exposes,
+  read live from it: models, context and rate-limit usage, MCP servers, skills,
+  plugins, settings, and a Command Center generated from its own `--help`.
+- **MCP & Skills managers** — test MCP servers (stdio, HTTP/SSE: tools, resources,
+  prompts, latency), add/remove/toggle them, import them for agents; create, edit
+  (with diff), disable, duplicate, test and export skills.
+- **CLAUDE UNLOCKED** — a maximum-autonomy mode that answers Claude Code's permission
+  prompts per your rules (never bypassing them), with a full decision journal,
+  power presets, Emergency Stop and Revoke-all.
+- **Continuous improvement, Raw Terminal, Environment Inspector** — scheduled
+  improvement missions, a real ConPTY terminal (Claude Code, PowerShell, CMD, WSL)
+  and a view of the machine, tools and project stack.
 - **Agent providers** — agents run on providers (adapters). Claude Code is supported;
   other runtimes (e.g. Codex CLI) are detected and shown as unavailable until an
   adapter exists — nothing is faked.

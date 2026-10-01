@@ -18,9 +18,19 @@ import { addLiveMessage, applyEvent, fromSnapshot, removeById, upsertById, type 
 export type ViewName =
   | "swarm"
   | "missions"
-  | "memory"
+  | "agents"
+  | "models"
+  | "mcp"
+  | "skills"
   | "connections"
+  | "commands"
+  | "memory"
   | "activity"
+  | "environment"
+  | "claude"
+  | "autonomy"
+  | "capabilities"
+  | "terminal"
   | "agent"
   | "tasks"
   | "git"
@@ -32,6 +42,8 @@ export interface View {
   agentId?: string;
   /** Selected task in the "tasks" view. */
   taskId?: string;
+  /** Section to scroll to (e.g. a Settings section id). */
+  section?: string;
 }
 
 interface AppState {

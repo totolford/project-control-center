@@ -42,6 +42,7 @@ function candidates(): { heading: string; items: { label: string; spec: PanelSpe
         { label: "Review queue", spec: { type: "Review" } },
         { label: "Memory", spec: { type: "Memory" } },
         { label: "Activity timeline", spec: { type: "Activity" } },
+        { label: "Raw terminal", spec: { type: "RawTerminal" } },
         ...(p.connections.some((c) => c.kind === "roblox_studio") ? [] : [{ label: "Roblox Studio (not configured)", spec: { type: "RobloxStudio" as const } }]),
       ],
     },

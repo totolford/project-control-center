@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Claude Control Center: live Claude Code inspection, Command Center from `--help`, MCP manager (stdio/HTTP/SSE probes, Claude config management, import), Skills manager, models and live model switch, agent profiles (effort, skills, env), capability matrix.
+- CLAUDE UNLOCKED with journaled auto-approval, power presets, Emergency Stop, Revoke all permissions.
+- Continuous improvement loop, Raw Terminal (ConPTY), Environment Inspector, detachable panels.
+- Connections: GitLab, SFTP, local terminals, HTTP/API, MCP over HTTP/SSE, enable/disable, last used.
 - NEXUS branding and swarm workspace UI: tiling agent panels with live terminals, Central panel, workspace tabs, notifications, command bar, mission composer.
 - Agent provider registry (Claude Code adapter; other runtimes detected but unavailable).
 - Per-project workspace layout persisted in `.agent-project/settings/workspace.json`.

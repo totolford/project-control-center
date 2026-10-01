@@ -45,6 +45,27 @@ pub struct ClaudeEnvironment {
     pub unavailable: Vec<String>,
 }
 
+pub const REDACTED: &str = "••••••";
+
+/// Hides `env` and `headers` values of an MCP server config (they often hold secrets).
+pub fn redact_mcp_config(config: &Value) -> Value {
+    let mut c = config.clone();
+    for key in ["env", "headers"] {
+        if let Some(Value::Object(map)) = c.get_mut(key) {
+            for v in map.values_mut() {
+                *v = json!(REDACTED);
+            }
+        }
+    }
+    c
+}
+
+/// Restores the real values of a redacted config by matching it against the
+/// unredacted configs NEXUS read from Claude Code (they never leave the backend).
+pub fn unredact_mcp_config(given: &Value, originals: &[Value]) -> Value {
+    originals.iter().find(|o| &redact_mcp_config(o) == given).cloned().unwrap_or_else(|| given.clone())
+}
+
 /// Hides the values of `env` maps: they frequently hold secrets.
 pub fn redact_settings(mut v: Value) -> Value {
     fn walk(v: &mut Value) {
@@ -139,6 +160,17 @@ pub async fn inspect(cwd: &Path) -> ClaudeEnvironment {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mcp_configs_round_trip_through_redaction() {
+        let real = json!({"type": "stdio", "command": "x", "env": {"API_KEY": "secret"}});
+        let other = json!({"type": "http", "url": "https://a", "headers": {"Authorization": "Bearer t"}});
+        let shown = redact_mcp_config(&real);
+        assert_eq!(shown["env"]["API_KEY"], REDACTED);
+        assert_eq!(unredact_mcp_config(&shown, &[other.clone(), real.clone()]), real);
+        let typed = json!({"type": "stdio", "command": "y", "env": {"K": "v"}});
+        assert_eq!(unredact_mcp_config(&typed, &[real]), typed);
+    }
 
     #[test]
     fn redacts_env_values_everywhere() {

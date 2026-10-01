@@ -1,5 +1,9 @@
 import { useEffect } from "react";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { Loading } from "../components/Common";
+import { AddAgentMenu } from "../shell/AddAgentMenu";
+import { useUi } from "../state/ui";
+import { ControlRail } from "./ControlRail";
 import { SwarmGrid } from "../panels/SwarmOverview";
 import { dock, getActiveTab, listPanels, restoreMaximized, type DockZone } from "./layout";
 import { AddPanelMenu } from "./AddPanelMenu";
@@ -69,6 +73,8 @@ function useEscapeRestores() {
 /** The Swarm view: workspace tabs + the tiling layout of the active tab. */
 export function SwarmWorkspace() {
   const ws = useWorkspace((s) => s.ws);
+  const railOpen = useUi((s) => s.railOpen);
+  const toggleRail = useUi((s) => s.toggleRail);
   usePanelDragging();
   useEscapeRestores();
   if (!ws) return <Loading text="Loading workspace…" />;
@@ -77,23 +83,30 @@ export function SwarmWorkspace() {
   return (
     <div className="swarm">
       <WorkspaceTabs>
+        <AddAgentMenu />
         <AddPanelMenu />
+        <button className="icon-btn" onClick={toggleRail} title={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"} aria-label={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"}>
+          {railOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+        </button>
       </WorkspaceTabs>
-      <div className="swarm-body">
-        {maximized ? (
-          <div className="tile maximized">
-            <PanelFrame panel={maximized} maximized />
-          </div>
-        ) : tab.root ? (
-          <div className="tile root-tile">
-            <NodeView key={tab.id} node={tab.root} tabId={tab.id} path={[]} />
-          </div>
-        ) : (
-          <div className="swarm-empty">
-            <div className="muted small pad">This tab is empty — add panels with “+ Panel”. The swarm right now:</div>
-            <SwarmGrid />
-          </div>
-        )}
+      <div className="swarm-row">
+        <div className="swarm-body">
+          {maximized ? (
+            <div className="tile maximized">
+              <PanelFrame panel={maximized} maximized />
+            </div>
+          ) : tab.root ? (
+            <div className="tile root-tile">
+              <NodeView key={tab.id} node={tab.root} tabId={tab.id} path={[]} />
+            </div>
+          ) : (
+            <div className="swarm-empty">
+              <div className="muted small pad">This tab is empty — add panels with “+ Panel”. The swarm right now:</div>
+              <SwarmGrid />
+            </div>
+          )}
+        </div>
+        {railOpen && <ControlRail />}
       </div>
     </div>
   );

@@ -1,14 +1,28 @@
 /* ------------------------------------------------------------------ shell layout */
 .shell {
   display: grid;
-  grid-template-rows: 40px 34px minmax(0, 1fr) auto;
+  /* A single column bounded by the window: wide content must never widen the page. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 40px auto minmax(0, 1fr) auto;
   height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+.shell > * {
+  min-width: 0;
+}
+.shell-body {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
 }
 .shell-main {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
-.shell-main.is-swarm {
+.shell-main.is-fill {
   overflow: hidden;
 }
 
@@ -197,64 +211,6 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* ------------------------------------------------------------------ secondary bar */
-.subbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  min-width: 0;
-}
-.subbar-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.subbar-item:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-.subbar-item.active {
-  color: var(--text);
-  background: var(--panel-2);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-.subbar-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  margin: 0 6px;
-}
-.subbar-icon {
-  position: relative;
-}
-.subbar-icon.active {
-  color: var(--text);
-  background: var(--panel-2);
-}
-.subbar-badge {
-  position: absolute;
-  top: 0;
-  right: -2px;
-  font-size: 9px;
-  background: var(--accent);
-  color: #0a0d16;
-  border-radius: 6px;
-  padding: 0 3px;
-  line-height: 12px;
-  font-weight: 700;
 }
 
 /* ------------------------------------------------------------------ bottom: status strip + composer */
@@ -561,7 +517,7 @@ button.strip-item:not(:disabled) {
   }
 }
 @media (max-width: 1180px) {
-  .subbar-label,
+  .safety-btn .btn-text,
   .composer-hint {
     display: none;
   }

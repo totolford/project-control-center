@@ -7,6 +7,7 @@ import { useAgents, useConnections, useMissions, useStore } from "../store";
 import { StatusDot } from "../components/StatusBadge";
 import { NotificationCenter } from "./NotificationCenter";
 import { ProjectBreadcrumb } from "./ProjectBreadcrumb";
+import { SafetyControls } from "./SafetyControls";
 
 function Indicators() {
   const agents = useAgents();
@@ -52,6 +53,7 @@ export function TopBar({ onCloseProject, onFolder }: { onCloseProject: () => voi
       <ProjectBreadcrumb onCloseProject={onCloseProject} onFolder={onFolder} />
       <Indicators />
       <span className="spacer" />
+      <SafetyControls />
       <button className="search-btn" onClick={() => setCommandOpen(true)} title="Search and commands (Ctrl+K)">
         <Search size={13} />
         <span className="indicator-label">Search</span>

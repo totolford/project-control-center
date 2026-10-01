@@ -3,6 +3,7 @@ import { Target } from "lucide-react";
 import { useMissions } from "../store";
 import { EmptyState, PageHeader } from "../components/Common";
 import { MissionCard, isRunning } from "../panels/MissionPanel";
+import { ImprovementCard } from "./missions/ImprovementCard";
 
 export function Missions() {
   const missions = useMissions();
@@ -16,6 +17,7 @@ export function Missions() {
         title="Missions"
         subtitle="Describe a goal in the composer below. Central plans it, creates specialised agents and tasks, and routes their work."
       />
+      <ImprovementCard />
       {sorted.length === 0 ? (
         <EmptyState icon={<Target size={22} />} title="No missions yet">
           Type what you want to build in “What do you want to build?” and press Ctrl+Enter.

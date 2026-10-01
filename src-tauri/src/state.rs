@@ -68,6 +68,9 @@ pub struct AppState {
     pub log_dir: PathBuf,
     /// Raw Terminal sessions (application-wide, survive project switches).
     pub pty: pcc_pty::PtyManager,
+    /// Unredacted MCP configs from the last Claude Code inspection; the UI only
+    /// receives redacted copies (secrets stay in the backend).
+    pub claude_mcp_configs: std::sync::Mutex<Vec<serde_json::Value>>,
 }
 
 /// Application-level settings (not tied to a project).
@@ -80,7 +83,13 @@ pub struct AppSettings {
 
 impl AppState {
     pub fn new(data_dir: PathBuf, log_dir: PathBuf) -> Self {
-        AppState { project: RwLock::new(None), data_dir, log_dir, pty: pcc_pty::PtyManager::new() }
+        AppState {
+            project: RwLock::new(None),
+            data_dir,
+            log_dir,
+            pty: pcc_pty::PtyManager::new(),
+            claude_mcp_configs: std::sync::Mutex::new(Vec::new()),
+        }
     }
 
     pub fn app_settings_file(&self) -> PathBuf {

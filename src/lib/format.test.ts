@@ -43,6 +43,8 @@ describe("format helpers", () => {
     expect(formatCost(1.234)).toBe("$1.23");
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2.0 KB");
+    expect(formatBytes(16 * 1024 ** 3)).toBe("16.0 GB");
+    expect(formatBytes(2 * 1024 ** 4)).toBe("2.00 TB");
   });
 
   it("computes ratios and normalizes progress", () => {

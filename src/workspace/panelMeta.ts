@@ -14,6 +14,7 @@ import {
   Sparkles,
   SquareTerminal,
   Target,
+  Terminal,
   Waves,
 } from "lucide-react";
 import { useStore } from "../store";
@@ -33,6 +34,7 @@ export const PANEL_ICON: Record<PanelType, LucideIcon> = {
   Review: CheckCheck,
   Activity: Activity,
   SwarmOverview: LayoutGrid,
+  RawTerminal: Terminal,
 };
 
 const STATIC_TITLE: Partial<Record<PanelType, string>> = {
@@ -44,6 +46,7 @@ const STATIC_TITLE: Partial<Record<PanelType, string>> = {
   Review: "Review",
   Activity: "Activity",
   SwarmOverview: "Swarm overview",
+  RawTerminal: "Raw terminal",
 };
 
 /** Human title of a panel, resolved against current project data. */

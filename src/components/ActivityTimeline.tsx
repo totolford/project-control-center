@@ -3,27 +3,34 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { api } from "../lib/api";
 import { toast } from "../lib/toast";
 import { formatClock } from "../lib/format";
-import type { Tone } from "../lib/labels";
-import type { EventKind, PccEvent } from "../lib/types";
+import type { LucideIcon } from "lucide-react";
+import { Bot, Folder, GitBranch, ListChecks, MessageSquare, OctagonX, Plug, ShieldCheck, Wrench } from "lucide-react";
+import { groupOf, kindTone, toolOf, type ActivityGroup } from "../lib/activityGroups";
+import type { PccEvent } from "../lib/types";
 import { useAgents, useTimeline } from "../store";
 import { Loading, Spinner } from "./Common";
 import { Chip } from "./StatusBadge";
 
 const PAGE = 200;
 
-export function kindTone(kind: EventKind): Tone {
-  if (kind === "Error" || kind === "AgentCrashed" || kind === "TaskFailed") return "red";
-  if (kind.startsWith("Permission") || kind === "ReviewRequested") return "amber";
-  if (kind.startsWith("Mission")) return "accent";
-  if (kind === "TaskCompleted") return "green";
-  if (kind === "AgentMessage") return "blue";
-  return "grey";
-}
+const GROUP_ICON: Record<ActivityGroup, LucideIcon> = {
+  agents: Bot,
+  tasks: ListChecks,
+  messages: MessageSquare,
+  tools: Wrench,
+  permissions: ShieldCheck,
+  mcp_skills: Plug,
+  git: GitBranch,
+  safety: OctagonX,
+  project: Folder,
+};
 
 export interface TimelineFilter {
   agentId?: string;
   missionId?: string;
   kind?: string;
+  /** Kind groups to show; empty or absent = all. */
+  groups?: ActivityGroup[];
 }
 
 const EventRow = memo(function EventRow({
@@ -37,12 +44,20 @@ const EventRow = memo(function EventRow({
   selected: boolean;
   onSelect: (e: PccEvent) => void;
 }) {
+  const Icon = GROUP_ICON[groupOf(e.kind)];
+  const tool = e.kind === "ToolUsed" ? toolOf(e.payload) : null;
   return (
     <button className={`event-row${selected ? " selected" : ""}`} onClick={() => onSelect(e)}>
       <span className="mono muted">{formatClock(e.ts)}</span>
-      <Chip tone={kindTone(e.kind)}>{e.kind}</Chip>
+      <span className={`event-kind tone-${kindTone(e.kind)}-fg`}>
+        <Icon size={12} />
+        <Chip tone={kindTone(e.kind)}>{e.kind}</Chip>
+      </span>
       <span className="event-agent">{agentName ?? e.agentId ?? ""}</span>
-      <span className="event-summary">{e.summary}</span>
+      <span className="event-summary">
+        {tool && <span className="mono tool-name">{tool}</span>}
+        {e.summary}
+      </span>
     </button>
   );
 });
@@ -66,7 +81,7 @@ export function ActivityTimeline({
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { agentId, missionId, kind } = filter;
+  const { agentId, missionId, kind, groups } = filter;
 
   useEffect(() => {
     let cancelled = false;
@@ -94,7 +109,10 @@ export function ActivityTimeline({
     const live = timeline.filter((e) => e.id > newest && (!agentId || e.agentId === agentId) && (!missionId || e.missionId === missionId));
     return [...live, ...history].sort((a, b) => b.id - a.id);
   }, [history, timeline, agentId, missionId]);
-  const rows = useMemo(() => (kind ? all.filter((e) => e.kind === kind) : all), [all, kind]);
+  const rows = useMemo(
+    () => all.filter((e) => (!kind || e.kind === kind) && (!groups || groups.length === 0 || groups.includes(groupOf(e.kind)))),
+    [all, kind, groups],
+  );
 
   useEffect(() => {
     onKinds?.([...new Set(all.map((e) => e.kind))].sort());

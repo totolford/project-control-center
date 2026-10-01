@@ -1,47 +1,17 @@
 import { useEffect, useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { api, onEvent } from "./lib/api";
+import { api } from "./lib/api";
 import { APP_NAME, APP_TAGLINE } from "./lib/brand";
-import { observeAllLogs, turnOutcome } from "./lib/logBus";
 import { isLive } from "./lib/labels";
-import { run, toast } from "./lib/toast";
+import { run } from "./lib/toast";
 import { useStore } from "./store";
+import { useBackendSync } from "./state/backendSync";
 import { Toasts } from "./components/Toasts";
 import { PermissionModal } from "./components/PermissionModal";
 import { RecoveryDialog } from "./components/RecoveryDialog";
 import { AppShell } from "./shell/AppShell";
 import { Welcome } from "./views/Welcome";
 import { Setup, type FolderInspection } from "./views/Setup";
-
-/** Subscribes once to backend events and logs, and keeps the snapshot fresh. */
-function useBackendSync() {
-  useEffect(() => {
-    let gitTimer: number | undefined;
-    const refreshSoon = () => {
-      window.clearTimeout(gitTimer);
-      gitTimer = window.setTimeout(() => void useStore.getState().refresh().catch(() => undefined), 400);
-    };
-    const unlisten = onEvent((e) => {
-      const store = useStore.getState();
-      if (!store.project) return;
-      store.applyEvent(e);
-      if (e.kind === "Error") toast.error(e.summary);
-      else if (e.kind === "GitChanged") refreshSoon();
-    });
-    const stopLogs = observeAllLogs((entry) => {
-      const outcome = turnOutcome(entry);
-      if (outcome !== null) useStore.getState().setTurnError(entry.agentId, outcome);
-    });
-    const onFocus = () => void useStore.getState().refresh().catch(() => undefined);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearTimeout(gitTimer);
-      window.removeEventListener("focus", onFocus);
-      stopLogs();
-      void unlisten.then((f) => f());
-    };
-  }, []);
-}
 
 function useWindowTitle() {
   const name = useStore((s) => s.project?.info.name);

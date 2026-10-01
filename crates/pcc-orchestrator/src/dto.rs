@@ -106,6 +106,9 @@ pub struct ConnectionInput {
     pub config: Value,
     #[serde(default)]
     pub secrets: Option<BTreeMap<String, String>>,
+    /// `None` keeps the current state (enabled for new connections).
+    #[serde(default)]
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

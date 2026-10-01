@@ -1,0 +1,219 @@
+/* ------------------------------------------------------------------ agent profiles */
+.agents-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.agent-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+}
+.agent-pick-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.agent-pick-item:hover {
+  background: var(--hover);
+}
+.agent-pick-item.active {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+}
+.agents-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.agents-detail-head {
+  flex-wrap: nowrap;
+}
+
+/* ------------------------------------------------------------------ relations tree */
+.topology {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.topo-root {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.topo-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  margin-left: 6px;
+}
+.topo-node {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.topo-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.topo-leaves {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding-left: 18px;
+}
+.topo-leaves > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.topo-key {
+  width: 86px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.topo-grants {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.topo-grants .checkbox {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ capabilities matrix */
+.matrix td,
+.matrix th {
+  white-space: nowrap;
+}
+.matrix select {
+  max-width: 190px;
+}
+.cap-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 64px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone, var(--muted)) 12%, transparent);
+  color: var(--tone, var(--muted));
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+button.cap-cell:hover {
+  border-color: var(--tone, var(--border-strong));
+}
+span.cap-cell {
+  cursor: default;
+  background: transparent;
+}
+.cap-effective {
+  margin-left: 2px;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ continuous improvement */
+.improvement-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.loop {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.loop-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.loop-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.loop-arrow {
+  color: var(--dim);
+}
+.cycles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cycle {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.trace {
+  padding: 3px 0;
+  border-top: 1px dashed var(--border);
+}
+
+/* ------------------------------------------------------------------ environment inspector */
+.disk-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.detect-list li {
+  display: grid;
+  grid-template-columns: 16px 150px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dep-chips {
+  padding: 6px 0;
+}
+
+/* ------------------------------------------------------------------ live activity */
+.event-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.tool-name {
+  margin-right: 6px;
+  color: var(--blue);
+}
+.activity-groups {
+  margin-top: -6px;
+}

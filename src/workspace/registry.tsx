@@ -16,6 +16,7 @@ import { ReviewPanel } from "../panels/ReviewPanel";
 import { RobloxStudioPanel } from "../panels/RobloxStudioPanel";
 import { SwarmOverview } from "../panels/SwarmOverview";
 import { TaskPanel } from "../panels/TaskPanel";
+import { RawTerminalPanel } from "../terminal/RawTerminalView";
 import type { PanelSpec, PanelType } from "./layout";
 import { GenericHeader, type PanelHeaderProps } from "./PanelHeader";
 
@@ -43,4 +44,5 @@ export const PANELS: Record<PanelType, PanelDef> = {
   Review: { Header: GenericHeader, Body: ReviewPanel },
   Activity: { Header: GenericHeader, Body: ActivityPanel },
   SwarmOverview: { Header: GenericHeader, Body: SwarmOverview },
+  RawTerminal: { Header: GenericHeader, Body: RawTerminalPanel },
 };

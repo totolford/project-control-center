@@ -6,7 +6,9 @@ import { useAgents, useMissions, useStore } from "../store";
 import { useUi } from "../state/ui";
 import { JsonView, PageHeader } from "../components/Common";
 import { Chip } from "../components/StatusBadge";
-import { ActivityTimeline, kindTone } from "../components/ActivityTimeline";
+import { ActivityTimeline } from "../components/ActivityTimeline";
+import { ACTIVITY_GROUPS, kindTone, toolOf, type ActivityGroup } from "../lib/activityGroups";
+import { toggleIn } from "../lib/autonomy";
 
 export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () => void }) {
   const agents = useAgents();
@@ -58,6 +60,11 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
             </>
           )}
         </dl>
+        {event.kind === "ToolUsed" && toolOf(event.payload) && (
+          <p>
+            Tool <code>{toolOf(event.payload)}</code>
+          </p>
+        )}
         {event.kind === "AgentMessage" && (
           <button className="btn btn-sm" onClick={() => openMessage(event.payload as Message)}>
             Open message
@@ -77,6 +84,7 @@ export function Activity() {
   const [missionId, setMissionId] = useState("");
   const [kind, setKind] = useState("");
   const [kinds, setKinds] = useState<string[]>([]);
+  const [groups, setGroups] = useState<ActivityGroup[]>([]);
   const [selected, setSelected] = useState<PccEvent | null>(null);
 
   return (
@@ -108,10 +116,25 @@ export function Activity() {
           ))}
         </select>
       </div>
+      <div className="chips-row activity-groups" role="group" aria-label="Event groups">
+        {ACTIVITY_GROUPS.map((g) => {
+          const on = groups.includes(g.key);
+          return (
+            <button key={g.key} className={`chip chip-toggle${on ? " tone-accent" : " tone-dim"}`} aria-pressed={on} onClick={() => setGroups(toggleIn(groups, g.key, !on))}>
+              {g.label}
+            </button>
+          );
+        })}
+        {groups.length > 0 && (
+          <button className="link-btn small" onClick={() => setGroups([])}>
+            Show all
+          </button>
+        )}
+      </div>
       <div className="split">
         <div className="split-main">
           <ActivityTimeline
-            filter={{ agentId: agentId || undefined, missionId: missionId || undefined, kind: kind || undefined }}
+            filter={{ agentId: agentId || undefined, missionId: missionId || undefined, kind: kind || undefined, groups }}
             selectedId={selected?.id}
             onSelect={setSelected}
             onKinds={setKinds}

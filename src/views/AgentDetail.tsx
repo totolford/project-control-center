@@ -42,7 +42,7 @@ function AgentMemory({ agent }: { agent: Agent }) {
   );
 }
 
-function Controls({ agent }: { agent: Agent }) {
+export function AgentControls({ agent }: { agent: Agent }) {
   const [confirmRetire, setConfirmRetire] = useState(false);
   const [busy, setBusy] = useState(false);
   const live = isLive(agent.status);
@@ -141,7 +141,7 @@ export function AgentDetail({ agentId }: { agentId: string }) {
           </div>
           <div className="muted">{agent.role}</div>
         </div>
-        <Controls agent={agent} />
+        <AgentControls agent={agent} />
       </div>
 
       <div className="agent-meta">

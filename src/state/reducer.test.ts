@@ -1,34 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Agent, Mission, PccEvent, PermissionRequest, PermissionSet, ProjectSnapshot, Task } from "../lib/types";
+import type { Agent, Mission, PccEvent, PermissionRequest, ProjectSnapshot, Task } from "../lib/types";
+import { makeAgent, makeSnapshot } from "../test/fixtures";
 import { TIMELINE_LIMIT, applyEvent, fromSnapshot, upsertById } from "./reducer";
 
-const perms = {} as PermissionSet;
-
 function agent(id: string, patch: Partial<Agent> = {}): Agent {
-  return {
-    id,
-    name: id,
-    kind: id === "central" ? "central" : "worker",
-    provider: "claude-code",
-    role: "r",
-    instructions: "",
-    status: "offline",
-    model: null,
-    permissions: perms,
-    connections: [],
-    isolation: "shared",
-    workdir: "C:/p",
-    branch: null,
-    currentTask: null,
-    currentAction: null,
-    progress: null,
-    claudeSessionId: null,
-    totalCostUsd: 0,
-    createdBy: "user",
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
-    ...patch,
-  };
+  return makeAgent(id, { createdBy: "user", ...patch });
 }
 
 function mission(id: string, patch: Partial<Mission> = {}): Mission {
@@ -49,28 +25,7 @@ function mission(id: string, patch: Partial<Mission> = {}): Mission {
 }
 
 function snapshot(patch: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
-  return {
-    info: { id: "p1", name: "Proj", root: "C:/p", createdAt: "2026-01-01T00:00:00Z", formatVersion: 1 },
-    settings: {
-      centralModel: null,
-      workerModel: null,
-      maxParallelWorkers: 3,
-      useWorktrees: true,
-      inheritUserSettings: false,
-      defaultWorkerPermissions: perms,
-      maxWorkerPermissions: perms,
-      maxBudgetUsdPerSession: null,
-      allowDirectWorkerMessages: false,
-    },
-    agents: [agent("central")],
-    tasks: [],
-    missions: [],
-    connections: [],
-    pendingPermissions: [],
-    repo: null,
-    recovery: null,
-    ...patch,
-  };
+  return makeSnapshot({ info: { id: "p1", name: "Proj", root: "C:/p", createdAt: "2026-01-01T00:00:00Z", formatVersion: 1 }, ...patch });
 }
 
 let nextId = 1;
@@ -167,6 +122,16 @@ describe("applyEvent", () => {
     expect(delivered.liveMessages).toHaveLength(1);
     expect(delivered.liveMessages[0].deliveredAt).not.toBeNull();
     expect(applyEvent(base, ev("MemoryUpdated", { key: "project" })).memoryVersion).toBe(1);
+  });
+
+  it("tracks the emergency stop and bumps journal / inventory versions", () => {
+    const base = fromSnapshot(snapshot({ emergency: true }));
+    expect(base.emergency).toBe(true);
+    const released = applyEvent(base, ev("EmergencyStop", { active: false }));
+    expect(released.emergency).toBe(false);
+    expect(applyEvent(released, ev("EmergencyStop", {})).emergency).toBe(false);
+    expect(applyEvent(base, ev("PermissionAutoApproved", { id: 3 })).decisionVersion).toBe(1);
+    expect(applyEvent(base, ev("SkillChanged", null)).toolsVersion).toBe(1);
   });
 
   it("ignores malformed payloads", () => {

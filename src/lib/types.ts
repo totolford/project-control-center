@@ -494,6 +494,8 @@ export interface ConnectionInput {
   config: Record<string, unknown>;
   /** Secret values to store in Windows Credential Manager (never written to the project). */
   secrets?: Record<string, string>;
+  /** Omit to keep the current state (new connections are enabled). Disabled connections are never given to agents. */
+  enabled?: boolean;
 }
 
 export interface AppInfo {
@@ -579,7 +581,10 @@ export interface ClaudeEnvironment {
   outputStyle: string | null;
   outputStyles: any[];
   fastMode: Record<string, any>;
-  /** { name, status: "connected"|"failed"|"pending"|"disabled"|..., error?, config: { type, command?, args?, env?, url?, headers? }, scope, source } */
+  /**
+   * { name, status: "connected"|"failed"|"pending"|"disabled"|..., error?, config: { type, command?, args?, env?, url?, headers? }, scope, source }
+   * env/headers values are redacted ("••••••"); pass the config unchanged to testMcpConfig/importClaudeMcp, the backend restores them.
+   */
   mcpServers: Record<string, any>[];
   /** get_context_usage: { categories: [{ name, tokens, kind }], totalTokens, maxTokens, percentage, ... } */
   context: Record<string, any> | null;

@@ -1,0 +1,309 @@
+/* ------------------------------------------------------------------ utilities */
+.tiny {
+  font-size: 11px;
+}
+.dim {
+  color: var(--dim);
+}
+.nowrap {
+  white-space: nowrap;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bullet-list {
+  list-style: disc;
+  padding-left: 18px;
+  margin: 4px 0 8px;
+}
+.bullet-list li {
+  padding: 1px 0;
+}
+.tone-blue-fg {
+  color: var(--blue);
+}
+.tone-orange-fg {
+  color: var(--orange);
+}
+.tone-grey-fg,
+.tone-dim-fg {
+  color: var(--muted);
+}
+.icon-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.kv-tight {
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+.kv-pair {
+  display: contents;
+}
+.compact-table td,
+.compact-table th {
+  padding: 3px 8px;
+}
+.chip-toggle {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.chip-toggle.tone-dim {
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ power */
+.power {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.power-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.power-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+.power-fill.power-low {
+  background: var(--green);
+}
+.power-fill.power-high {
+  background: var(--amber);
+}
+.power-fill.power-maximum {
+  background: var(--red);
+}
+.power-fill.power-custom {
+  background: var(--muted);
+}
+.power-levels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+.power-custom-chip {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+.power-btn {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.power-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover);
+}
+.power-btn.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.power-btn.active.power-maximum {
+  border-color: var(--red);
+  background: rgba(248, 81, 73, 0.12);
+}
+.power.compact .power-btn {
+  font-size: 9.5px;
+  padding: 0 3px;
+}
+
+/* ------------------------------------------------------------------ usage bars */
+.usage-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.usage-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ------------------------------------------------------------------ CLAUDE UNLOCKED */
+.unlock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+.unlock-toggle:hover:not(:disabled) {
+  color: var(--text);
+}
+.unlock-toggle.on {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(210, 153, 34, 0.08);
+}
+.unlock-toggle.large {
+  width: auto;
+  height: 38px;
+  padding: 0 16px;
+  font-size: 12.5px;
+}
+.unlock-label {
+  flex: 1;
+  text-align: left;
+}
+.unlock-state {
+  font-family: var(--mono);
+}
+.unlock-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.unlock-hero.on {
+  border-color: rgba(210, 153, 34, 0.6);
+}
+.checklist-table td:first-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* ------------------------------------------------------------------ CONTROL rail */
+.swarm-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.swarm-row .swarm-body {
+  min-width: 0;
+}
+.control-rail {
+  width: 260px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  padding: 0 10px 12px;
+}
+.rail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.rail-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.rail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.rail-section h3 {
+  font-size: 10.5px;
+}
+.rail-link {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.panel-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.panel-window .tile-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ approval journal */
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.journal-scroll {
+  height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.journal-row {
+  display: grid;
+  grid-template-columns: 120px 110px 130px 100px minmax(0, 2fr) minmax(0, 1.4fr);
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.journal-row.auto {
+  background: var(--accent-soft);
+}
+.journal-head {
+  height: 26px;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ------------------------------------------------------------------ env editor */
+.env-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.env-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.env-row input:first-child {
+  width: 200px;
+}

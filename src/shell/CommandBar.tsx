@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bot, Cable, CornerDownLeft, ListChecks, OctagonX, Plus, RotateCcw, Sparkles, Target, View } from "lucide-react";
+import { Bot, Cable, CornerDownLeft, FlaskConical, ListChecks, OctagonX, PanelRightOpen, Plus, RefreshCw, RotateCcw, Siren, Sparkles, Target } from "lucide-react";
 import { api } from "../lib/api";
 import { run } from "../lib/toast";
 import { fuzzyFilter } from "../lib/fuzzy";
 import { useUi } from "../state/ui";
-import { useStore, type ViewName } from "../store";
+import { useStore } from "../store";
+import { useClaude } from "../state/claude";
+import { ALL_NAV_ITEMS } from "./navItems";
 import { availableProviderId, useLayoutContext, useProviders } from "../workspace/hooks";
 import { confirmResetLayout } from "../workspace/store";
 
@@ -16,17 +18,6 @@ interface Command {
   icon: LucideIcon;
   run: () => void;
 }
-
-const VIEWS: [ViewName, string][] = [
-  ["swarm", "Swarm"],
-  ["missions", "Missions"],
-  ["memory", "Memory"],
-  ["connections", "Connections"],
-  ["activity", "Activity"],
-  ["tasks", "Tasks"],
-  ["git", "Git"],
-  ["settings", "Settings"],
-];
 
 function focusComposer() {
   document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus();
@@ -43,8 +34,14 @@ function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
     ...(provider ? [{ id: "cmd:agent", label: "Add agent…", group: "Command", icon: Plus, run: () => ui.openDialog({ type: "newAgent", provider }) }] : []),
     { id: "cmd:conn", label: "Add connection…", group: "Command", icon: Cable, run: () => ui.openDialog({ type: "addConnection" }) },
     { id: "cmd:stop", label: "Stop all agents", group: "Command", icon: OctagonX, run: () => void run(() => api.stopAll(), "Stop requested for all agents") },
+    ...(p.emergency
+      ? [{ id: "cmd:release", label: "Release emergency stop", group: "Safety", icon: Siren, run: () => void run(() => api.releaseEmergency(), "Emergency stop released") }]
+      : []),
+    { id: "cmd:improve", label: "Run an improvement cycle now", group: "Command", icon: FlaskConical, run: () => void run(() => api.startImprovementCycle(), "Improvement cycle started") },
+    { id: "cmd:claude-refresh", label: "Refresh Claude Code environment", group: "Command", icon: RefreshCw, run: () => void useClaude.getState().load(true) },
+    { id: "cmd:rail", label: "Toggle CONTROL rail", group: "Command", icon: PanelRightOpen, run: () => ui.toggleRail() },
     { id: "cmd:reset", label: "Reset workspace layout", group: "Command", icon: RotateCcw, run: () => void confirmResetLayout(ctx) },
-    ...VIEWS.map(([name, label]) => ({ id: `view:${name}`, label: `Go to ${label}`, group: "View", icon: View, run: () => s.navigate({ name }) })),
+    ...ALL_NAV_ITEMS.map((item) => ({ id: `view:${item.name}`, label: `Go to ${item.label}`, group: "View", icon: item.icon, run: () => s.navigate({ name: item.name }) })),
     ...p.agents.map((a) => ({ id: `agent:${a.id}`, label: `${a.name} — ${a.role}`, group: "Agent", icon: Bot, run: () => s.openAgent(a.id) })),
     ...p.missions.map((m) => ({ id: `mission:${m.id}`, label: m.title, group: "Mission", icon: Target, run: () => s.navigate({ name: "missions" }) })),
     ...p.tasks.map((t) => ({ id: `task:${t.id}`, label: t.title, group: "Task", icon: ListChecks, run: () => s.openTask(t.id) })),

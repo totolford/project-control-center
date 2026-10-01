@@ -71,7 +71,24 @@ pub fn save_app_settings(state: State<'_, AppState>, settings: AppSettings) -> C
 
 #[tauri::command]
 pub async fn claude_environment(state: State<'_, AppState>) -> CmdResult<ClaudeEnvironment> {
-    Ok(pcc_claude::inspect::inspect(&workdir(&state).await).await)
+    let mut env = pcc_claude::inspect::inspect(&workdir(&state).await).await;
+    let mut originals = Vec::new();
+    for server in env.mcp_servers.iter_mut() {
+        if let Some(config) = server.get_mut("config") {
+            originals.push(config.clone());
+            *config = pcc_claude::inspect::redact_mcp_config(config);
+        }
+    }
+    *state.claude_mcp_configs.lock().map_err(|_| Error::Process("state lock poisoned".into()))? = originals;
+    Ok(env)
+}
+
+/// Real values for a config the UI got redacted.
+fn unredact(state: &AppState, config: &Value) -> Value {
+    match state.claude_mcp_configs.lock() {
+        Ok(originals) => pcc_claude::inspect::unredact_mcp_config(config, &originals),
+        Err(_) => config.clone(),
+    }
 }
 
 /// The CLI command tree of the installed version (cached per version).
@@ -171,6 +188,7 @@ pub async fn claude_mcp_set_enabled(state: State<'_, AppState>, name: String, en
 /// Tests a server given in Claude Code's config format (`type`, `command`, `url`, ...).
 #[tauri::command]
 pub async fn test_mcp_config(state: State<'_, AppState>, config: Value) -> CmdResult<McpProbe> {
+    let config = unredact(&state, &config);
     let cwd = workdir(&state).await;
     let strings = |k: &str| -> BTreeMap<String, String> {
         config
@@ -224,6 +242,7 @@ pub async fn import_claude_mcp(
     name: String,
     config: Value,
 ) -> CmdResult<pcc_core::Connection> {
+    let config = unredact(&state, &config);
     let cfg: McpConfig =
         kinds::mcp_config_from_claude(&config).ok_or_else(|| Error::invalid("unsupported MCP server type"))?;
     let mut secrets = BTreeMap::new();
@@ -240,7 +259,13 @@ pub async fn import_claude_mcp(
     let kind =
         if name.to_ascii_lowercase().contains("roblox") { ConnectionKind::RobloxStudio } else { ConnectionKind::Mcp };
     let mut e = orch.lock().await;
-    e.add_connection(ConnectionInput { name, kind, config: serde_json::to_value(cfg)?, secrets: Some(secrets) })
+    e.add_connection(ConnectionInput {
+        name,
+        kind,
+        config: serde_json::to_value(cfg)?,
+        secrets: Some(secrets),
+        enabled: None,
+    })
 }
 
 #[tauri::command]

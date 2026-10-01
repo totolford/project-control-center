@@ -36,6 +36,12 @@ export interface ProjectData {
   memoryVersion: number;
   /** Bumped on GitChanged so git views can reload. */
   gitVersion: number;
+  /** Emergency stop active: autonomy and new work are blocked until released. */
+  emergency: boolean;
+  /** Bumped on permission events so the approval journal can reload. */
+  decisionVersion: number;
+  /** Bumped on McpChanged / SkillChanged so Claude Code inventories can reload. */
+  toolsVersion: number;
 }
 
 export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | null): ProjectData {
@@ -54,6 +60,9 @@ export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | nul
     liveMessages: keep?.liveMessages ?? [],
     memoryVersion: keep?.memoryVersion ?? 0,
     gitVersion: keep?.gitVersion ?? 0,
+    emergency: snap.emergency,
+    decisionVersion: keep?.decisionVersion ?? 0,
+    toolsVersion: keep?.toolsVersion ?? 0,
   };
 }
 
@@ -117,9 +126,18 @@ export function applyEvent(data: ProjectData, e: PccEvent): ProjectData {
     case "AgentMessage":
       return hasId(p) ? { ...next, liveMessages: addLiveMessage(next.liveMessages, p as Message) } : next;
     case "PermissionRequested":
-      return hasId(p) ? { ...next, pendingPermissions: upsertById(next.pendingPermissions, p as PermissionRequest) } : next;
+      return hasId(p)
+        ? { ...next, pendingPermissions: upsertById(next.pendingPermissions, p as PermissionRequest), decisionVersion: next.decisionVersion + 1 }
+        : next;
     case "PermissionResolved":
-      return hasId(p) ? { ...next, pendingPermissions: removeById(next.pendingPermissions, p.id) } : next;
+      return hasId(p) ? { ...next, pendingPermissions: removeById(next.pendingPermissions, p.id), decisionVersion: next.decisionVersion + 1 } : next;
+    case "PermissionAutoApproved":
+      return { ...next, decisionVersion: next.decisionVersion + 1 };
+    case "EmergencyStop":
+      return isObject(p) && typeof p.active === "boolean" ? { ...next, emergency: p.active } : next;
+    case "McpChanged":
+    case "SkillChanged":
+      return { ...next, toolsVersion: next.toolsVersion + 1 };
     case "ConnectionChanged":
       if (!hasId(p)) return next;
       if ((p as { deleted?: boolean }).deleted === true) {

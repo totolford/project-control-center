@@ -168,3 +168,75 @@ Credential Manager under the service `ProjectControlCenter`; the project stores
 only a `credentialRef`. MCP secrets reach the server through `${VAR}` references
 in the generated MCP config and environment variables of the session process, so
 they are never written to disk.
+
+## Claude Control Center
+
+Everything shown about Claude Code comes from Claude Code itself, so the interface
+adapts to the installed version:
+
+| Area | Source |
+|------|--------|
+| Version, login | `claude --version`, `claude auth status` |
+| Models, slash commands & skills, sub-agents, account, permission mode, output styles | `initialize` control request (stream-json), in a short-lived session that never calls a model |
+| MCP servers (status, scope, transport) | `mcp_status` control request |
+| Context window usage | `get_context_usage` |
+| Session usage and subscription rate limits | `get_usage` |
+| Effective settings (env values hidden) | `get_settings` |
+| Plugins | `claude plugin list --json` |
+| Command Center | `claude --help` and every sub-command's `--help`, parsed and cached per version |
+
+Live session controls use the same protocol on running agents: `set_model`,
+`mcp_reconnect`, `reload_plugins`. `mcp_toggle` is persisted by Claude Code for
+the project, so NEXUS presents it as a configuration change.
+
+### MCP
+
+Two worlds are shown side by side. NEXUS connections are what agents receive
+(sessions run with `--strict-mcp-config`); Claude Code's own servers are what the
+user gets when running `claude` directly. A Claude Code server can be imported into
+NEXUS: its environment/header values move to Windows Credential Manager. Servers
+added to Claude Code's configuration from NEXUS may only reference secrets as
+`${VAR}`. Probes speak MCP over stdio and streamable HTTP/SSE and list tools,
+resources and prompts with the initialize latency.
+
+### Skills
+
+Skills are read from `~/.claude/skills` (including claude.ai synced skills),
+`<project>/.claude/skills` and installed plugins. Claude Code has no per-skill
+switch, so disabling a user/project skill moves it to a sibling
+`skills-disabled/` folder (reversible) and deleting moves it to `skills-trash/`.
+Plugin skills follow their plugin (`claude plugin enable|disable`). Edits are shown
+as a unified diff before being saved. "Test" checks the frontmatter and whether
+Claude Code actually lists the skill. Per agent, skills are all or nothing
+(`--disable-slash-commands`).
+
+### Power, CLAUDE UNLOCKED and the decision journal
+
+Power levels (LOW, NORMAL, HIGH, MAXIMUM) are only permission presets; the
+resulting capabilities are what is stored, enforced and displayed. CLAUDE UNLOCKED
+replaces every agent's effective permissions by the configured unlocked set; with
+Auto Approve, prompts that would be asked are answered by NEXUS, except the
+categories kept manual (destructive commands, paths outside the workspace and
+chosen capabilities by default). NEXUS never uses Claude Code's
+`bypassPermissions`: every tool call still goes through the permission prompt, and
+every decision (allowed, denied, asked, auto-approved, user decision) is written to
+the `decisions` table.
+
+**Emergency stop** kills every managed Claude Code process and Raw Terminal, rejects
+pending prompts and blocks auto-start, auto-approval, new missions and messages
+until released. **Revoke all** sets every agent to LOW, deletes saved "allow
+always" rules and turns UNLOCKED off.
+
+### Continuous improvement
+
+When enabled, a minute tick starts an improvement mission for Central when none is
+active, the interval has elapsed and the daily limit is not reached. Propose mode
+asks for reviewed tasks only; implement mode lets workers change code (merges
+still need approval). Traceability is the mission, its tasks (files, tests,
+commits) and the git snapshots used for rollback.
+
+### Raw Terminal
+
+Interactive sessions run in a ConPTY pseudo-terminal (`pcc-pty`): Claude Code
+itself, `claude --resume` of a stopped agent's session, PowerShell, CMD or WSL.
+Processes join the application's kill-on-close job object.

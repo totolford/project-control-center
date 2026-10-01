@@ -6,22 +6,32 @@ import type { ProjectSettings } from "../lib/types";
 import { useStore } from "../store";
 import { Field, PageHeader, Section, Spinner } from "../components/Common";
 import { PermissionEditor } from "../components/PermissionEditor";
-import { ClaudeStatus, useClaudeInfo } from "../components/ClaudeStatus";
 import { UpdatePanel } from "./settings/UpdatePanel";
 import { WorkspaceSettings } from "./settings/WorkspaceSettings";
+import { ClaudeSettings } from "./settings/ClaudeSettings";
+import { SessionDefaults } from "./settings/SessionDefaults";
+import { ImprovementSettings } from "./settings/ImprovementSettings";
 
 function numberOrNull(v: string): number | null {
   const n = Number(v);
   return v.trim() === "" || Number.isNaN(n) ? null : n;
 }
 
+/** Scrolls to the section named by the current view (e.g. navigate({ name: "settings", section: "improvement" })). */
+function useScrollToSection() {
+  const section = useStore((s) => s.view.section);
+  useEffect(() => {
+    if (section) document.getElementById(`settings-${section}`)?.scrollIntoView({ block: "start" });
+  }, [section]);
+}
+
 export function Settings() {
   const settings = useStore((s) => s.project?.settings);
   const setSettings = useStore((s) => s.setSettings);
-  const claude = useClaudeInfo();
   const [draft, setDraft] = useState<ProjectSettings | undefined>(settings);
   const [budget, setBudget] = useState(settings?.maxBudgetUsdPerSession?.toString() ?? "");
   const [saving, setSaving] = useState(false);
+  useScrollToSection();
 
   // Snapshot refreshes replace the object; only reset the form when the saved values really change.
   const savedKey = JSON.stringify(settings);
@@ -58,15 +68,15 @@ export function Settings() {
         }
       />
 
-      <Section title="Agents">
-        <div className="form-row">
-          <Field label="Central model" hint="Empty = Claude Code default.">
-            <input className="mono" value={draft.centralModel ?? ""} onChange={(e) => set("centralModel", e.target.value.trim() || null)} placeholder="default" />
-          </Field>
-          <Field label="Worker model" hint="Empty = Claude Code default.">
-            <input className="mono" value={draft.workerModel ?? ""} onChange={(e) => set("workerModel", e.target.value.trim() || null)} placeholder="default" />
-          </Field>
-        </div>
+      <div id="settings-claude">
+        <ClaudeSettings />
+      </div>
+
+      <div id="settings-defaults">
+        <SessionDefaults draft={draft} set={set} />
+      </div>
+
+      <Section title="Workers">
         <div className="form-row">
           <Field label="Max parallel workers">
             <input
@@ -106,15 +116,9 @@ export function Settings() {
         </Section>
       </div>
 
-      <Section title="Claude Code">
-        <ClaudeStatus info={claude.info} loading={claude.loading} onRecheck={() => void claude.reload()} />
-        {claude.info?.path && (
-          <dl className="kv">
-            <dt>Path</dt>
-            <dd className="mono small">{claude.info.path}</dd>
-          </dl>
-        )}
-      </Section>
+      <div id="settings-improvement">
+        <ImprovementSettings value={draft.improvement} onChange={(v) => set("improvement", v)} />
+      </div>
 
       <WorkspaceSettings />
 

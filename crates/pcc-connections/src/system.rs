@@ -37,9 +37,13 @@ pub fn system_report() -> SystemReport {
     sys.refresh_cpu_all();
     sys.refresh_memory();
     let cpu = sys.cpus().first().map(|c| c.brand().trim().to_string()).unwrap_or_default();
+    let os = System::name().unwrap_or_else(|| std::env::consts::OS.into());
+    // `long_os_version` repeats the name ("Windows 11 Pro"); keep only the version part.
+    let long = System::long_os_version().or_else(System::os_version).unwrap_or_default();
+    let os_version = long.strip_prefix(&os).map(|v| v.trim().to_string()).unwrap_or(long);
     SystemReport {
-        os: System::name().unwrap_or_else(|| std::env::consts::OS.into()),
-        os_version: System::long_os_version().or_else(System::os_version).unwrap_or_default(),
+        os,
+        os_version,
         arch: std::env::consts::ARCH.into(),
         cpu,
         cpu_cores: sys.cpus().len(),

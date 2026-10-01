@@ -1,7 +1,9 @@
 import { memo, useMemo } from "react";
-import { ExternalLink, GripVertical, Maximize2, Minimize2, Minus, Pin, PinOff, Plus, X } from "lucide-react";
+import { AppWindow, ExternalLink, GripVertical, Maximize2, Minimize2, Minus, Pin, PinOff, Plus, X } from "lucide-react";
 import type { MenuEntry } from "../components/Menu";
 import { closePanel, movePanelToNewTab, patchPanel, toggleMaximize, type PanelNode } from "./layout";
+import { detachPanel } from "./detachWindow";
+import { usePanelTitle } from "./panelMeta";
 import { PANELS } from "./registry";
 import { useDrag, useWorkspace } from "./store";
 
@@ -21,6 +23,7 @@ export interface PanelChrome {
 function usePanelChrome(panel: PanelNode, maximized: boolean): PanelChrome {
   const update = useWorkspace((s) => s.update);
   const setSource = useDrag((s) => s.setSource);
+  const title = usePanelTitle(panel.panel);
   return useMemo(() => {
     const { id, pinned, minimized } = panel;
     const grip = pinned ? (
@@ -78,9 +81,16 @@ function usePanelChrome(panel: PanelNode, maximized: boolean): PanelChrome {
         disabled: pinned,
         onSelect: () => update((ws) => movePanelToNewTab(ws, id)),
       },
+      {
+        label: "Detach to window",
+        detail: pinned ? "Unpin first" : "Closing the window docks it back",
+        icon: <AppWindow size={13} />,
+        disabled: pinned,
+        onSelect: () => void detachPanel(panel, title),
+      },
     ];
     return { panel, maximized, grip, controls, menu };
-  }, [panel, maximized, update, setSource]);
+  }, [panel, maximized, update, setSource, title]);
 }
 
 /** One tile: header (generic or panel-specific) + body, with drop zones while dragging. */

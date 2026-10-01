@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Info, Trash2 } from "lucide-react";
 import { api } from "../../lib/api";
 import { attempt, run } from "../../lib/toast";
+import { CONNECTION_STATUS } from "../../lib/labels";
+import { formatRelative } from "../../lib/format";
 import type { Agent, PermissionSet } from "../../lib/types";
 import { useConnections, useStore } from "../../store";
 import { PermissionEditor } from "../../components/PermissionEditor";
@@ -69,7 +71,7 @@ export function AgentPermissions({ agent }: { agent: Agent }) {
         <PermissionEditor value={perms} onChange={setPerms} disabled={saving} ceiling={agent.kind === "worker" ? maxWorker : undefined} />
       </Section>
 
-      <Section title="Granted connections">
+      <Section title="Granted MCP servers & connections">
         {connections.length === 0 ? (
           <div className="muted small">This project has no connections. Add them on the Connections page.</div>
         ) : (
@@ -83,6 +85,8 @@ export function AgentPermissions({ agent }: { agent: Agent }) {
                   disabled={saving}
                 />
                 {c.name} <span className="muted small">({c.kind})</span>
+                <span className={`chip tone-${c.enabled ? CONNECTION_STATUS[c.status].tone : "dim"}`}>{c.enabled ? CONNECTION_STATUS[c.status].label : "Disabled"}</span>
+                <span className="muted tiny">used {formatRelative(c.lastUsed)}</span>
               </label>
             ))}
           </div>
