@@ -218,3 +218,53 @@ async fn worker_slots_are_reclaimed_and_stopped_central_is_woken() {
     wait_for("central restarted", || store.agent("central").unwrap().status.is_live()).await;
     o.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unlocked_auto_approval_is_journaled_and_emergency_blocks_work() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    let mut settings = store.settings();
+    settings.autonomy.unlocked = true;
+    settings.autonomy.auto_approve = true;
+    settings.autonomy.manual_for_destructive = false;
+    store.save_settings(settings).unwrap();
+    {
+        let mut e = o.lock().await;
+        e.create_agent(
+            pcc_orchestrator::dto::AgentSpec {
+                name: "Ops".into(),
+                role: "Operations".into(),
+                isolation: Some("shared".into()),
+                ..Default::default()
+            },
+            "user",
+        )
+        .unwrap();
+        e.send_user_message("ops", "DANGER: clean the build").unwrap();
+    }
+    // No prompt: the destructive command is answered automatically and journaled.
+    wait_for("auto-approved decision reaches the session", || {
+        store.list_logs("ops", None, 100).unwrap().iter().any(|l| l.text.contains("dangerous command allow"))
+    })
+    .await;
+    assert!(o.lock().await.snapshot().unwrap().pending_permissions.is_empty());
+    let journal = store.list_decisions(Some("ops"), None, 10).unwrap();
+    assert!(journal
+        .iter()
+        .any(|d| d.decision == "auto_approved" && d.summary.contains("rm -rf build") && d.actor == "autonomy"));
+
+    // Emergency stop: sessions stop and new work is refused until released.
+    o.lock().await.emergency_stop().unwrap();
+    wait_for("ops stopped", || store.agent("ops").unwrap().status == AgentStatus::Stopped).await;
+    assert!(o.lock().await.create_mission("anything", None).is_err());
+    assert!(o.lock().await.send_user_message("ops", "hi").is_err());
+    o.lock().await.release_emergency().unwrap();
+    assert!(o.lock().await.send_user_message("ops", "hi").is_ok());
+
+    // Revoke all: everyone back to LOW, UNLOCKED off.
+    o.lock().await.revoke_all_permissions().unwrap();
+    assert_eq!(store.agent("ops").unwrap().permissions.power(), Some(pcc_core::PowerLevel::Low));
+    assert!(!store.settings().autonomy.unlocked);
+    o.close().await;
+}

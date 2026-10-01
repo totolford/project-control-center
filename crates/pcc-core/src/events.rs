@@ -28,6 +28,14 @@ pub enum EventKind {
     ConnectionChanged,
     MemoryUpdated,
     GitChanged,
+    /// A permission prompt answered automatically under CLAUDE UNLOCKED.
+    PermissionAutoApproved,
+    /// An agent called a tool that changes things (command, edit, MCP...).
+    ToolUsed,
+    EmergencyStop,
+    ImprovementCycle,
+    McpChanged,
+    SkillChanged,
     Error,
 }
 

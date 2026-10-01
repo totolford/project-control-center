@@ -1,0 +1,15 @@
+[package]
+name = "pcc-pty"
+description = "Pseudo-terminal sessions (ConPTY on Windows) for the Raw Terminal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pcc-core.workspace = true
+pcc-claude.workspace = true
+serde.workspace = true
+parking_lot.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+portable-pty = "0.9"

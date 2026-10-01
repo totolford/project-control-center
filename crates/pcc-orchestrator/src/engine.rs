@@ -78,6 +78,9 @@ pub struct Engine {
     /// session (mission, message, start, recovery). Prevents spending tokens
     /// just because a project was opened.
     pub(crate) autopilot: bool,
+    /// Emergency stop: no auto-start, no auto-approval, no new work until released.
+    pub(crate) emergency: bool,
+    pub(crate) connection_touches: HashMap<String, std::time::Instant>,
 }
 
 impl Engine {
@@ -102,7 +105,10 @@ impl Engine {
             nudges: HashMap::new(),
             recovery: None,
             autopilot: false,
+            emergency: false,
+            connection_touches: HashMap::new(),
         };
+        e.emergency = e.store.meta_get("emergency_stop")?.is_some_and(|v| !v.is_empty());
         e.ensure_central()?;
         e.detect_recovery()?;
         Ok(e)
@@ -180,6 +186,7 @@ impl Engine {
             pending_permissions: self.permissions.values().map(|p| p.request.clone()).collect(),
             repo: self.repo.as_ref().map(Repo::status),
             recovery: self.recovery.clone(),
+            emergency: self.emergency,
         })
     }
 
@@ -213,6 +220,7 @@ impl Engine {
             progress: None,
             claude_session_id: None,
             total_cost_usd: 0.0,
+            profile: Default::default(),
             created_by: SYSTEM_ID.into(),
             created_at: now.clone(),
             updated_at: now,
@@ -378,6 +386,7 @@ impl Engine {
         if self.sessions.contains_key(id) {
             return Ok(());
         }
+        self.ensure_not_emergency()?;
         let claude = self.claude_path()?;
         let mut agent = self.store.agent(id)?;
         if agent.status == AgentStatus::Retired {
@@ -515,7 +524,10 @@ impl Engine {
             Some(l) if l.busy || l.stopping => return Ok(()),
             Some(_) => {}
             None => {
-                if !self.autopilot || !matches!(agent.status, AgentStatus::Offline | AgentStatus::Waiting) {
+                if !self.autopilot
+                    || self.emergency
+                    || !matches!(agent.status, AgentStatus::Offline | AgentStatus::Waiting)
+                {
                     return Ok(());
                 }
                 let limit = self.store.settings().max_parallel_workers as usize;
@@ -681,6 +693,7 @@ impl Engine {
     }
 
     pub fn send_user_message(&mut self, to: &str, body: &str) -> Result<Message> {
+        self.ensure_not_emergency()?;
         self.autopilot = true;
         self.wake(to)?;
         self.post_message(USER_ID, to, MessageKind::User, body, None, None)
@@ -754,6 +767,16 @@ impl Engine {
                                 LogKind::ToolUse,
                                 &format!("{prefix}{name} {}", compact_json(&input, 1200)),
                             );
+                            if is_notable_tool(&name) {
+                                self.emit(
+                                    Event::new(
+                                        EventKind::ToolUsed,
+                                        format!("{agent}: {action}"),
+                                        json!({"tool": name, "input": truncate_value(&input)}),
+                                    )
+                                    .agent(agent),
+                                );
+                            }
                             if let Some(l) = self.sessions.get_mut(agent) {
                                 l.tool_names.insert(id, name);
                             }
@@ -972,24 +995,52 @@ impl Engine {
                 let store = self.store.clone();
                 let agent_id = a.id.clone();
                 let has_rule = move |k: &str| store.has_permission_rule(&agent_id, k).unwrap_or(false);
+                let mut autonomy = self.store.settings().autonomy;
+                if self.emergency {
+                    autonomy.auto_approve = false;
+                }
                 let decision = policy::evaluate(
                     &PolicyInput {
                         agent: &a,
                         project_root: self.store.root().to_path_buf(),
                         connections: &connections,
                         has_rule: &has_rule,
+                        autonomy: &autonomy,
                     },
                     &tool_name,
                     &input,
                 );
+                let class = pcc_core::permissions::classify_tool(&tool_name, &input, &[]);
                 match decision {
-                    Decision::Allow => self.write(agent, protocol::permission_allow(&request_id, &input))?,
+                    Decision::Allow => {
+                        if class.capability.is_some() {
+                            self.record_decision(agent, &tool_name, Some(&class), "allowed", "policy", None);
+                        }
+                        self.touch_connection(&class);
+                        self.write(agent, protocol::permission_allow(&request_id, &input))?
+                    }
+                    Decision::AutoApprove { reason, class } => {
+                        self.record_decision(
+                            agent,
+                            &tool_name,
+                            Some(&class),
+                            "auto_approved",
+                            "autonomy",
+                            Some(reason),
+                        );
+                        self.touch_connection(&class);
+                        let row = self.session_row(agent);
+                        self.log(agent, row, LogKind::System, &format!("AUTO-APPROVED {}", class.summary));
+                        self.write(agent, protocol::permission_allow(&request_id, &input))?
+                    }
                     Decision::Deny(msg) => {
+                        self.record_decision(agent, &tool_name, Some(&class), "denied", "policy", Some(msg.clone()));
                         let row = self.session_row(agent);
                         self.log(agent, row, LogKind::System, &format!("Denied {tool_name}: {msg}"));
                         self.write(agent, protocol::permission_deny(&request_id, &msg))?;
                     }
                     Decision::Ask { reason, class } => {
+                        self.record_decision(agent, &tool_name, Some(&class), "asked", "policy", Some(reason.clone()));
                         let req = PermissionRequest {
                             id: format!("perm-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]),
                             agent_id: agent.into(),
@@ -1043,6 +1094,20 @@ impl Engine {
         let p = self.permissions.remove(id).ok_or_else(|| Error::not_found(format!("permission request {id}")))?;
         let agent = p.request.agent_id.clone();
         let allow = decision != PermissionDecision::Reject;
+        self.store
+            .insert_decision(pcc_core::DecisionRecord {
+                id: 0,
+                ts: pcc_core::now(),
+                agent_id: agent.clone(),
+                tool_name: p.request.tool_name.clone(),
+                capability: Some(p.request.capability.clone()).filter(|c| !c.is_empty()),
+                summary: p.request.summary.clone(),
+                decision: if allow { "user_allowed" } else { "user_rejected" }.into(),
+                actor: "user".into(),
+                reason: Some(format!("{decision:?}")),
+            })
+            .map(|_| ())
+            .unwrap_or_else(|e| tracing::error!("cannot journal decision: {e}"));
         if decision == PermissionDecision::AllowAlways {
             self.store.add_permission_rule(&agent, &p.request.rule_key)?;
         }
@@ -1092,6 +1157,24 @@ impl Engine {
             }
         }
         Ok(())
+    }
+}
+
+/// Tools worth a timeline entry (reads and searches would flood it).
+fn is_notable_tool(name: &str) -> bool {
+    !matches!(name, "Read" | "Glob" | "Grep" | "TodoWrite" | "LSP" | "ToolSearch" | "NotebookRead")
+        && !name.starts_with("mcp__pcc__")
+}
+
+/// Keeps event payloads small: long strings are cut.
+fn truncate_value(v: &Value) -> Value {
+    match v {
+        Value::String(s) if s.chars().count() > 600 => {
+            Value::String(format!("{}…", s.chars().take(600).collect::<String>()))
+        }
+        Value::Object(o) => Value::Object(o.iter().map(|(k, v)| (k.clone(), truncate_value(v))).collect()),
+        Value::Array(a) => Value::Array(a.iter().take(50).map(truncate_value).collect()),
+        other => other.clone(),
     }
 }
 

@@ -18,8 +18,8 @@ use crate::db::{self, storage};
 use crate::layout::{write_json_atomic, Layout, FORMAT_VERSION};
 use crate::memory::{self, MemoryFile, MemoryScope};
 use pcc_core::{
-    ids, Agent, Connection as ProjectConnection, Error, Event, EventKind, LogEntry, LogKind, Message, Mission,
-    MissionStatus, MissionView, ProjectInfo, ProjectSettings, Result, SessionRecord, Task, TaskStatus,
+    ids, Agent, Connection as ProjectConnection, DecisionRecord, Error, Event, EventKind, LogEntry, LogKind, Message,
+    Mission, MissionStatus, MissionView, ProjectInfo, ProjectSettings, Result, SessionRecord, Task, TaskStatus,
 };
 
 /// Maximum characters stored for one log line (tool results can be huge).
@@ -705,6 +705,52 @@ impl ProjectStore {
         Ok(())
     }
 
+    // ------------------------------------------------------------ decision journal
+
+    /// Records a permission decision and returns it with its id.
+    pub fn insert_decision(&self, mut d: DecisionRecord) -> Result<DecisionRecord> {
+        let c = self.conn.lock();
+        c.execute(
+            "INSERT INTO decisions(ts, agent_id, tool_name, capability, summary, decision, actor, reason)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![d.ts, d.agent_id, d.tool_name, d.capability, d.summary, d.decision, d.actor, d.reason],
+        )
+        .map_err(storage)?;
+        d.id = c.last_insert_rowid();
+        Ok(d)
+    }
+
+    /// Newest first.
+    pub fn list_decisions(&self, agent: Option<&str>, before: Option<i64>, limit: u32) -> Result<Vec<DecisionRecord>> {
+        let c = self.conn.lock();
+        let mut stmt = c
+            .prepare(
+                "SELECT id, ts, agent_id, tool_name, capability, summary, decision, actor, reason FROM decisions
+                 WHERE (?1 IS NULL OR agent_id = ?1) AND (?2 IS NULL OR id < ?2) ORDER BY id DESC LIMIT ?3",
+            )
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![agent, before, limit.min(2000)], |r| {
+                Ok(DecisionRecord {
+                    id: r.get(0)?,
+                    ts: r.get(1)?,
+                    agent_id: r.get(2)?,
+                    tool_name: r.get(3)?,
+                    capability: r.get(4)?,
+                    summary: r.get(5)?,
+                    decision: r.get(6)?,
+                    actor: r.get(7)?,
+                    reason: r.get(8)?,
+                })
+            })
+            .map_err(storage)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    pub fn clear_permission_rules(&self) -> Result<usize> {
+        self.conn.lock().execute("DELETE FROM permission_rules", []).map_err(storage)
+    }
+
     // ------------------------------------------------------------ connections
 
     pub fn upsert_connection(&self, c: &ProjectConnection) -> Result<()> {
@@ -940,6 +986,31 @@ mod tests {
     }
 
     #[test]
+    fn decision_journal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = ProjectStore::open_ephemeral(tmp.path(), "t").unwrap();
+        for (i, d) in ["allowed", "auto_approved", "user_rejected"].iter().enumerate() {
+            s.insert_decision(DecisionRecord {
+                id: 0,
+                ts: pcc_core::now(),
+                agent_id: if i == 0 { "a".into() } else { "b".into() },
+                tool_name: "Bash".into(),
+                capability: Some("fs_execute".into()),
+                summary: format!("cmd {i}"),
+                decision: d.to_string(),
+                actor: "policy".into(),
+                reason: None,
+            })
+            .unwrap();
+        }
+        let all = s.list_decisions(None, None, 10).unwrap();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].decision, "user_rejected");
+        assert_eq!(s.list_decisions(Some("a"), None, 10).unwrap().len(), 1);
+        assert_eq!(s.list_decisions(None, Some(all[1].id), 10).unwrap().len(), 1);
+    }
+
+    #[test]
     fn workspace_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
         let s = ProjectStore::open_ephemeral(tmp.path(), "t").unwrap();
@@ -974,6 +1045,7 @@ mod tests {
             progress: None,
             claude_session_id: None,
             total_cost_usd: 0.0,
+            profile: Default::default(),
             created_by: "user".into(),
             created_at: pcc_core::now(),
             updated_at: pcc_core::now(),

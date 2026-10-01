@@ -66,11 +66,40 @@ pub struct AppState {
     pub project: RwLock<Option<OpenProject>>,
     pub data_dir: PathBuf,
     pub log_dir: PathBuf,
+    /// Raw Terminal sessions (application-wide, survive project switches).
+    pub pty: pcc_pty::PtyManager,
+}
+
+/// Application-level settings (not tied to a project).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AppSettings {
+    /// Explicit Claude Code executable; auto-detected when empty.
+    pub claude_path: Option<String>,
 }
 
 impl AppState {
     pub fn new(data_dir: PathBuf, log_dir: PathBuf) -> Self {
-        AppState { project: RwLock::new(None), data_dir, log_dir }
+        AppState { project: RwLock::new(None), data_dir, log_dir, pty: pcc_pty::PtyManager::new() }
+    }
+
+    pub fn app_settings_file(&self) -> PathBuf {
+        self.data_dir.join("app-settings.json")
+    }
+
+    pub fn load_app_settings(&self) -> AppSettings {
+        std::fs::read_to_string(self.app_settings_file())
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    /// Applies the Claude Code path override for this process (read by detection).
+    pub fn apply_app_settings(s: &AppSettings) {
+        match s.claude_path.as_deref().filter(|p| !p.trim().is_empty()) {
+            Some(p) => std::env::set_var("PCC_CLAUDE_PATH", p),
+            None => std::env::remove_var("PCC_CLAUDE_PATH"),
+        }
     }
 
     pub fn recent_file(&self) -> PathBuf {

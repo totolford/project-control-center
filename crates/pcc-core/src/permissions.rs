@@ -59,6 +59,20 @@ impl Capability {
     }
 }
 
+/// Power profile: a named permission preset.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum PowerLevel {
+    Low,
+    Normal,
+    High,
+    Maximum,
+}
+
+impl PowerLevel {
+    pub const ALL: [PowerLevel; 4] = [PowerLevel::Low, PowerLevel::Normal, PowerLevel::High, PowerLevel::Maximum];
+}
+
 /// What happens when an agent uses a capability.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
@@ -149,6 +163,45 @@ impl PermissionSet {
             (SshExecute, Ask),
             (Mcp, Allow),
         ])
+    }
+
+    /// Permission preset of a power level. Power is only a preset: the
+    /// resulting capabilities are what is enforced and displayed.
+    pub fn preset(level: PowerLevel) -> Self {
+        use Access::*;
+        use Capability::*;
+        match level {
+            PowerLevel::Low => Self::from_pairs(&[(FsRead, Allow), (GitRead, Allow), (GithubRead, Allow)]),
+            PowerLevel::Normal => Self::from_pairs(&[
+                (FsRead, Allow),
+                (FsWrite, Allow),
+                (FsExecute, Allow),
+                (GitRead, Allow),
+                (GitWrite, Ask),
+                (GithubRead, Allow),
+                (Network, Ask),
+                (Mcp, Ask),
+            ]),
+            PowerLevel::High => Self::from_pairs(&[
+                (FsRead, Allow),
+                (FsWrite, Allow),
+                (FsExecute, Allow),
+                (Network, Allow),
+                (GitRead, Allow),
+                (GitWrite, Allow),
+                (GithubRead, Allow),
+                (GithubWrite, Ask),
+                (SshRead, Ask),
+                (SshExecute, Ask),
+                (Mcp, Allow),
+            ]),
+            PowerLevel::Maximum => Self::from_pairs(&Capability::ALL.map(|c| (c, Allow))),
+        }
+    }
+
+    /// The power level whose preset equals this set, if any ("custom" otherwise).
+    pub fn power(&self) -> Option<PowerLevel> {
+        PowerLevel::ALL.into_iter().find(|l| &Self::preset(*l) == self)
     }
 
     /// Caps every capability at the ceiling (`Deny < Ask < Allow`).
@@ -486,6 +539,20 @@ fn is_inside_any(path: &str, roots: &[PathBuf]) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn power_presets_are_ordered_and_detected() {
+        let caps = PermissionSet::preset;
+        for c in Capability::ALL {
+            assert!(caps(PowerLevel::Low).get(c) <= caps(PowerLevel::Normal).get(c), "{c:?}");
+            assert!(caps(PowerLevel::Normal).get(c) <= caps(PowerLevel::High).get(c), "{c:?}");
+            assert!(caps(PowerLevel::High).get(c) <= caps(PowerLevel::Maximum).get(c), "{c:?}");
+            assert_eq!(caps(PowerLevel::Maximum).get(c), Access::Allow);
+        }
+        assert_eq!(caps(PowerLevel::Low).get(Capability::FsWrite), Access::Deny);
+        assert_eq!(caps(PowerLevel::High).power(), Some(PowerLevel::High));
+        assert_eq!(PermissionSet::worker_default().power(), None);
+    }
 
     #[test]
     fn clamp_caps_permissions() {

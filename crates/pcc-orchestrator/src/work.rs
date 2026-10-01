@@ -81,6 +81,11 @@ impl Engine {
             progress: None,
             claude_session_id: None,
             total_cost_usd: 0.0,
+            profile: pcc_core::AgentProfile {
+                effort: settings.default_effort.clone(),
+                skills_enabled: settings.default_skills_enabled,
+                ..Default::default()
+            },
             created_by: created_by.into(),
             created_at: now.clone(),
             updated_at: now,
@@ -113,6 +118,18 @@ impl Engine {
         }
         if let Some(m) = patch.model {
             a.model = m.filter(|m| !m.trim().is_empty());
+        }
+        if let Some(mut p) = patch.profile {
+            if let Some(e) = &p.effort {
+                if !matches!(e.as_str(), "low" | "medium" | "high" | "xhigh" | "max") {
+                    return Err(Error::invalid(format!("unknown effort level `{e}`")));
+                }
+            }
+            p.env.retain(|k, _| !k.trim().is_empty());
+            if let Some(bad) = p.env.keys().find(|k| !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')) {
+                return Err(Error::invalid(format!("invalid environment variable name `{bad}`")));
+            }
+            a.profile = p;
         }
         self.save_agent(&mut a)?;
         Ok(a)
@@ -440,6 +457,7 @@ impl Engine {
     // ------------------------------------------------------------ missions
 
     pub fn create_mission(&mut self, prompt: &str, title: Option<String>) -> Result<Mission> {
+        self.ensure_not_emergency()?;
         let prompt = prompt.trim();
         if prompt.is_empty() {
             return Err(Error::invalid("describe the mission"));

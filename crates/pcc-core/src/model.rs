@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::permissions::PermissionSet;
+use std::collections::BTreeMap;
+
+use crate::permissions::{Capability, PermissionSet, PowerLevel};
 
 // ---------------------------------------------------------------- project
 
@@ -39,6 +41,85 @@ pub struct ProjectSettings {
     pub max_budget_usd_per_session: Option<f64>,
     /// Allow workers to message each other directly instead of through Central.
     pub allow_direct_worker_messages: bool,
+    /// CLAUDE UNLOCKED and auto-approval rules.
+    pub autonomy: AutonomySettings,
+    /// Periodic project analysis and improvement missions.
+    pub improvement: ImprovementSettings,
+    /// Non-secret environment variables given to every agent session.
+    pub session_env: BTreeMap<String, String>,
+    /// Default reasoning effort for new agents (`--effort`), `None` = Claude Code default.
+    pub default_effort: Option<String>,
+    /// Skills (slash commands) enabled for new agents.
+    pub default_skills_enabled: bool,
+    /// Restart sessions that were running when the app closed without asking.
+    pub auto_recover: bool,
+}
+
+/// Maximum-autonomy mode. NEXUS never bypasses Claude Code's own safety: it
+/// answers Claude Code's permission prompts on the user's behalf according to
+/// these rules, and journals every decision.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AutonomySettings {
+    /// Every agent's effective permissions become `unlocked_permissions`.
+    pub unlocked: bool,
+    pub unlocked_permissions: PermissionSet,
+    /// Answer "ask" decisions automatically (journaled as auto-approved).
+    pub auto_approve: bool,
+    /// Keep asking the user for destructive commands even with auto-approve.
+    pub manual_for_destructive: bool,
+    /// Keep asking for paths outside the agent's workspace.
+    pub manual_for_outside_workspace: bool,
+    /// Capabilities that always stay manual.
+    pub manual_capabilities: Vec<Capability>,
+}
+
+impl Default for AutonomySettings {
+    fn default() -> Self {
+        Self {
+            unlocked: false,
+            unlocked_permissions: PermissionSet::preset(PowerLevel::Maximum),
+            auto_approve: false,
+            manual_for_destructive: true,
+            manual_for_outside_workspace: true,
+            manual_capabilities: vec![Capability::GithubAdmin],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImprovementMode {
+    /// Central analyses and creates tasks that require review.
+    Propose,
+    /// Central plans and implements; merges still need approval.
+    Implement,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ImprovementSettings {
+    pub enabled: bool,
+    pub interval_minutes: u32,
+    pub mode: ImprovementMode,
+    /// Focus areas, e.g. "bugs", "dead code", "tests", "documentation".
+    pub focus: Vec<String>,
+    pub max_runs_per_day: u32,
+}
+
+impl Default for ImprovementSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_minutes: 120,
+            mode: ImprovementMode::Propose,
+            focus: ["bugs", "dead code", "tests", "documentation", "conventions"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            max_runs_per_day: 4,
+        }
+    }
 }
 
 impl Default for ProjectSettings {
@@ -53,6 +134,12 @@ impl Default for ProjectSettings {
             max_worker_permissions: PermissionSet::worker_ceiling(),
             max_budget_usd_per_session: None,
             allow_direct_worker_messages: false,
+            autonomy: AutonomySettings::default(),
+            improvement: ImprovementSettings::default(),
+            session_env: BTreeMap::new(),
+            default_effort: None,
+            default_skills_enabled: true,
+            auto_recover: false,
         }
     }
 }
@@ -139,9 +226,29 @@ pub struct Agent {
     /// Claude Code session id, used to resume after a restart.
     pub claude_session_id: Option<String>,
     pub total_cost_usd: f64,
+    /// Runtime profile: effort, skills, environment.
+    #[serde(default)]
+    pub profile: AgentProfile,
     pub created_by: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgentProfile {
+    /// Reasoning effort passed as `--effort` (low, medium, high, xhigh, max).
+    pub effort: Option<String>,
+    /// When false the session starts with `--disable-slash-commands` (no skills).
+    pub skills_enabled: bool,
+    /// Non-secret environment variables for this agent's session.
+    pub env: BTreeMap<String, String>,
+}
+
+impl Default for AgentProfile {
+    fn default() -> Self {
+        Self { effort: None, skills_enabled: true, env: BTreeMap::new() }
+    }
 }
 
 /// The provider every agent used before providers existed, and the default.
@@ -374,7 +481,11 @@ pub enum ConnectionKind {
     Local,
     Git,
     Github,
+    Gitlab,
     Ssh,
+    Sftp,
+    Terminal,
+    Http,
     Mcp,
     RobloxStudio,
     Docker,
@@ -403,6 +514,33 @@ pub struct Connection {
     pub status_detail: Option<String>,
     pub last_checked: Option<String>,
     pub created_at: String,
+    /// Disabled connections are never given to agents.
+    #[serde(default = "enabled_by_default")]
+    pub enabled: bool,
+    /// Last time an agent was allowed to use it.
+    #[serde(default)]
+    pub last_used: Option<String>,
+}
+
+fn enabled_by_default() -> bool {
+    true
+}
+
+/// One permission decision, kept for the audit journal.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionRecord {
+    pub id: i64,
+    pub ts: String,
+    pub agent_id: String,
+    pub tool_name: String,
+    pub capability: Option<String>,
+    pub summary: String,
+    /// `allowed`, `denied`, `asked`, `auto_approved`, `user_allowed`, `user_rejected`.
+    pub decision: String,
+    /// `policy`, `rule`, `autonomy` or `user`.
+    pub actor: String,
+    pub reason: Option<String>,
 }
 
 // ---------------------------------------------------------------- environment

@@ -52,7 +52,7 @@ fn connections_section(ctx: &PromptContext<'_>) -> String {
     let granted: Vec<&Connection> = ctx
         .connections
         .iter()
-        .filter(|c| ctx.agent.kind == AgentKind::Central || ctx.agent.connections.contains(&c.id))
+        .filter(|c| c.enabled && (ctx.agent.kind == AgentKind::Central || ctx.agent.connections.contains(&c.id)))
         .collect();
     if granted.is_empty() {
         return "## Connections\n\nNo external connection is granted to you.".into();
@@ -61,10 +61,32 @@ fn connections_section(ctx: &PromptContext<'_>) -> String {
     for c in granted {
         let how = match c.kind {
             ConnectionKind::Mcp | ConnectionKind::RobloxStudio => format!("MCP tools `mcp__{}__*`", c.id),
-            ConnectionKind::Ssh => {
+            ConnectionKind::Ssh | ConnectionKind::Sftp => {
                 let host = c.config.get("host").and_then(|v| v.as_str()).unwrap_or("?");
                 let user = c.config.get("user").and_then(|v| v.as_str()).unwrap_or("?");
-                format!("`ssh {user}@{host}` (key/agent auth; commands may require user approval)")
+                let program = if c.kind == ConnectionKind::Sftp { "sftp" } else { "ssh" };
+                format!("`{program} {user}@{host}` (key/agent auth; commands may require user approval)")
+            }
+            ConnectionKind::Gitlab => {
+                "`glab` CLI or the GitLab API; `GITLAB_HOST` and `GITLAB_TOKEN` are set in your environment".into()
+            }
+            ConnectionKind::Http => {
+                let url = c.config.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("?");
+                let header = c.config.get("authHeader").and_then(|v| v.as_str()).unwrap_or("");
+                let token = if c.credential_ref.is_some() {
+                    format!(
+                        "; token in env `{}`{}",
+                        pcc_connections::kinds::token_env_var(c),
+                        if header.is_empty() { String::new() } else { format!(" (send it in the `{header}` header)") }
+                    )
+                } else {
+                    String::new()
+                };
+                format!("HTTP API at {url} (curl / scripts){token}. Never print the token.")
+            }
+            ConnectionKind::Terminal => {
+                let shell = c.config.get("shell").and_then(|v| v.as_str()).unwrap_or("shell");
+                format!("local `{shell}` shell available for commands")
             }
             ConnectionKind::Github => "`gh` CLI and `git push` (writes may require approval)".into(),
             ConnectionKind::Docker => "`docker` CLI".into(),

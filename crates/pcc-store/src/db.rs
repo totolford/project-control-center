@@ -42,6 +42,14 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (agent_id, rule_key));
     CREATE TABLE connections (id TEXT PRIMARY KEY, data TEXT NOT NULL);
     "#,
+    // v2: permission decision journal
+    r#"
+    CREATE TABLE decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, agent_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL, capability TEXT, summary TEXT NOT NULL, decision TEXT NOT NULL,
+        actor TEXT NOT NULL, reason TEXT);
+    CREATE INDEX decisions_agent ON decisions(agent_id, id);
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

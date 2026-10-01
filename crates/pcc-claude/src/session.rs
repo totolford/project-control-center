@@ -33,6 +33,10 @@ pub struct LaunchSpec {
     pub env: Vec<(String, String)>,
     pub max_budget_usd: Option<f64>,
     pub name: Option<String>,
+    /// Reasoning effort (`--effort`).
+    pub effort: Option<String>,
+    /// Start without skills and slash commands (`--disable-slash-commands`).
+    pub disable_skills: bool,
 }
 
 impl LaunchSpec {
@@ -78,6 +82,12 @@ impl LaunchSpec {
         }
         if let Some(b) = self.max_budget_usd {
             a.extend(["--max-budget-usd".into(), format!("{b:.2}")]);
+        }
+        if let Some(e) = &self.effort {
+            a.extend(["--effort".into(), e.clone()]);
+        }
+        if self.disable_skills {
+            a.push("--disable-slash-commands".into());
         }
         if let Some(n) = &self.name {
             a.extend(["--name".into(), n.clone()]);

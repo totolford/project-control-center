@@ -1,6 +1,7 @@
 //! Project Control Center desktop application.
 
 mod commands;
+mod control_commands;
 mod state;
 
 use tauri::{Manager, RunEvent};
@@ -47,7 +48,9 @@ pub fn run() {
                 app.manage(guard);
             }
             tracing::info!("{} {} starting", APP_NAME, app.package_info().version);
-            app.manage(AppState::new(data_dir, log_dir));
+            let state = AppState::new(data_dir, log_dir);
+            AppState::apply_app_settings(&state.load_app_settings());
+            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -109,6 +112,47 @@ pub fn run() {
             commands::list_agent_providers,
             commands::open_path,
             commands::reveal_path,
+            control_commands::app_settings,
+            control_commands::save_app_settings,
+            control_commands::claude_environment,
+            control_commands::claude_command_tree,
+            control_commands::run_claude_cli,
+            control_commands::claude_mcp_add,
+            control_commands::claude_mcp_remove,
+            control_commands::claude_mcp_set_enabled,
+            control_commands::test_mcp_config,
+            control_commands::probe_connection,
+            control_commands::import_claude_mcp,
+            control_commands::reconnect_mcp,
+            control_commands::reload_plugins,
+            control_commands::claude_plugin_set_enabled,
+            control_commands::list_skills,
+            control_commands::skill_create,
+            control_commands::skill_preview,
+            control_commands::skill_read_file,
+            control_commands::skill_diff,
+            control_commands::skill_save,
+            control_commands::skill_set_enabled,
+            control_commands::skill_duplicate,
+            control_commands::skill_delete,
+            control_commands::skill_export,
+            control_commands::skill_test,
+            control_commands::set_agent_model,
+            control_commands::apply_power,
+            control_commands::emergency_stop,
+            control_commands::release_emergency,
+            control_commands::revoke_all_permissions,
+            control_commands::list_decisions,
+            control_commands::start_improvement_cycle,
+            control_commands::system_report,
+            control_commands::project_insights,
+            control_commands::pty_spawn,
+            control_commands::pty_write,
+            control_commands::pty_resize,
+            control_commands::pty_kill,
+            control_commands::pty_close,
+            control_commands::pty_list,
+            control_commands::pty_scrollback,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the application");
@@ -117,6 +161,7 @@ pub fn run() {
         if let RunEvent::Exit = event {
             // Stop every agent session and mark them for recovery on next start.
             let state = handle.state::<AppState>();
+            state.pty.kill_all();
             tauri::async_runtime::block_on(state.close_project());
             tracing::info!("{APP_NAME} exited");
         }

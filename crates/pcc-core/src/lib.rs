@@ -12,7 +12,7 @@ pub mod tasks;
 pub use error::{Error, Result};
 pub use events::{Event, EventBus, EventKind, LogEntry, LogKind};
 pub use model::*;
-pub use permissions::{Access, Capability, PermissionSet};
+pub use permissions::{Access, Capability, PermissionSet, PowerLevel};
 
 /// Current UTC timestamp in RFC 3339, the format used everywhere on disk.
 pub fn now() -> String {

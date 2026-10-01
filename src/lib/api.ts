@@ -7,6 +7,7 @@ import type * as T from "./types";
 
 export const EVENT_CHANNEL = "pcc://event";
 export const LOG_CHANNEL = "pcc://log";
+export const PTY_CHANNEL = "pcc://pty";
 
 export const api = {
   // ---------------------------------------------------------------- app
@@ -103,6 +104,78 @@ export const api = {
   saveWorkspace: (layout: object) => invoke<void>("save_workspace", { layout }),
   listAgentProviders: () => invoke<T.ProviderInfo[]>("list_agent_providers"),
 
+
+  // ---------------------------------------------------------------- Claude Control Center
+  appSettings: () => invoke<T.AppSettings>("app_settings"),
+  saveAppSettings: (settings: T.AppSettings) => invoke<T.AppSettings>("save_app_settings", { settings }),
+  /** Live snapshot of what Claude Code exposes (one short control session, no model call). Takes a few seconds. */
+  claudeEnvironment: () => invoke<T.ClaudeEnvironment>("claude_environment"),
+  /** CLI command tree parsed from the installed version's --help (cached per version). */
+  claudeCommandTree: (refresh = false) => invoke<T.CliCommand>("claude_command_tree", { refresh }),
+  /** Runs `claude <args>` without a terminal (interactive commands time out → use the Raw Terminal). */
+  runClaudeCli: (args: string[]) => invoke<T.CliRun>("run_claude_cli", { args }),
+
+  // MCP in Claude Code's own configuration
+  /** config in Claude format ({type, command, args, env} or {type:"http", url, headers}); env/header values must be ${VAR} references. */
+  claudeMcpAdd: (name: string, config: object, scope: "local" | "user" | "project") =>
+    invoke<T.CliRun>("claude_mcp_add", { name, config, scope }),
+  claudeMcpRemove: (name: string, scope: string) => invoke<T.CliRun>("claude_mcp_remove", { name, scope }),
+  /** Persisted by Claude Code for this project. */
+  claudeMcpSetEnabled: (name: string, enabled: boolean) => invoke<void>("claude_mcp_set_enabled", { name, enabled }),
+  /** Tests a server given in Claude format (from ClaudeEnvironment.mcpServers[].config). */
+  testMcpConfig: (config: object) => invoke<T.McpProbe>("test_mcp_config", { config }),
+  /** Copies a Claude Code MCP server into NEXUS (values → Credential Manager). */
+  importClaudeMcp: (name: string, config: object) => invoke<T.Connection>("import_claude_mcp", { name, config }),
+  /** Detailed test of a NEXUS MCP/Roblox connection (tools, resources, prompts, latency). */
+  probeConnection: (id: string) => invoke<T.McpProbe>("probe_connection", { id }),
+  /** Asks every running agent session to reconnect a server; returns agent ids reached. */
+  reconnectMcp: (server: string) => invoke<string[]>("reconnect_mcp", { server }),
+  reloadPlugins: () => invoke<string[]>("reload_plugins"),
+  claudePluginSetEnabled: (id: string, enabled: boolean) => invoke<T.CliRun>("claude_plugin_set_enabled", { id, enabled }),
+
+  // Skills
+  listSkills: () => invoke<T.Skill[]>("list_skills"),
+  skillPreview: (spec: T.NewSkill) => invoke<string>("skill_preview", { spec }),
+  skillCreate: (scope: "user" | "project", spec: T.NewSkill) => invoke<string>("skill_create", { scope, spec }),
+  skillReadFile: (dir: string, file: string) => invoke<string>("skill_read_file", { dir, file }),
+  /** Unified diff current SKILL.md → content. Show it before skillSave. */
+  skillDiff: (dir: string, content: string) => invoke<string>("skill_diff", { dir, content }),
+  skillSave: (dir: string, content: string) => invoke<void>("skill_save", { dir, content }),
+  /** Returns the new folder (disabled skills live in skills-disabled/). */
+  skillSetEnabled: (dir: string, enabled: boolean) => invoke<string>("skill_set_enabled", { dir, enabled }),
+  skillDuplicate: (dir: string, name: string) => invoke<string>("skill_duplicate", { dir, name }),
+  /** Moves the skill to skills-trash/ (recoverable). */
+  skillDelete: (dir: string) => invoke<string>("skill_delete", { dir }),
+  skillExport: (dir: string, destination: string) => invoke<string>("skill_export", { dir, destination }),
+  skillTest: (dir: string) => invoke<T.SkillTest>("skill_test", { dir }),
+
+  // Models, power, autonomy
+  /** true = the running session switched immediately; false = applies at next start. */
+  setAgentModel: (agentId: string, model: string | null) => invoke<boolean>("set_agent_model", { agentId, model }),
+  applyPower: (agentId: string, level: T.PowerLevel) => invoke<T.Agent>("apply_power", { agentId, level }),
+  emergencyStop: () => invoke<void>("emergency_stop"),
+  releaseEmergency: () => invoke<void>("release_emergency"),
+  revokeAllPermissions: () => invoke<void>("revoke_all_permissions"),
+  /** Newest first. */
+  listDecisions: (agentId: string | null, before: number | null, limit: number) =>
+    invoke<T.DecisionRecord[]>("list_decisions", { agentId, before, limit }),
+  startImprovementCycle: () => invoke<T.Mission>("start_improvement_cycle"),
+
+  // Environment inspector
+  systemReport: () => invoke<T.SystemReport>("system_report"),
+  projectInsights: () => invoke<T.ProjectInsights>("project_insights"),
+
+  // Raw Terminal (ConPTY). Output arrives on onPty(); answer terminal queries by writing back (xterm.js does it).
+  ptySpawn: (request: { profile: T.TerminalProfile; agentId?: string | null; cols: number; rows: number }) =>
+    invoke<T.PtyInfo>("pty_spawn", { request }),
+  ptyWrite: (id: string, data: string) => invoke<void>("pty_write", { id, data }),
+  ptyResize: (id: string, cols: number, rows: number) => invoke<void>("pty_resize", { id, cols, rows }),
+  ptyKill: (id: string) => invoke<void>("pty_kill", { id }),
+  ptyClose: (id: string) => invoke<void>("pty_close", { id }),
+  ptyList: () => invoke<T.PtyInfo[]>("pty_list"),
+  /** Recent output (≤256 KB) to repaint a terminal after re-mounting. */
+  ptyScrollback: (id: string) => invoke<string>("pty_scrollback", { id }),
+
   // ---------------------------------------------------------------- misc
   /** Opens a file/folder of the project with the default app (folders open in Explorer). */
   openPath: (path: string) => invoke<void>("open_path", { path }),
@@ -127,4 +200,8 @@ export function errorMessage(e: unknown): string {
   } catch {
     return String(e);
   }
+}
+
+export function onPty(cb: (e: T.PtyEvent) => void): Promise<UnlistenFn> {
+  return listen<T.PtyEvent>(PTY_CHANNEL, (e) => cb(e.payload));
 }

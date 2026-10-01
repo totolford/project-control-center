@@ -69,12 +69,14 @@ pub fn prepare(
 
     let mut servers = Map::new();
     servers.insert(PCC_SERVER.into(), json!({"type": "sdk", "name": PCC_SERVER}));
-    let mut env = Vec::new();
-    for c in connections.iter().filter(|c| agent.connections.contains(&c.id)) {
+    let mut env: Vec<(String, String)> = settings.session_env.clone().into_iter().collect();
+    env.extend(agent.profile.env.clone());
+    for c in connections.iter().filter(|c| c.enabled && agent.connections.contains(&c.id)) {
         if let Some(entry) = pcc_connections::mcp_server_entry(c)? {
             servers.insert(entry.name, entry.config);
             env.extend(entry.env);
         }
+        env.extend(pcc_connections::kinds::session_env(c)?);
     }
     let mcp_file = sessions_dir.join(format!("{}.mcp.json", agent.id));
     std::fs::write(&mcp_file, serde_json::to_string_pretty(&json!({"mcpServers": Value::Object(servers)}))?)?;
@@ -101,7 +103,9 @@ pub fn prepare(
             cwd: workdir,
             model,
             system_prompt_file: Some(prompt_file),
-            tools: builtin_tools(&agent.permissions),
+            tools: builtin_tools(crate::policy::effective_permissions(agent, &settings.autonomy)),
+            effort: agent.profile.effort.clone(),
+            disable_skills: !agent.profile.skills_enabled,
             mcp_config_file: Some(mcp_file),
             sdk_mcp_servers: vec![PCC_SERVER.into()],
             session_id: Some(session_id.clone()),

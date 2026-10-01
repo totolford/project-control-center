@@ -3,6 +3,7 @@
 //! * `engine`  – sessions, delivery, scheduling, control requests, recovery.
 //! * `work`    – agents, tasks, missions, memory operations.
 //! * `connections` – project connections and their secrets.
+//! * `autonomy` – decision journal, power, UNLOCKED, emergency stop, improvement loop.
 //! * `gitops`  – agent branches, merges, snapshots.
 //! * `tools`   – the in-process MCP server agents use to act.
 //! * `policy`  – tool-call permission decisions.
@@ -11,6 +12,7 @@
 //! * `providers` – agent runtimes (Claude Code adapter, detected others).
 //! * `dto`     – shapes shared with the UI.
 
+mod autonomy;
 mod connections;
 pub mod dto;
 pub mod engine;
@@ -39,6 +41,7 @@ pub struct Orchestrator {
     pub store: Arc<ProjectStore>,
     pub bus: EventBus,
     pump: Arc<tokio::task::JoinHandle<()>>,
+    ticker: Arc<tokio::task::JoinHandle<()>>,
 }
 
 impl Orchestrator {
@@ -66,7 +69,24 @@ impl Orchestrator {
                 }
             }
         });
-        Ok(Orchestrator { engine, store, bus, pump: Arc::new(pump) })
+        // Minute tick: continuous-improvement scheduling.
+        let e = engine.clone();
+        let ticker = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                let mut guard = e.lock().await;
+                if let Err(err) = guard.tick() {
+                    guard.emit(pcc_core::Event::new(
+                        pcc_core::EventKind::Error,
+                        format!("Improvement cycle skipped: {err}"),
+                        serde_json::Value::Null,
+                    ));
+                }
+            }
+        });
+        Ok(Orchestrator { engine, store, bus, pump: Arc::new(pump), ticker: Arc::new(ticker) })
     }
 
     pub async fn lock(&self) -> MutexGuard<'_, Engine> {
@@ -77,5 +97,6 @@ impl Orchestrator {
     pub async fn close(&self) {
         self.engine.lock().await.shutdown();
         self.pump.abort();
+        self.ticker.abort();
     }
 }

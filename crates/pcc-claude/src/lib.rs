@@ -6,10 +6,14 @@
 //! permission prompts (`can_use_tool`) and the app-provided MCP server
 //! (`mcp_message`) arrive as control requests that the host answers.
 
+pub mod cli_help;
+pub mod control;
 pub mod detect;
+pub mod inspect;
 pub mod process;
 pub mod protocol;
 pub mod session;
+pub mod skills;
 
 pub use detect::{detect, find_claude};
 pub use protocol::{Block, ControlRequest, Inbound};

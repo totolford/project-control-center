@@ -38,6 +38,8 @@ pub struct ProjectSnapshot {
     pub pending_permissions: Vec<PermissionRequest>,
     pub repo: Option<RepoStatus>,
     pub recovery: Option<RecoveryInfo>,
+    /// Emergency stop active: new work and autonomy are blocked.
+    pub emergency: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -68,6 +70,7 @@ pub struct AgentPatch {
     /// `Some(None)` clears the model override.
     #[serde(default, deserialize_with = "double_option")]
     pub model: Option<Option<String>>,
+    pub profile: Option<pcc_core::AgentProfile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

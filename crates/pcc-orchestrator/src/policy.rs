@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 use pcc_core::permissions::{classify_tool, ToolClassification};
-use pcc_core::{Access, Agent, Capability, Connection, ConnectionKind, PermissionSet};
+use pcc_core::{Access, Agent, AutonomySettings, Capability, Connection, ConnectionKind, PermissionSet};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decision {
@@ -16,6 +16,20 @@ pub enum Decision {
         reason: String,
         class: ToolClassification,
     },
+    /// Would ask, but CLAUDE UNLOCKED auto-approval answers on the user's behalf.
+    AutoApprove {
+        reason: String,
+        class: ToolClassification,
+    },
+}
+
+/// The permissions actually enforced for an agent.
+pub fn effective_permissions<'a>(agent: &'a Agent, autonomy: &'a AutonomySettings) -> &'a PermissionSet {
+    if autonomy.unlocked {
+        &autonomy.unlocked_permissions
+    } else {
+        &agent.permissions
+    }
 }
 
 pub struct PolicyInput<'a> {
@@ -24,9 +38,27 @@ pub struct PolicyInput<'a> {
     pub connections: &'a [Connection],
     /// Returns true when the user chose "allow for this agent" for this key.
     pub has_rule: &'a dyn Fn(&str) -> bool,
+    pub autonomy: &'a AutonomySettings,
 }
 
 pub fn evaluate(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
+    match evaluate_rules(p, tool, input) {
+        Decision::Ask { reason, class } if auto_approvable(p.autonomy, &class) => {
+            Decision::AutoApprove { reason, class }
+        }
+        d => d,
+    }
+}
+
+fn auto_approvable(a: &AutonomySettings, class: &ToolClassification) -> bool {
+    a.unlocked
+        && a.auto_approve
+        && !(class.destructive && a.manual_for_destructive)
+        && !(class.outside_workspace && a.manual_for_outside_workspace)
+        && !class.capability.is_some_and(|c| a.manual_capabilities.contains(&c))
+}
+
+fn evaluate_rules(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
     // The orchestrator's own tools validate their arguments themselves.
     if tool.starts_with("mcp__pcc__") {
         return Decision::Allow;
@@ -47,6 +79,7 @@ pub fn evaluate(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
     if let Some(server) = &class.mcp_server {
         let conn = p.connections.iter().find(|c| &c.id == server);
         match conn {
+            Some(c) if !c.enabled => return Decision::Deny(format!("connection `{}` is disabled", c.name)),
             Some(c) if p.agent.connections.contains(&c.id) => {}
             Some(c) => {
                 return Decision::Deny(format!("connection `{}` is not granted to agent {}", c.name, p.agent.id))
@@ -56,10 +89,11 @@ pub fn evaluate(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
     }
     if let Some(host) = &class.ssh_host {
         let conn = p.connections.iter().find(|c| {
-            c.kind == ConnectionKind::Ssh
+            matches!(c.kind, ConnectionKind::Ssh | ConnectionKind::Sftp)
                 && c.config.get("host").and_then(Value::as_str).is_some_and(|h| h.eq_ignore_ascii_case(host))
         });
         match conn {
+            Some(c) if !c.enabled => return Decision::Deny(format!("connection `{}` is disabled", c.name)),
             Some(c) if p.agent.connections.contains(&c.id) => {}
             Some(c) => {
                 return Decision::Deny(format!("SSH connection `{}` is not granted to agent {}", c.name, p.agent.id))
@@ -73,7 +107,7 @@ pub fn evaluate(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
         }
     }
 
-    let access = p.agent.permissions.get(cap);
+    let access = effective_permissions(p.agent, p.autonomy).get(cap);
     if access == Access::Deny {
         return Decision::Deny(format!(
             "agent {} does not have the `{}` permission; ask Central or the user if it is needed",
@@ -157,6 +191,7 @@ mod tests {
             progress: None,
             claude_session_id: None,
             total_cost_usd: 0.0,
+            profile: Default::default(),
             created_by: "central".into(),
             created_at: String::new(),
             updated_at: String::new(),
@@ -174,17 +209,84 @@ mod tests {
             status_detail: None,
             last_checked: None,
             created_at: String::new(),
+            enabled: true,
+            last_used: None,
         }
     }
 
-    fn eval(a: &Agent, conns: &[Connection], tool: &str, input: Value, rules: &[&str]) -> Decision {
+    fn eval_with(
+        a: &Agent,
+        conns: &[Connection],
+        tool: &str,
+        input: Value,
+        rules: &[&str],
+        autonomy: &AutonomySettings,
+    ) -> Decision {
         let rules: Vec<String> = rules.iter().map(|s| s.to_string()).collect();
         let has = |k: &str| rules.iter().any(|r| r == k);
         evaluate(
-            &PolicyInput { agent: a, project_root: PathBuf::from(r"C:\P"), connections: conns, has_rule: &has },
+            &PolicyInput {
+                agent: a,
+                project_root: PathBuf::from(r"C:\P"),
+                connections: conns,
+                has_rule: &has,
+                autonomy,
+            },
             tool,
             &input,
         )
+    }
+
+    fn eval(a: &Agent, conns: &[Connection], tool: &str, input: Value, rules: &[&str]) -> Decision {
+        eval_with(a, conns, tool, input, rules, &AutonomySettings::default())
+    }
+
+    #[test]
+    fn unlocked_and_auto_approve() {
+        let a = agent(PermissionSet::preset(pcc_core::PowerLevel::Low), &[]);
+        let wt = r"C:\P\.agent-project\worktrees\movement";
+        let file = json!({"file_path": format!(r"{wt}\a.txt")});
+        // Locked: low power cannot write.
+        assert!(matches!(eval(&a, &[], "Write", file.clone(), &[]), Decision::Deny(_)));
+        // Unlocked: maximum preset applies.
+        let mut auto = AutonomySettings { unlocked: true, ..Default::default() };
+        assert_eq!(eval_with(&a, &[], "Write", file.clone(), &[], &auto), Decision::Allow);
+        // Destructive still asks without auto-approve...
+        assert!(matches!(
+            eval_with(&a, &[], "Bash", json!({"command": "rm -rf build"}), &[], &auto),
+            Decision::Ask { .. }
+        ));
+        auto.auto_approve = true;
+        // ...and with auto-approve, because destructive stays manual by default.
+        assert!(matches!(
+            eval_with(&a, &[], "Bash", json!({"command": "rm -rf build"}), &[], &auto),
+            Decision::Ask { .. }
+        ));
+        auto.manual_for_destructive = false;
+        assert!(matches!(
+            eval_with(&a, &[], "Bash", json!({"command": "rm -rf build"}), &[], &auto),
+            Decision::AutoApprove { .. }
+        ));
+        // Outside the workspace stays manual by default.
+        assert!(matches!(
+            eval_with(&a, &[], "Write", json!({"file_path": r"C:\Windows\x"}), &[], &auto),
+            Decision::Ask { .. }
+        ));
+        // Auto-approve never applies while locked.
+        let locked = AutonomySettings { auto_approve: true, manual_for_destructive: false, ..Default::default() };
+        let w = agent(PermissionSet::worker_default(), &[]);
+        assert!(matches!(
+            eval_with(&w, &[], "Bash", json!({"command": "rm -rf build"}), &[], &locked),
+            Decision::Ask { .. }
+        ));
+    }
+
+    #[test]
+    fn disabled_connections_are_denied() {
+        let mut c = conn("roblox-studio", ConnectionKind::RobloxStudio, json!({}));
+        c.enabled = false;
+        let a = agent(PermissionSet::worker_default(), &["roblox-studio"]);
+        assert!(matches!(eval(&a, &[c], "mcp__roblox-studio__run_code", json!({}), &[]), Decision::Deny(_)));
     }
 
     #[test]

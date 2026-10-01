@@ -37,6 +37,14 @@ pub fn attach_to_app_job(child: &tokio::process::Child) {
     let _ = child;
 }
 
+/// Same as [`attach_to_app_job`] for a process known only by its pid.
+pub fn attach_pid_to_app_job(pid: u32) {
+    #[cfg(windows)]
+    win::attach_pid(pid);
+    #[cfg(not(windows))]
+    let _ = pid;
+}
+
 /// Kills a process and all of its descendants.
 pub async fn kill_tree(pid: u32) {
     #[cfg(windows)]
@@ -99,6 +107,22 @@ mod win {
             job as usize
         });
         (h != 0).then_some(h)
+    }
+
+    pub fn attach_pid(pid: u32) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+        let Some(job) = job() else { return };
+        unsafe {
+            let h = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+            if h.is_null() {
+                return;
+            }
+            if AssignProcessToJobObject(job as _, h) == 0 {
+                tracing::warn!("could not assign process {pid} to job object");
+            }
+            CloseHandle(h);
+        }
     }
 
     pub fn attach(child: &tokio::process::Child) {

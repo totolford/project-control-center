@@ -36,6 +36,13 @@ export interface ProjectSettings {
   maxWorkerPermissions: PermissionSet;
   maxBudgetUsdPerSession: number | null;
   allowDirectWorkerMessages: boolean;
+  autonomy: AutonomySettings;
+  improvement: ImprovementSettings;
+  /** Non-secret environment variables of every agent session. */
+  sessionEnv: Record<string, string>;
+  defaultEffort: string | null;
+  defaultSkillsEnabled: boolean;
+  autoRecover: boolean;
 }
 
 export type AgentKind = "central" | "worker";
@@ -71,6 +78,7 @@ export interface Agent {
   progress: number | null;
   claudeSessionId: string | null;
   totalCostUsd: number;
+  profile: AgentProfile;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -174,7 +182,18 @@ export interface PermissionRequest {
   createdAt: string;
 }
 
-export type ConnectionKind = "local" | "git" | "github" | "ssh" | "mcp" | "roblox_studio" | "docker";
+export type ConnectionKind =
+  | "local"
+  | "git"
+  | "github"
+  | "gitlab"
+  | "ssh"
+  | "sftp"
+  | "terminal"
+  | "http"
+  | "mcp"
+  | "roblox_studio"
+  | "docker";
 export type ConnectionStatus = "unknown" | "connected" | "disconnected" | "error";
 
 export interface Connection {
@@ -187,6 +206,9 @@ export interface Connection {
   statusDetail: string | null;
   lastChecked: string | null;
   createdAt: string;
+  /** Disabled connections are never given to agents. */
+  enabled: boolean;
+  lastUsed: string | null;
 }
 
 export interface SshConfig {
@@ -262,6 +284,12 @@ export type EventKind =
   | "ConnectionChanged"
   | "MemoryUpdated"
   | "GitChanged"
+  | "PermissionAutoApproved"
+  | "ToolUsed"
+  | "EmergencyStop"
+  | "ImprovementCycle"
+  | "McpChanged"
+  | "SkillChanged"
   | "Error";
 
 /**
@@ -414,6 +442,8 @@ export interface ProjectSnapshot {
   pendingPermissions: PermissionRequest[];
   repo: RepoStatus | null;
   recovery: RecoveryInfo | null;
+  /** Emergency stop active: new work and autonomy are blocked until released. */
+  emergency: boolean;
 }
 
 export interface AgentSpec {
@@ -436,6 +466,7 @@ export interface AgentPatch {
   permissions?: PermissionSet;
   connections?: string[];
   model?: string | null;
+  profile?: AgentProfile;
 }
 
 export interface TaskSpec {
@@ -481,4 +512,222 @@ export interface ProviderInfo {
   /** The runtime was found on this machine (may still lack an adapter). */
   installed: boolean;
   detail: string;
+}
+
+// ======================================================================
+// Claude Control Center (see src-tauri/src/control_commands.rs)
+// ======================================================================
+
+export type PowerLevel = "low" | "normal" | "high" | "maximum";
+export type ImprovementMode = "propose" | "implement";
+
+/** CLAUDE UNLOCKED: NEXUS answers Claude Code's permission prompts per these rules; nothing is bypassed. */
+export interface AutonomySettings {
+  unlocked: boolean;
+  /** Effective permissions of EVERY agent while unlocked. */
+  unlockedPermissions: PermissionSet;
+  autoApprove: boolean;
+  manualForDestructive: boolean;
+  manualForOutsideWorkspace: boolean;
+  /** Capabilities that always stay manual even with auto-approve. */
+  manualCapabilities: Capability[];
+}
+
+export interface ImprovementSettings {
+  enabled: boolean;
+  intervalMinutes: number;
+  mode: ImprovementMode;
+  focus: string[];
+  maxRunsPerDay: number;
+}
+
+export interface AgentProfile {
+  /** --effort: "low" | "medium" | "high" | "xhigh" | "max"; null = Claude Code default. */
+  effort: string | null;
+  /** false → session starts with --disable-slash-commands (no skills). */
+  skillsEnabled: boolean;
+  /** Non-secret environment variables of the agent's session. */
+  env: Record<string, string>;
+}
+
+export interface DecisionRecord {
+  id: number;
+  ts: string;
+  agentId: string;
+  toolName: string;
+  capability: string | null;
+  summary: string;
+  /** allowed | denied | asked | auto_approved | user_allowed | user_rejected */
+  decision: string;
+  /** policy | autonomy | user */
+  actor: string;
+  reason: string | null;
+}
+
+/** Everything below is passed through from Claude Code; unknown fields may appear. Never invent missing ones. */
+export interface ClaudeEnvironment {
+  cli: ClaudeInfo;
+  capturedAt: string;
+  /** e.g. { value, resolvedModel, displayName, description, supportsEffort, supportedEffortLevels, supportsFastMode, ... } */
+  models: Record<string, any>[];
+  /** Slash commands and skills: { name, description, argumentHint? } */
+  commands: Record<string, any>[];
+  agents: Record<string, any>[];
+  /** { email, organization, subscriptionType, apiProvider } */
+  account: Record<string, any> | null;
+  permissionMode: string | null;
+  outputStyle: string | null;
+  outputStyles: any[];
+  fastMode: Record<string, any>;
+  /** { name, status: "connected"|"failed"|"pending"|"disabled"|..., error?, config: { type, command?, args?, env?, url?, headers? }, scope, source } */
+  mcpServers: Record<string, any>[];
+  /** get_context_usage: { categories: [{ name, tokens, kind }], totalTokens, maxTokens, percentage, ... } */
+  context: Record<string, any> | null;
+  /** get_usage: { session: { total_cost_usd, model_usage, ... }, subscription_type, rate_limits: { five_hour: { utilization, resets_at }, seven_day: {...}, ... } } */
+  usage: Record<string, any> | null;
+  /** get_settings with env values replaced by "••••••": { effective: {...}, ... } */
+  settings: Record<string, any> | null;
+  /** claude plugin list --json: { id, version, scope, enabled, installPath, ... } */
+  plugins: Record<string, any>[];
+  /** Sections Claude Code did not answer, with the reason. Show them as "Unavailable". */
+  unavailable: string[];
+}
+
+export interface CliOption {
+  flags: string;
+  long: string | null;
+  short: string | null;
+  value: string | null;
+  description: string;
+  choices: string[];
+  default: string | null;
+  category: string;
+}
+
+export interface CliCommand {
+  path: string[];
+  aliases: string[];
+  usage: string;
+  signature: string;
+  description: string;
+  arguments: { name: string; description: string }[];
+  options: CliOption[];
+  subcommands: CliCommand[];
+  category: string;
+}
+
+export interface CliRun {
+  args: string[];
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+export interface McpItem {
+  name: string;
+  description: string | null;
+}
+
+export interface McpProbe {
+  serverName: string | null;
+  serverVersion: string | null;
+  protocolVersion: string | null;
+  tools: McpItem[];
+  /** null = the server does not implement resources */
+  resources: McpItem[] | null;
+  prompts: McpItem[] | null;
+  latencyMs: number;
+  stderrTail: string[];
+}
+
+export type SkillScope = "user" | "project" | "plugin";
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  scope: SkillScope;
+  /** plugin id for plugin skills, "synced" for claude.ai synced skills */
+  source: string | null;
+  enabled: boolean;
+  /** user/project skills only (plugin and synced skills are read-only) */
+  editable: boolean;
+  dir: string;
+  frontmatter: Record<string, string>;
+  allowedTools: string[];
+  files: string[];
+  problems: string[];
+}
+
+export interface NewSkill {
+  name: string;
+  description: string;
+  trigger: string;
+  instructions: string;
+  allowedTools: string[];
+  argumentHint: string;
+  requiredMcp: string[];
+  requiredConnections: string[];
+  requiredPermissions: string[];
+  dependencies: string[];
+}
+
+export interface SkillTest {
+  discovered: boolean;
+  problems: string[];
+  commandName: string | null;
+}
+
+export interface SystemReport {
+  os: string;
+  osVersion: string;
+  arch: string;
+  cpu: string;
+  cpuCores: number;
+  memoryTotalBytes: number;
+  memoryUsedBytes: number;
+  gpus: string[];
+  disks: { mount: string; totalBytes: number; availableBytes: number }[];
+}
+
+export interface ProjectInsights {
+  languages: { language: string; files: number }[];
+  frameworks: string[];
+  dependencies: Record<string, string[]>;
+  filesScanned: number;
+}
+
+export interface AppSettings {
+  /** Explicit Claude Code executable; auto-detected when null/empty. */
+  claudePath: string | null;
+}
+
+export type TerminalProfile = "claude" | "claude-resume" | "powershell" | "pwsh" | "cmd" | "wsl";
+
+export interface PtyInfo {
+  id: string;
+  title: string;
+  program: string;
+  args: string[];
+  cwd: string;
+  pid: number | null;
+  startedAt: string;
+  exitCode: number | null;
+  running: boolean;
+}
+
+export type PtyEvent = { type: "data"; id: string; data: string } | { type: "exit"; id: string; code: number | null };
+
+/** MCP connection config (kind "mcp" / "roblox_studio"). */
+export interface McpConnectionConfig {
+  transport: "stdio" | "http" | "sse";
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  /** names whose values are in Windows Credential Manager (pass values in ConnectionInput.secrets) */
+  secretEnv: string[];
+  url: string;
+  headers: Record<string, string>;
+  secretHeaders: string[];
 }

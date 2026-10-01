@@ -7,6 +7,7 @@ members = [
   "crates/pcc-git",
   "crates/pcc-connections",
   "crates/pcc-orchestrator",
+  "crates/pcc-pty",
   "src-tauri",
 ]
 
@@ -24,6 +25,7 @@ pcc-claude = { path = "crates/pcc-claude" }
 pcc-git = { path = "crates/pcc-git" }
 pcc-connections = { path = "crates/pcc-connections" }
 pcc-orchestrator = { path = "crates/pcc-orchestrator" }
+pcc-pty = { path = "crates/pcc-pty" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

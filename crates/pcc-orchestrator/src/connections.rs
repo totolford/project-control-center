@@ -24,6 +24,8 @@ impl Engine {
                 status_detail: None,
                 last_checked: None,
                 created_at: pcc_core::now(),
+                enabled: true,
+                last_used: None,
             };
             self.store.upsert_connection(&c)?;
             self.emit(Event::new(EventKind::ConnectionChanged, format!("Connection {name} added"), json!(c)));
@@ -83,6 +85,8 @@ impl Engine {
             status_detail: None,
             last_checked: None,
             created_at: pcc_core::now(),
+            enabled: true,
+            last_used: None,
         };
         self.store.upsert_connection(&c)?;
         self.emit(Event::new(EventKind::ConnectionChanged, format!("Connection {} added", c.name), json!(c)));
