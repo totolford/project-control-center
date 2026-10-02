@@ -1,0 +1,11 @@
+webpack*
+.eslintrc.cjs
+next.config.js
+tailwind.config.js
+postcss.config.js
+convex/_generated/*
+convex/util/FastIntegerCompression.ts
+convex/util/xxhash.ts
+data/*.js
+src/editor/*
+dist/*
