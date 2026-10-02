@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Agent, Mission, PccEvent, PermissionRequest, ProjectSnapshot, Task } from "../lib/types";
-import { makeAgent, makeSnapshot } from "../test/fixtures";
+import { makeAgent, makeInfo, makeSnapshot } from "../test/fixtures";
 import { TIMELINE_LIMIT, applyEvent, fromSnapshot, upsertById } from "./reducer";
 
 function agent(id: string, patch: Partial<Agent> = {}): Agent {
@@ -25,7 +25,7 @@ function mission(id: string, patch: Partial<Mission> = {}): Mission {
 }
 
 function snapshot(patch: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
-  return makeSnapshot({ info: { id: "p1", name: "Proj", root: "C:/p", createdAt: "2026-01-01T00:00:00Z", formatVersion: 1 }, ...patch });
+  return makeSnapshot({ info: makeInfo({ name: "Proj", root: "C:/p" }), ...patch });
 }
 
 let nextId = 1;
@@ -158,5 +158,42 @@ describe("upsertById", () => {
     const a = { id: "x" };
     const list = [a];
     expect(upsertById(list, a)).toBe(list);
+  });
+});
+
+describe("0.2 project data", () => {
+  const request = { id: "r1", agentId: "central", kind: "secret", title: "Pi password", reason: "ssh", connectionId: "c1", key: "password", createdAt: "2026-01-01T00:00:00Z" };
+
+  it("adds and resolves user requests from events", () => {
+    const base = fromSnapshot(snapshot());
+    expect(base.userRequests).toEqual([]);
+    const asked = applyEvent(base, ev("UserRequested", request));
+    expect(asked.userRequests.map((r) => r.id)).toEqual(["r1"]);
+    expect(applyEvent(asked, ev("UserRequestResolved", { id: "r1" })).userRequests).toEqual([]);
+    expect(applyEvent(asked, ev("UserRequestResolved", null)).userRequests).toHaveLength(1);
+  });
+
+  it("shows the migration report only from the snapshot that opened the project", () => {
+    const migration = {
+      fromFormat: 1,
+      toFormat: 2,
+      backup: { id: "b1", path: "C:/b", createdAt: "2026-01-01T00:00:00Z", formatVersion: 1, reason: "migration" },
+      steps: [],
+      integrity: [],
+      ok: true,
+      reportPath: "C:/r.md",
+    };
+    const opened = fromSnapshot(snapshot({ migration }));
+    expect(opened.migration).toEqual(migration);
+    const cleared = { ...opened, migration: null };
+    expect(fromSnapshot(snapshot({ migration }), cleared).migration).toBeNull();
+  });
+
+  it("keeps compatibility mode and bumps reload counters", () => {
+    const base = fromSnapshot(snapshot({ readOnly: true }));
+    expect(base.readOnly).toBe(true);
+    expect(applyEvent(base, ev("ToolUsed", { tool: "Bash" })).commandVersion).toBe(1);
+    expect(applyEvent(base, ev("ProjectChanged", {})).masterVersion).toBe(1);
+    expect(applyEvent(base, ev("ConnectionChanged", { id: "c1", deleted: true })).masterVersion).toBe(1);
   });
 });

@@ -1,0 +1,206 @@
+/* 0.2 operations: hero composer, command interpreter, user requests, compatibility */
+
+/* ------------------------------------------------------------------ hero composer */
+.hero-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 2px;
+}
+.hero-composer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-composer-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.hero-composer.mode-mission .hero-composer-label {
+  font-size: 14px;
+  color: var(--text);
+}
+.hero-composer .composer-bar {
+  padding: 0 0 6px;
+}
+.hero-composer.mode-mission .composer-input {
+  min-height: 46px;
+  font-size: 13.5px;
+}
+.hero-composer.mode-command .composer-input {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.run-btn {
+  height: 46px;
+  padding: 0 20px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+/* ------------------------------------------------------------------ interpreted command */
+.cmd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.cmd-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cmd-card .notice {
+  margin: 0;
+}
+.cmd-raw {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+}
+.cmd-fields {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+.cmd-actions {
+  flex-wrap: wrap;
+}
+.cmd-result {
+  align-items: flex-start;
+}
+
+/* ------------------------------------------------------------------ user requests */
+.req-stack {
+  position: fixed;
+  top: 56px;
+  right: 14px;
+  width: 380px;
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(210, 153, 34, 0.55);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 45;
+}
+.req-stack-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.req-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.req-card p {
+  margin: 0;
+}
+.req-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.req-reason {
+  white-space: pre-wrap;
+}
+.req-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.req-actions input {
+  flex: 1;
+  min-width: 140px;
+}
+.req-pill {
+  position: fixed;
+  top: 56px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--amber);
+  border-radius: 12px;
+  background: rgba(210, 153, 34, 0.14);
+  color: var(--amber);
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 45;
+}
+
+/* ------------------------------------------------------------------ compatibility */
+.compat-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.compat-banner > svg {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.compat-banner.read-only {
+  background: rgba(210, 153, 34, 0.14);
+  border-bottom-color: var(--amber);
+  color: #f0c66b;
+}
+.compat-banner.newer {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.compat-notes {
+  list-style: disc;
+  padding-left: 18px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.compat-table th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 400;
+  width: 1%;
+  white-space: nowrap;
+}
+.migration-steps {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.integrity-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.integrity-ok svg {
+  color: var(--green);
+}
+.integrity-error {
+  color: var(--red);
+}
+.integrity-info svg {
+  color: var(--muted);
+}

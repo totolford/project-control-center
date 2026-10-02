@@ -2,8 +2,10 @@
 
 import type {
   Agent,
+  CompatibilityReport,
   Connection,
   Message,
+  MigrationReport,
   Mission,
   PccEvent,
   PermissionRequest,
@@ -13,6 +15,7 @@ import type {
   RecoveryInfo,
   RepoStatus,
   Task,
+  UserRequest,
 } from "../lib/types";
 
 export const TIMELINE_LIMIT = 500;
@@ -42,6 +45,17 @@ export interface ProjectData {
   decisionVersion: number;
   /** Bumped on McpChanged / SkillChanged so Claude Code inventories can reload. */
   toolsVersion: number;
+  /** Agents waiting for the user (secret, SSH key, GitHub sign-in, other step). */
+  userRequests: UserRequest[];
+  compatibility: CompatibilityReport | null;
+  /** Compatibility mode: the backend refuses every change. */
+  readOnly: boolean;
+  /** Migration performed while opening; shown once, then cleared. */
+  migration: MigrationReport | null;
+  /** Bumped on ToolUsed so the command journal can reload. */
+  commandVersion: number;
+  /** Bumped on ProjectChanged / ConnectionChanged / McpChanged / SkillChanged so MASTER CONTROL can reload its status. */
+  masterVersion: number;
 }
 
 export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | null): ProjectData {
@@ -63,6 +77,13 @@ export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | nul
     emergency: snap.emergency,
     decisionVersion: keep?.decisionVersion ?? 0,
     toolsVersion: keep?.toolsVersion ?? 0,
+    userRequests: snap.userRequests ?? [],
+    compatibility: snap.compatibility,
+    readOnly: snap.readOnly,
+    // The report comes with the snapshot that opened the project; later refreshes never show it again.
+    migration: keep ? keep.migration : snap.migration,
+    commandVersion: keep?.commandVersion ?? 0,
+    masterVersion: keep?.masterVersion ?? 0,
   };
 }
 
@@ -137,16 +158,26 @@ export function applyEvent(data: ProjectData, e: PccEvent): ProjectData {
       return isObject(p) && typeof p.active === "boolean" ? { ...next, emergency: p.active } : next;
     case "McpChanged":
     case "SkillChanged":
-      return { ...next, toolsVersion: next.toolsVersion + 1 };
-    case "ConnectionChanged":
-      if (!hasId(p)) return next;
+      return { ...next, toolsVersion: next.toolsVersion + 1, masterVersion: next.masterVersion + 1 };
+    case "ConnectionChanged": {
+      const bumped = { ...next, masterVersion: next.masterVersion + 1 };
+      if (!hasId(p)) return bumped;
       if ((p as { deleted?: boolean }).deleted === true) {
-        return { ...next, connections: removeById(next.connections, p.id) };
+        return { ...bumped, connections: removeById(next.connections, p.id) };
       }
-      return { ...next, connections: upsertById(next.connections, p as Connection) };
-    case "ProjectChanged":
-      if (isObject(p) && isObject(p.settings)) return { ...next, settings: p.settings as unknown as ProjectSettings };
-      return next;
+      return { ...bumped, connections: upsertById(next.connections, p as Connection) };
+    }
+    case "ProjectChanged": {
+      const bumped = { ...next, masterVersion: next.masterVersion + 1 };
+      if (isObject(p) && isObject(p.settings)) return { ...bumped, settings: p.settings as unknown as ProjectSettings };
+      return bumped;
+    }
+    case "ToolUsed":
+      return { ...next, commandVersion: next.commandVersion + 1 };
+    case "UserRequested":
+      return hasId(p) ? { ...next, userRequests: upsertById(next.userRequests, p as UserRequest) } : next;
+    case "UserRequestResolved":
+      return hasId(p) ? { ...next, userRequests: removeById(next.userRequests, p.id) } : next;
     case "MemoryUpdated":
       return { ...next, memoryVersion: next.memoryVersion + 1 };
     case "GitChanged":

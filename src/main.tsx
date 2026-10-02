@@ -14,6 +14,9 @@ import "./styles/control.css";
 import "./styles/agents.css";
 import "./styles/terminal.css";
 import "./styles/tools.css";
+import "./styles/ops.css";
+import "./styles/ops-views.css";
+import "./styles/world.css";
 
 // Detached panel windows load the same bundle with `#panel=<spec>`.
 const detached = parseDetachHash(window.location.hash);

@@ -1,7 +1,7 @@
 // Test-only builders for backend entities (complete objects matching the contract).
 
 import { powerPreset } from "../lib/power";
-import type { Agent, PermissionSet, ProjectSettings, ProjectSnapshot } from "../lib/types";
+import type { Agent, PermissionSet, ProjectInfo, ProjectSettings, ProjectSnapshot } from "../lib/types";
 
 export function makeAgent(id: string, patch: Partial<Agent> = {}): Agent {
   return {
@@ -56,13 +56,28 @@ export function makeSettings(patch: Partial<ProjectSettings> = {}): ProjectSetti
     defaultEffort: null,
     defaultSkillsEnabled: true,
     autoRecover: false,
+    masterControl: { active: false, pc: false, github: false, mcp: false, ssh: false, skills: false, manageConnections: false },
+    ...patch,
+  };
+}
+
+export function makeInfo(patch: Partial<ProjectInfo> = {}): ProjectInfo {
+  return {
+    id: "p1",
+    name: "Demo",
+    root: "C:/proj",
+    createdAt: "2026-01-01T00:00:00Z",
+    formatVersion: 1,
+    createdWith: "0.2.0",
+    lastOpenedWith: "0.2.0",
+    minimumNexusVersion: null,
     ...patch,
   };
 }
 
 export function makeSnapshot(patch: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
   return {
-    info: { id: "p1", name: "Demo", root: "C:/proj", createdAt: "2026-01-01T00:00:00Z", formatVersion: 1 },
+    info: makeInfo(),
     settings: makeSettings(),
     agents: [makeAgent("central")],
     tasks: [],
@@ -72,6 +87,10 @@ export function makeSnapshot(patch: Partial<ProjectSnapshot> = {}): ProjectSnaps
     repo: null,
     recovery: null,
     emergency: false,
+    userRequests: [],
+    compatibility: null,
+    readOnly: false,
+    migration: null,
     ...patch,
   };
 }

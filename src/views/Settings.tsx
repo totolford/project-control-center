@@ -3,7 +3,7 @@ import { Save } from "lucide-react";
 import { api } from "../lib/api";
 import { attempt } from "../lib/toast";
 import type { ProjectSettings } from "../lib/types";
-import { useStore } from "../store";
+import { useReadOnly, useStore } from "../store";
 import { Field, PageHeader, Section, Spinner } from "../components/Common";
 import { PermissionEditor } from "../components/PermissionEditor";
 import { UpdatePanel } from "./settings/UpdatePanel";
@@ -11,6 +11,7 @@ import { WorkspaceSettings } from "./settings/WorkspaceSettings";
 import { ClaudeSettings } from "./settings/ClaudeSettings";
 import { SessionDefaults } from "./settings/SessionDefaults";
 import { ImprovementSettings } from "./settings/ImprovementSettings";
+import { CompatibilitySettings } from "./settings/CompatibilitySettings";
 
 function numberOrNull(v: string): number | null {
   const n = Number(v);
@@ -31,6 +32,7 @@ export function Settings() {
   const [draft, setDraft] = useState<ProjectSettings | undefined>(settings);
   const [budget, setBudget] = useState(settings?.maxBudgetUsdPerSession?.toString() ?? "");
   const [saving, setSaving] = useState(false);
+  const readOnly = useReadOnly();
   useScrollToSection();
 
   // Snapshot refreshes replace the object; only reset the form when the saved values really change.
@@ -61,7 +63,12 @@ export function Settings() {
             <button className="btn" onClick={() => { setDraft(settings); setBudget(settings.maxBudgetUsdPerSession?.toString() ?? ""); }} disabled={!dirty || saving}>
               Reset
             </button>
-            <button className="btn primary" onClick={() => void save()} disabled={!dirty || saving}>
+            <button
+              className="btn primary"
+              onClick={() => void save()}
+              disabled={!dirty || saving || readOnly}
+              title={readOnly ? "Compatibility mode: this project is read-only" : undefined}
+            >
               {saving ? <Spinner size={12} /> : <Save size={13} />} Save project settings
             </button>
           </>
@@ -118,6 +125,10 @@ export function Settings() {
 
       <div id="settings-improvement">
         <ImprovementSettings value={draft.improvement} onChange={(v) => set("improvement", v)} />
+      </div>
+
+      <div id="settings-compatibility">
+        <CompatibilitySettings />
       </div>
 
       <WorkspaceSettings />

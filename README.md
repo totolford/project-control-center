@@ -33,6 +33,20 @@ memory and a timeline. Use your usual editor alongside it.
 - **Continuous improvement, Raw Terminal, Environment Inspector** — scheduled
   improvement missions, a real ConPTY terminal (Claude Code, PowerShell, CMD, WSL)
   and a view of the machine, tools and project stack.
+- **"Fais-moi ça"** — give Central an intent ("connect to my Pi, check Docker,
+  update the server and test it"): it discovers its capabilities, reuses or creates
+  connections (SSH, MCP from a `claude mcp add` line, GitHub...), asks you only for
+  approvals, secrets (stored in Windows Credential Manager) or sign-ins, and
+  journals every command.
+- **NEXUS MASTER CONTROL** — open domains (PC, GitHub, MCP, SSH, skills) to Central
+  in one switch, with the real availability and effective permissions displayed.
+- **GitHub** — sign in with the official `gh` flow; repositories, issues, PRs,
+  Actions, releases, clone-and-open, issues and workflow dispatch.
+- **AI World** — turn the project into a living 2D world of its agents (hybrid,
+  mirroring real work) or a simulation; optional AI Town fork with generated
+  characters.
+- **Project compatibility** — projects from older versions are backed up and
+  migrated automatically (with a report and rollback); newer ones open read-only.
 - **Agent providers** — agents run on providers (adapters). Claude Code is supported;
   other runtimes (e.g. Codex CLI) are detected and shown as unavailable until an
   adapter exists — nothing is faked.

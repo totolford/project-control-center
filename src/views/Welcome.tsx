@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import logo from "../assets/icon.svg";
-import { FolderOpen, FolderPlus, X } from "lucide-react";
+import { FolderOpen, FolderPlus, Info, X } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import { APP_NAME, APP_TAGLINE } from "../lib/brand";
 import { attempt, run } from "../lib/toast";
 import { formatRelative } from "../lib/format";
 import type { ProjectSnapshot, RecentProject } from "../lib/types";
+import { useUi } from "../state/ui";
 import { ClaudeStatus, useClaudeInfo } from "../components/ClaudeStatus";
 import { Spinner } from "../components/Common";
 
@@ -20,6 +21,8 @@ export function Welcome({
   const claude = useClaudeInfo();
   const [recent, setRecent] = useState<RecentProject[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const notice = useUi((s) => s.welcomeNotice);
+  const setNotice = useUi((s) => s.setWelcomeNotice);
 
   useEffect(() => {
     void attempt(() => api.recentProjects()).then((r) => setRecent(r ?? []));
@@ -37,7 +40,10 @@ export function Welcome({
     setBusy(p.root);
     const snap = await attempt(() => api.openProject(p.root));
     setBusy(null);
-    if (snap) onOpened(snap);
+    if (snap) {
+      setNotice(null);
+      onOpened(snap);
+    }
   };
 
   const forget = async (root: string) => {
@@ -54,6 +60,16 @@ export function Welcome({
           <p className="welcome-tagline">{APP_TAGLINE}</p>
           <p className="muted">Orchestrate a swarm of coding agents on your project.</p>
         </div>
+
+        {notice && (
+          <div className="notice" role="status">
+            <Info size={14} />
+            <span className="grow">{notice}</span>
+            <button className="icon-btn" onClick={() => setNotice(null)} aria-label="Dismiss">
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         <ClaudeStatus info={claude.info} loading={claude.loading} onRecheck={() => void claude.reload()} />
 

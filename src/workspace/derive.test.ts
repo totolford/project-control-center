@@ -76,6 +76,12 @@ describe("deriveNotifications", () => {
     expect(list[4].target).toEqual({ type: "mission", id: "mi1" });
   });
 
+  it("notifies user requests with a request target", () => {
+    const list = deriveNotifications([ev("UserRequested", { id: "req1", agentId: "w1", kind: "secret", title: "Password of the Pi" })], name);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ title: "Movement needs you", body: "Password of the Pi", tone: "amber", target: { type: "request", id: "req1" } });
+  });
+
   it("keeps only the newest notification per task status", () => {
     const events = [ev("TaskUpdated", { id: "t1", title: "A", status: "failed" }), ev("TaskFailed", { id: "t1", title: "A", status: "failed" })];
     expect(deriveNotifications(events, name)).toHaveLength(1);

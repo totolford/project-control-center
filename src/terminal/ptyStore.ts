@@ -14,6 +14,8 @@ interface PtyState {
   refresh: () => Promise<void>;
   spawn: (profile: TerminalProfile, agentId?: string | null) => Promise<PtyInfo | undefined>;
   close: (id: string) => Promise<void>;
+  /** Shows a session the backend spawned itself (GitHub sign-in, SSH key install) and selects it. */
+  adopt: (info: PtyInfo) => void;
   setActive: (id: string) => void;
 }
 
@@ -39,6 +41,7 @@ export const usePty = create<PtyState>((set, get) => ({
       return { sessions, active: s.active === id ? (sessions[sessions.length - 1]?.id ?? null) : s.active };
     });
   },
+  adopt: (info) => set((s) => ({ sessions: [...s.sessions.filter((x) => x.id !== info.id), info], active: info.id })),
   setActive: (active) => set({ active }),
 }));
 

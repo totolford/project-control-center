@@ -5,6 +5,7 @@ import type { Message, PccEvent, Task } from "../lib/types";
 
 export type NotificationTarget =
   | { type: "permission"; id: string }
+  | { type: "request"; id: string }
   | { type: "agent"; id: string }
   | { type: "task"; id: string }
   | { type: "mission"; id: string }
@@ -42,6 +43,9 @@ function fromEvent(e: PccEvent, name: (id: string) => string): Notification | nu
     case "PermissionRequested":
       if (!isRecord(p) || typeof p.id !== "string") return null;
       return { ...base, tone: "amber", title: `${name(String(p.agentId ?? e.agentId ?? ""))} needs permission`, body: String(p.summary ?? e.summary), target: { type: "permission", id: p.id } };
+    case "UserRequested":
+      if (!isRecord(p) || typeof p.id !== "string") return null;
+      return { ...base, tone: "amber", title: `${name(String(p.agentId ?? e.agentId ?? ""))} needs you`, body: String(p.title ?? e.summary), target: { type: "request", id: p.id } };
     case "AgentCrashed":
       return { ...base, tone: "red", title: `${name(e.agentId ?? "")} crashed`, body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
     case "Error":

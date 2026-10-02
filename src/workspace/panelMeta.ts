@@ -8,6 +8,7 @@ import {
   Gamepad2,
   GitCompare,
   GitPullRequest,
+  Globe2,
   LayoutGrid,
   ListChecks,
   Brain,
@@ -35,6 +36,7 @@ export const PANEL_ICON: Record<PanelType, LucideIcon> = {
   Activity: Activity,
   SwarmOverview: LayoutGrid,
   RawTerminal: Terminal,
+  AiWorld: Globe2,
 };
 
 const STATIC_TITLE: Partial<Record<PanelType, string>> = {
@@ -47,6 +49,7 @@ const STATIC_TITLE: Partial<Record<PanelType, string>> = {
   Activity: "Activity",
   SwarmOverview: "Swarm overview",
   RawTerminal: "Raw terminal",
+  AiWorld: "AI World",
 };
 
 /** Human title of a panel, resolved against current project data. */

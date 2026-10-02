@@ -9,6 +9,7 @@ import { Spinner } from "../components/Common";
 import { PowerControl } from "../components/PowerControl";
 import { ContextBar, RateLimitBars } from "../components/UsageBars";
 import { UnlockedToggle } from "../components/UnlockedToggle";
+import { DomainBar, MasterToggle, useMasterStatus } from "../views/master/MasterParts";
 
 function RailSection({ title, children, onClick }: { title: string; children: ReactNode; onClick?: () => void }) {
   return (
@@ -41,7 +42,21 @@ function AgentPower() {
   );
 }
 
-/** Right CONTROL rail of the Swarm view: models, power, MCP/skills, limits, CLAUDE UNLOCKED. */
+function MasterCard() {
+  const { data, error } = useMasterStatus();
+  const enabled = data?.domains.filter((d) => d.enabled) ?? [];
+  return (
+    <>
+      <MasterToggle />
+      {error && <div className="tiny tone-red-fg">Status unavailable</div>}
+      {enabled.map((d) => (
+        <DomainBar key={d.key} domain={d} compact />
+      ))}
+    </>
+  );
+}
+
+/** Right CONTROL rail of the Swarm view: models, power, MCP/skills, limits, CLAUDE UNLOCKED, MASTER CONTROL. */
 export const ControlRail = memo(function ControlRail() {
   const { env, loading, error, refresh } = useClaudeEnv();
   const { skills } = useSkills();
@@ -99,6 +114,10 @@ export const ControlRail = memo(function ControlRail() {
 
       <RailSection title="Autonomy" onClick={() => navigate({ name: "autonomy" })}>
         <UnlockedToggle />
+      </RailSection>
+
+      <RailSection title="Master control" onClick={() => navigate({ name: "master" })}>
+        <MasterCard />
       </RailSection>
     </aside>
   );

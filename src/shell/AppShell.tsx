@@ -22,6 +22,10 @@ import { Capabilities } from "../views/Capabilities";
 import { RawTerminalView } from "../terminal/RawTerminalView";
 import { Git } from "../views/Git";
 import { Settings } from "../views/Settings";
+import { GithubView } from "../views/github/GithubView";
+import { MasterControlView } from "../views/master/MasterControlView";
+import { AiWorldView } from "../views/world";
+import { FolderContext } from "../state/opsActions";
 import { NewAgentDialog } from "../views/agent/NewAgentDialog";
 import { AddConnectionDialog } from "../views/connections/AddConnectionDialog";
 import { TopBar } from "./TopBar";
@@ -32,6 +36,8 @@ import { MissionComposer } from "./MissionComposer";
 import { MessageFlow } from "./MessageFlow";
 import { MessageDetail } from "./MessageDetail";
 import { CommandBar } from "./CommandBar";
+import { CompatBanner } from "./CompatBanner";
+import { UserRequests } from "./UserRequests";
 
 const VIEWS: Record<Exclude<ViewName, "agent">, ComponentType> = {
   swarm: SwarmWorkspace,
@@ -51,11 +57,14 @@ const VIEWS: Record<Exclude<ViewName, "agent">, ComponentType> = {
   terminal: RawTerminalView,
   tasks: Tasks,
   git: Git,
+  github: GithubView,
+  master: MasterControlView,
+  world: AiWorldView,
   settings: Settings,
 };
 
 /** Views that manage their own scrolling (tiling, terminals). */
-const FILL_VIEWS: ViewName[] = ["swarm", "terminal"];
+const FILL_VIEWS: ViewName[] = ["swarm", "terminal", "world"];
 
 function DialogHost() {
   const dialog = useUi((s) => s.dialog);
@@ -78,23 +87,27 @@ export function AppShell({ onCloseProject, onFolder }: { onCloseProject: () => v
     main = <View />;
   }
   return (
-    <div className="shell">
-      <TopBar onCloseProject={onCloseProject} onFolder={onFolder} />
-      <div>
-        <EmergencyBanner />
+    <FolderContext.Provider value={onFolder}>
+      <div className="shell">
+        <TopBar onCloseProject={onCloseProject} onFolder={onFolder} />
+        <div>
+          <EmergencyBanner />
+          <CompatBanner />
+        </div>
+        <div className="shell-body">
+          <MainNav />
+          <main className={`shell-main${FILL_VIEWS.includes(view.name) ? " is-fill" : ""}`}>{main}</main>
+        </div>
+        <div className="shell-bottom">
+          <StatusStrip />
+          <MissionComposer />
+        </div>
+        <MessageFlow />
+        <MessageDetail />
+        <CommandBar />
+        <DialogHost />
+        <UserRequests />
       </div>
-      <div className="shell-body">
-        <MainNav />
-        <main className={`shell-main${FILL_VIEWS.includes(view.name) ? " is-fill" : ""}`}>{main}</main>
-      </div>
-      <div className="shell-bottom">
-        <StatusStrip />
-        <MissionComposer />
-      </div>
-      <MessageFlow />
-      <MessageDetail />
-      <CommandBar />
-      <DialogHost />
-    </div>
+    </FolderContext.Provider>
   );
 }

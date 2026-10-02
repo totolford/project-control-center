@@ -1,6 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bot, Cable, CornerDownLeft, FlaskConical, ListChecks, OctagonX, PanelRightOpen, Plus, RefreshCw, RotateCcw, Siren, Sparkles, Target } from "lucide-react";
+import {
+  Bot,
+  Cable,
+  CornerDownLeft,
+  FlaskConical,
+  Globe2,
+  Hand,
+  ListChecks,
+  LogIn,
+  OctagonX,
+  PanelRightOpen,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  ScrollText,
+  Siren,
+  Sparkles,
+  SquareTerminal,
+  Target,
+} from "lucide-react";
+import { githubSignIn } from "../state/opsActions";
 import { api } from "../lib/api";
 import { run } from "../lib/toast";
 import { fuzzyFilter } from "../lib/fuzzy";
@@ -23,6 +43,12 @@ function focusComposer() {
   document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus();
 }
 
+function composeIn(mode: "mission" | "command") {
+  useUi.getState().setComposerMode(mode);
+  // The textarea re-renders for the new mode before it can take focus.
+  window.setTimeout(focusComposer, 0);
+}
+
 function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
   const s = useStore.getState();
   const ui = useUi.getState();
@@ -30,7 +56,24 @@ function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
   const provider = availableProviderId();
   if (!p) return [];
   return [
-    { id: "cmd:mission", label: "Start mission…", group: "Command", icon: Sparkles, run: focusComposer },
+    { id: "cmd:mission", label: "Start mission…", group: "Command", icon: Sparkles, run: () => composeIn("mission") },
+    { id: "cmd:interpret", label: "Interpret a command line…", group: "Command", icon: SquareTerminal, run: () => composeIn("command") },
+    { id: "cmd:journal", label: "Command journal", group: "Command", icon: ScrollText, run: () => s.navigate({ name: "commands", section: "journal" }) },
+    { id: "cmd:world", label: "Open AI World", group: "Command", icon: Globe2, run: () => s.navigate({ name: "world" }) },
+    {
+      id: "cmd:ai-town",
+      label: "Make this project an AI Town",
+      group: "Command",
+      icon: Globe2,
+      run: () => {
+        ui.setAiWorldWizard(true);
+        s.navigate({ name: "world" });
+      },
+    },
+    { id: "cmd:gh-login", label: "Connect GitHub (gh auth login)", group: "Command", icon: LogIn, run: () => void githubSignIn() },
+    ...(p.userRequests.length > 0
+      ? [{ id: "cmd:requests", label: `Show requests from agents (${p.userRequests.length})`, group: "Command", icon: Hand, run: () => ui.setRequestsCollapsed(false) }]
+      : []),
     ...(provider ? [{ id: "cmd:agent", label: "Add agent…", group: "Command", icon: Plus, run: () => ui.openDialog({ type: "newAgent", provider }) }] : []),
     { id: "cmd:conn", label: "Add connection…", group: "Command", icon: Cable, run: () => ui.openDialog({ type: "addConnection" }) },
     { id: "cmd:stop", label: "Stop all agents", group: "Command", icon: OctagonX, run: () => void run(() => api.stopAll(), "Stop requested for all agents") },

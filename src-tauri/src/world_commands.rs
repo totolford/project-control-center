@@ -78,14 +78,141 @@ fn chrono_minus_seconds(secs: i64) -> String {
 struct WorldFrame<'a> {
     tick: u64,
     running: bool,
+    mode: WorldMode,
     characters: &'a [Character],
-    events: &'a [pcc_world::model::WorldEvent],
+    /// Events since the previous frame.
+    events: Vec<pcc_world::model::WorldEvent>,
+    /// All conversations, sent only when they changed.
+    conversations: Option<&'a [Conversation]>,
+}
+
+/// What the previous frame carried, to send only what changed.
+#[derive(Default)]
+pub struct FrameCursor {
+    last_event_ts: String,
+    conversation_lines: usize,
+}
+
+fn conversation_lines(w: &World) -> usize {
+    w.conversations.iter().map(|c| c.lines.len() + 1).sum()
+}
+
+/// Streams the world state to the UI (also used after pauses and edits).
+pub fn emit_frame(app: &AppHandle, w: &World, cursor: &mut FrameCursor) {
+    let events: Vec<_> = w.events.iter().filter(|e| e.ts > cursor.last_event_ts).cloned().collect();
+    if let Some(last) = w.events.last() {
+        cursor.last_event_ts = last.ts.clone();
+    }
+    let lines = conversation_lines(w);
+    let conversations = (lines != cursor.conversation_lines).then_some(w.conversations.as_slice());
+    cursor.conversation_lines = lines;
+    let _ = app.emit(
+        WORLD_CHANNEL,
+        WorldFrame { tick: w.tick, running: w.running, mode: w.mode, characters: &w.characters, events, conversations },
+    );
+}
+
+/// Hybrid / real execution: real NEXUS messages between linked agents become
+/// "real" conversations of their characters.
+fn absorb_messages(orch: &Orchestrator, w: &mut World, since: &mut String) {
+    let messages = orch.store.list_messages(None, 50).unwrap_or_default();
+    for m in messages.iter().filter(|m| m.created_at > *since) {
+        let who = |agent: &str| {
+            w.characters
+                .iter()
+                .find(|c| c.nexus_agent.as_deref() == Some(agent))
+                .map(|c| (c.id.clone(), c.name.clone()))
+        };
+        let (Some((from_id, from_name)), Some((to_id, _))) = (who(&m.from), who(&m.to)) else { continue };
+        let mut pair = vec![from_id.clone(), to_id];
+        pair.sort();
+        let text: String = m.body.lines().next().unwrap_or("").chars().take(200).collect();
+        let line = pcc_world::model::ConversationLine { speaker: from_name.clone(), text, ts: m.created_at.clone() };
+        let recent = chrono_minus_seconds(600);
+        let existing =
+            w.conversations.iter_mut().rev().find(|c| {
+                c.origin == "real" && c.participants == pair && c.lines.last().is_some_and(|l| l.ts >= recent)
+            });
+        match existing {
+            Some(c) => c.lines.push(line),
+            None => {
+                let room = w.characters.iter().find(|c| c.id == from_id).and_then(|c| c.room.clone());
+                w.conversations.push(Conversation {
+                    id: format!("real-{}", m.id),
+                    participants: pair,
+                    room,
+                    lines: vec![line],
+                    origin: "real".into(),
+                    started_at: m.created_at.clone(),
+                });
+                w.push_event(Some(&from_id), format!("{from_name} messages a teammate (real NEXUS message)"));
+            }
+        }
+    }
+    if let Some(last) = messages.iter().map(|m| m.created_at.clone()).max() {
+        if last > *since {
+            *since = last;
+        }
+    }
+    let excess = w.conversations.len().saturating_sub(100);
+    w.conversations.drain(..excess);
+}
+
+/// Simulation with `llmConversations`: occasionally let two characters in the
+/// same room talk (one real Claude call each, capped per hour).
+fn maybe_converse(world: &SharedWorld, w: &World, busy: &Arc<std::sync::atomic::AtomicBool>) {
+    use std::sync::atomic::Ordering;
+    if w.mode != WorldMode::Simulation || !w.settings.llm_conversations || busy.load(Ordering::SeqCst) {
+        return;
+    }
+    let hour_ago = chrono_minus_seconds(3600);
+    let recent = w.conversations.iter().filter(|c| c.origin == "simulated" && c.started_at >= hour_ago).count() as u32;
+    if recent >= w.settings.max_conversations_per_hour {
+        return;
+    }
+    let ten_min = chrono_minus_seconds(600);
+    let pair = engine::conversation_candidates(w).into_iter().find(|(a, b)| {
+        !w.conversations
+            .iter()
+            .any(|c| c.started_at >= ten_min && c.participants.contains(a) && c.participants.contains(b))
+    });
+    let Some((a, b)) = pair else { return };
+    let find = |id: &str| w.characters.iter().find(|c| c.id == id).cloned();
+    let (Some(ca), Some(cb)) = (find(&a), find(&b)) else { return };
+    let Some(claude) = pcc_claude::find_claude() else { return };
+    let room = ca.room.clone().and_then(|r| w.room(&r).map(|r| r.name.clone())).unwrap_or_default();
+    let desc = format!("{} — {}", w.settings.environment, w.description);
+    let model = w.settings.conversation_model.clone();
+    busy.store(true, Ordering::SeqCst);
+    let (world, busy) = (world.clone(), busy.clone());
+    tokio::spawn(async move {
+        let (c1, c2, r2) = (ca.clone(), cb.clone(), room.clone());
+        let lines =
+            tokio::task::spawn_blocking(move || characters::converse(&claude, &model, &desc, &c1, &c2, &r2)).await;
+        if let Ok(Ok(lines)) = lines {
+            if let Some(w) = world.lock().await.as_mut() {
+                w.conversations.push(Conversation {
+                    id: format!("conv-{}", chrono::Utc::now().timestamp_millis()),
+                    participants: vec![ca.id.clone(), cb.id.clone()],
+                    room: Some(room),
+                    lines,
+                    origin: "simulated".into(),
+                    started_at: pcc_core::now(),
+                });
+                w.push_event(Some(&ca.id), format!("{} talks with {} (simulated)", ca.name, cb.name));
+            }
+        }
+        busy.store(false, Ordering::SeqCst);
+    });
 }
 
 /// Advances running worlds and streams frames to the UI; saves periodically.
 pub fn spawn_runner(app: AppHandle, orch: Orchestrator, world: SharedWorld) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut since_save = 0u32;
+        let mut cursor = FrameCursor::default();
+        let mut messages_since = pcc_core::now();
+        let busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
         loop {
             let delay = {
                 let mut guard = world.lock().await;
@@ -93,16 +220,11 @@ pub fn spawn_runner(app: AppHandle, orch: Orchestrator, world: SharedWorld) -> J
                     Some(w) if w.running => {
                         let views = agent_views(&orch);
                         engine::tick(w, &views);
-                        let start = w.events.len().saturating_sub(5);
-                        let _ = app.emit(
-                            WORLD_CHANNEL,
-                            WorldFrame {
-                                tick: w.tick,
-                                running: true,
-                                characters: &w.characters,
-                                events: &w.events[start..],
-                            },
-                        );
+                        if w.mode != WorldMode::Simulation {
+                            absorb_messages(&orch, w, &mut messages_since);
+                        }
+                        maybe_converse(&world, w, &busy);
+                        emit_frame(&app, w, &mut cursor);
                         since_save += 1;
                         if since_save >= 40 && !orch.store.read_only() {
                             since_save = 0;
@@ -343,15 +465,17 @@ pub async fn world_create(state: State<'_, AppState>, spec: WorldSpec) -> CmdRes
 
 /// Replaces the world (edits from the UI: characters, settings, rooms).
 #[tauri::command]
-pub async fn world_save(state: State<'_, AppState>, world: World) -> CmdResult<World> {
+pub async fn world_save(app: AppHandle, state: State<'_, AppState>, world: World) -> CmdResult<World> {
     let (orch, shared) = project(&state).await?;
     persist(&orch, &world).await?;
     *shared.lock().await = Some(world.clone());
+    emit_frame(&app, &world, &mut FrameCursor::default());
     Ok(world)
 }
 
 #[tauri::command]
 pub async fn world_control(
+    app: AppHandle,
     state: State<'_, AppState>,
     running: Option<bool>,
     mode: Option<WorldMode>,
@@ -373,6 +497,7 @@ pub async fn world_control(
     let copy = w.clone();
     drop(guard);
     persist(&orch, &copy).await?;
+    emit_frame(&app, &copy, &mut FrameCursor::default());
     Ok(copy)
 }
 

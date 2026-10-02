@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+
+- Project compatibility: versioned manifest, automatic backed-up migrations with integrity report and rollback, read-only compatibility mode, unknown fields preserved.
+- Command interpreter (`claude mcp add`, `ssh`, `git`/`gh` clone, `gh auth login`) and command journal.
+- Agent-driven environment: Central discovers capabilities, finds or creates connections without duplicates, adds MCP servers from a command line, grants access, requests secrets and manual steps (SSH key setup, GitHub sign-in).
+- NEXUS MASTER CONTROL; secret redaction in logs.
+- GitHub account, repositories, Actions, releases, clone, issues, workflow dispatch.
+- AI World: native engine (hybrid with real agents, or simulation), AI Town compatible export, AI Town fork, custom worlds; Claude-generated characters and conversations.
 
 - Claude Control Center: live Claude Code inspection, Command Center from `--help`, MCP manager (stdio/HTTP/SSE probes, Claude config management, import), Skills manager, models and live model switch, agent profiles (effort, skills, env), capability matrix.
 - CLAUDE UNLOCKED with journaled auto-approval, power presets, Emergency Stop, Revoke all permissions.

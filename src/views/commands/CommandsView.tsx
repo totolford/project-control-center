@@ -1,17 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useClaudeEnv } from "../../state/claude";
+import { useStore } from "../../store";
 import { PageHeader, Spinner } from "../../components/Common";
 import { Tabs } from "../../components/Tabs";
 import { CliBrowser } from "./CliBrowser";
 import { SlashCommands } from "./SlashCommands";
+import { CommandJournal } from "./CommandJournal";
 
-type TabKey = "cli" | "slash";
+type TabKey = "cli" | "slash" | "journal";
 
-/** Command Center: the installed Claude Code's CLI and its slash commands & skills. */
+/** Command Center: the installed Claude Code's CLI, its slash commands & skills, and the journal of commands run. */
 export function CommandsView() {
   const { env, loading, refresh } = useClaudeEnv();
-  const [tab, setTab] = useState<TabKey>("cli");
+  const section = useStore((s) => s.view.section);
+  const [tab, setTab] = useState<TabKey>(section === "journal" ? "journal" : "cli");
+  useEffect(() => {
+    if (section === "journal") setTab("journal");
+  }, [section]);
   const version = env?.cli.version;
   return (
     <div className="page page-fill">
@@ -29,6 +35,7 @@ export function CommandsView() {
               tabs={[
                 { key: "cli", label: "CLI commands" },
                 { key: "slash", label: "Slash commands & skills" },
+                { key: "journal", label: "Command journal" },
               ]}
               active={tab}
               onChange={setTab}
@@ -39,7 +46,7 @@ export function CommandsView() {
           </>
         }
       />
-      {tab === "cli" ? <CliBrowser exe={env?.cli.path ?? null} /> : <SlashCommands env={env} />}
+      {tab === "cli" ? <CliBrowser exe={env?.cli.path ?? null} /> : tab === "slash" ? <SlashCommands env={env} /> : <CommandJournal />}
     </div>
   );
 }

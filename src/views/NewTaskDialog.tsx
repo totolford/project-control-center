@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { attempt } from "../lib/toast";
 import { PRIORITIES } from "../lib/labels";
 import type { Priority } from "../lib/types";
-import { useAgents, useMissions, useStore, useTasks } from "../store";
+import { useAgents, useMissions, useReadOnly, useStore, useTasks } from "../store";
 import { Modal } from "../components/Modal";
 import { Field } from "../components/Common";
 
@@ -12,6 +12,7 @@ export function NewTaskDialog({ onClose, missionId }: { onClose: () => void; mis
   const missions = useMissions();
   const tasks = useTasks();
   const upsertTask = useStore((s) => s.upsertTask);
+  const readOnly = useReadOnly();
   const openTask = useStore((s) => s.openTask);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,7 +59,7 @@ export function NewTaskDialog({ onClose, missionId }: { onClose: () => void; mis
           <button className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn primary" onClick={() => void create()} disabled={busy || !title.trim()}>
+          <button className="btn primary" onClick={() => void create()} disabled={busy || readOnly || !title.trim()}>
             Create task
           </button>
         </>

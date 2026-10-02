@@ -12,6 +12,7 @@ import type {
   ProjectSettings,
   ProjectSnapshot,
   Task,
+  UserRequest,
 } from "./lib/types";
 import { addLiveMessage, applyEvent, fromSnapshot, removeById, upsertById, type ProjectData } from "./state/reducer";
 
@@ -34,6 +35,9 @@ export type ViewName =
   | "agent"
   | "tasks"
   | "git"
+  | "github"
+  | "master"
+  | "world"
   | "settings";
 
 export interface View {
@@ -66,6 +70,9 @@ interface AppState {
   addMessage: (m: Message) => void;
   setSettings: (s: ProjectSettings) => void;
   clearRecovery: () => void;
+  clearMigration: () => void;
+  /** Drops a request the user just answered (the UserRequestResolved event does the same). */
+  removeUserRequest: (id: string) => void;
   /** Reloads the full snapshot from the backend (safety net after actions / on focus). */
   refresh: () => Promise<void>;
 }
@@ -94,6 +101,8 @@ export const useStore = create<AppState>((set, get) => ({
   addMessage: (m) => set((s) => patchProject(s, (p) => ({ ...p, liveMessages: addLiveMessage(p.liveMessages, m) }))),
   setSettings: (settings) => set((s) => patchProject(s, (p) => ({ ...p, settings }))),
   clearRecovery: () => set((s) => patchProject(s, (p) => ({ ...p, recovery: null }))),
+  clearMigration: () => set((s) => patchProject(s, (p) => ({ ...p, migration: null }))),
+  removeUserRequest: (id) => set((s) => patchProject(s, (p) => ({ ...p, userRequests: removeById(p.userRequests, id) }))),
   refresh: async () => {
     if (!get().project) return;
     const snap = await api.snapshot();
@@ -113,6 +122,7 @@ const NO_CONNECTIONS: Connection[] = [];
 const NO_PERMISSIONS: PermissionRequest[] = [];
 const NO_EVENTS: PccEvent[] = [];
 const NO_MESSAGES: Message[] = [];
+const NO_REQUESTS: UserRequest[] = [];
 
 export const useAgents = () => useStore((s) => s.project?.agents ?? NO_AGENTS);
 export const useTasks = () => useStore((s) => s.project?.tasks ?? NO_TASKS);
@@ -121,6 +131,9 @@ export const useConnections = () => useStore((s) => s.project?.connections ?? NO
 export const usePendingPermissions = () => useStore((s) => s.project?.pendingPermissions ?? NO_PERMISSIONS);
 export const useTimeline = () => useStore((s) => s.project?.timeline ?? NO_EVENTS);
 export const useLiveMessages = () => useStore((s) => s.project?.liveMessages ?? NO_MESSAGES);
+export const useUserRequests = () => useStore((s) => s.project?.userRequests ?? NO_REQUESTS);
+/** Compatibility mode: the project needs a newer NEXUS and every change is refused by the backend. */
+export const useReadOnly = () => useStore((s) => s.project?.readOnly ?? false);
 export const useAgent = (id: string | null | undefined) =>
   useStore((s) => (id ? s.project?.agents.find((a) => a.id === id) : undefined));
 export const useTask = (id: string | null | undefined) =>

@@ -42,7 +42,7 @@ function ItemList({ items, empty }: { items: GhItem[]; empty: string }) {
 }
 
 /** GitHub status and repository overview. `bare` renders without the page Section (for workspace panels). */
-export function GithubPanel({ bare }: { bare?: boolean }) {
+export function GithubPanel({ bare, title = "GitHub" }: { bare?: boolean; title?: string }) {
   const [status, setStatus] = useState<GithubStatus | null>(null);
   const [overview, setOverview] = useState<GithubOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +146,7 @@ export function GithubPanel({ bare }: { bare?: boolean }) {
     );
   }
   return (
-    <Section title="GitHub" actions={refresh}>
+    <Section title={title} actions={refresh}>
       {content}
     </Section>
   );

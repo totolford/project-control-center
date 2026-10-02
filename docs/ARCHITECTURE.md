@@ -240,3 +240,97 @@ commits) and the git snapshots used for rollback.
 Interactive sessions run in a ConPTY pseudo-terminal (`pcc-pty`): Claude Code
 itself, `claude --resume` of a stopped agent's session, PowerShell, CMD or WSL.
 Processes join the application's kill-on-close job object.
+
+## Project compatibility (0.2)
+
+`project.json` records `formatVersion`, `createdWith`, `lastOpenedWith` and
+`minimumNexusVersion`; fields written by other versions are preserved on rewrite
+(`#[serde(flatten)] extra`, also in `settings.json`). `pcc-store::compat`:
+
+```
+Detect project version → compare with this build
+  compatible            → open
+  older format          → backup (.agent-project-backups/<stamp>) → migrate step by step
+                          → integrity check (manifest, settings, PRAGMA integrity_check)
+                          → report (.agent-project/migrations/*.md) → open
+  newer format          → open, unknown data kept, features listed as unavailable
+  requires newer NEXUS  → read-only compatibility mode (SQLite query_only, every write refused)
+```
+
+Any backup can be restored (`rollback`), after an automatic backup of the current
+state. The database schema migrates independently (`PRAGMA user_version`).
+
+## Command interpreter and journal
+
+`pcc-core::interpreter` tokenises a command line (quotes, Windows paths) and
+recognises `claude mcp add` (transport, scope, `-e`, `-H`, `--`), `ssh`, `git
+clone`, `gh repo clone`, `gh auth login` and other `claude` commands; everything
+else is classified with the permission classifier. `-e`/`-H` values are treated as
+secrets: they go to Windows Credential Manager and are redacted everywhere.
+Every Bash/PowerShell call of an agent is journaled (`commands` table): agent,
+source, raw and parsed command, target, capability, permission decision, start,
+end, exit code (recorded only when Claude Code reports one, "Exit code N"; the
+error flag is always recorded) and redacted output. Shell wrappers (`timeout`,
+`env`, `nohup`, `sudo`...) and nested shells (`powershell -Command "..."`, `cmd /c`)
+are seen through by the permission classifier, and allowed SSH commands are made
+non-interactive (`BatchMode`, `ConnectTimeout`, the connection's key) so an agent
+never hangs on a password prompt.
+
+## Agent-driven environment
+
+Central has environment tools (`env_tools.rs`): `list_capabilities`,
+`find_or_create_connection` (equivalent connections are reused: same host/user/port,
+same MCP command/args or URL...), `add_mcp_from_command`, `grant_connection`,
+`test_connection`, `request_secret`, `request_user_action` (SSH key setup, GitHub
+sign-in, manual steps), `github_repositories`, `interpret_command`. Slow tools answer
+later: the MCP reply is written by a background job when the work is done, so other
+sessions are never blocked. Without MASTER CONTROL, connection creation and grants
+wait for a user approval. Secrets never pass through agents: the user types them
+into a NEXUS dialog, and stored values are redacted from logs and command outputs.
+
+SSH works with keys or ssh-agent. "SSH key setup" generates `~/.ssh/nexus_<id>`,
+switches the connection to it and opens a Raw Terminal that appends the public key
+on the host; the user types the remote password there once.
+
+## MASTER CONTROL
+
+`settings.masterControl` opens domains (PC, GitHub, MCP, SSH, skills) to Central:
+its effective permissions become the maximum preset for those domains, it may use
+every enabled connection of an opened domain without a grant, its prompts are
+answered automatically (destructive actions and paths outside the workspace still
+follow the manual rules), and with "manage connections" it creates connections and
+grants without a prompt. `master_status` reports, per domain, the user's choice,
+the real availability (gh signed in, connections present...) and the effective
+level. Emergency stop disables it.
+
+## GitHub
+
+The official `gh` CLI is the authentication (`gh auth login --web` in a Raw
+Terminal). NEXUS reads the account, organisations and token scopes (shown as the
+list of what the token allows), repositories, issues, pull requests, Actions runs,
+releases, branches and commits, clones repositories, creates issues and dispatches
+workflows on explicit user actions. Agents use `gh`/`git` through their
+`github_*` capabilities.
+
+## AI World (`pcc-world`)
+
+Inspired by the architecture of a16z-infra/ai-town (MIT): world state, a tick-based
+engine, characters with personality/goals/memory, a client. `World` is stored in
+`.agent-project/ai-world/world.json`; the app runs one tick loop per open project
+and streams frames on `pcc://world`.
+
+* **Hybrid / real execution**: characters linked to NEXUS agents move to the room
+  matching the agent's real state (Workshop = running a turn, Review Room = task in
+  review, Meeting Room = messages, Library = memory, Server Room = SSH/MCP, Security
+  Desk = waiting for a permission, Lounge = idle, Infirmary = crashed, Gate =
+  offline) and show its real current action.
+* **Simulation**: unlinked behaviour follows a deterministic routine; mood and
+  conversations are simulated, conversations being generated on request by a
+  one-shot Claude Code call (no tools, budget-capped).
+* **Providers** (`AIWorldProvider`): NEXUS Native; AI Town compatible (native world
+  + `characters.ts` export); AI Town fork (clones the repository and rewrites only
+  the `Descriptions` array of `data/characters.ts`; AI Town needs Convex and an
+  Ollama/OpenAI-compatible LLM with embeddings, which a Claude subscription cannot
+  provide — prerequisites are checked and reported, and Central can finish the setup
+  as a mission); Custom (an existing world project folder). Conversions back up
+  `.agent-project` and take a git snapshot first, and never modify project files.

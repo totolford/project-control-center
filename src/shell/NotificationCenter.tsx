@@ -44,6 +44,7 @@ export function NotificationCenter() {
     const t = n.target;
     if (!t) return;
     if (t.type === "permission") ui.setPermissionsDeferred(false);
+    else if (t.type === "request") ui.setRequestsCollapsed(false);
     else if (t.type === "agent") openAgent(t.id);
     else if (t.type === "task") openTask(t.id);
     else if (t.type === "mission") navigate({ name: "missions" });

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import { attempt } from "../../lib/toast";
 import type { AgentSpec } from "../../lib/types";
-import { useStore } from "../../store";
+import { useReadOnly, useStore } from "../../store";
 import { useProviderName } from "../../workspace/hooks";
 import { addPanelToActive } from "../../workspace/layout";
 import { useWorkspace } from "../../workspace/store";
@@ -21,6 +21,7 @@ const ISOLATION: { value: IsolationChoice; label: string }[] = [
 export function NewAgentDialog({ onClose, provider }: { onClose: () => void; provider: string }) {
   const providerName = useProviderName(provider);
   const upsertAgent = useStore((s) => s.upsertAgent);
+  const readOnly = useReadOnly();
   const update = useWorkspace((s) => s.update);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
@@ -62,7 +63,7 @@ export function NewAgentDialog({ onClose, provider }: { onClose: () => void; pro
           <button className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn primary" onClick={() => void create()} disabled={busy || !name.trim() || !role.trim()}>
+          <button className="btn primary" onClick={() => void create()} disabled={busy || readOnly || !name.trim() || !role.trim()}>
             Create agent
           </button>
         </>

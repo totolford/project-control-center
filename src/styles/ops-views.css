@@ -1,0 +1,168 @@
+/* 0.2 views: command journal, GitHub, MASTER CONTROL */
+
+/* ------------------------------------------------------------------ command journal */
+.cmdj {
+  flex: 1;
+  min-height: 0;
+}
+.cmdj-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.cmdj-scroll {
+  flex: 1;
+  min-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.cmdj-row {
+  display: grid;
+  grid-template-columns: 112px 90px 70px minmax(0, 2.4fr) 80px minmax(0, 1fr) 90px 100px 64px 40px 16px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cmdj-row:hover {
+  background: var(--hover);
+}
+.cmdj-row.selected {
+  background: var(--accent-soft);
+}
+.cmdj-row.error {
+  box-shadow: inset 2px 0 0 var(--red);
+}
+.cmdj-head {
+  height: 26px;
+  border: none;
+  cursor: default;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cmdj-head:hover {
+  background: none;
+}
+.cmd-output {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* ------------------------------------------------------------------ GitHub */
+.gh-conn {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gh-dot.on {
+  color: var(--green);
+}
+.gh-dot.off {
+  color: var(--muted);
+}
+.gh-repos {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  gap: 14px;
+  min-height: 360px;
+}
+.gh-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.gh-repo-list {
+  max-height: 520px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.gh-repo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.gh-repo:hover {
+  background: var(--hover);
+}
+.gh-repo.selected {
+  background: var(--accent-soft);
+}
+.gh-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.gh-actions {
+  flex-wrap: wrap;
+}
+.gh-tab-body {
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ MASTER CONTROL */
+.master-toggle.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.master-hero.on {
+  border-color: var(--accent);
+}
+.master-emergency {
+  flex-shrink: 0;
+}
+.master-domains {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.master-domain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.domain-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.domain-bar .progress-fill {
+  background: var(--tone, var(--accent));
+}
+.domain-state {
+  color: var(--tone);
+  font-family: var(--mono);
+}
+.domain-bar.state-off {
+  opacity: 0.6;
+}

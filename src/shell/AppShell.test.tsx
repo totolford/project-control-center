@@ -64,6 +64,9 @@ describe("AppShell", () => {
       "terminal",
       "tasks",
       "git",
+      "github",
+      "master",
+      "world",
       "settings",
       "swarm",
     ];

@@ -62,6 +62,25 @@ fn prereq(name: &str, found: Option<String>, required: bool, missing: &str) -> P
     Prerequisite { name: name.into(), met: found.is_some(), detail: found.unwrap_or_else(|| missing.into()), required }
 }
 
+/// Ollama is only useful when its server answers; `ollama --version` still
+/// succeeds without one and says so in its output.
+fn ollama_prereq() -> Prerequisite {
+    let out = std_command("ollama").arg("--version").output().ok().filter(|o| o.status.success());
+    let (met, detail) = match out {
+        None => (false, "optional: or set an OpenAI-compatible LLM in Convex env".to_string()),
+        Some(o) => {
+            let text = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+            let version = text.lines().find_map(|l| l.split("version is ").nth(1)).unwrap_or("").trim().to_string();
+            if text.contains("could not connect") {
+                (false, format!("installed ({version}) but not running: start it with `ollama serve`"))
+            } else {
+                (true, format!("running ({version})"))
+            }
+        }
+    };
+    Prerequisite { name: "Ollama (local LLM)".into(), met, detail, required: false }
+}
+
 pub struct NexusNative;
 
 impl AIWorldProvider for NexusNative {
@@ -141,12 +160,7 @@ impl AIWorldProvider for AiTownFork {
                 false,
                 "optional: needed only to self-host",
             ),
-            prereq(
-                "Ollama (local LLM)",
-                version_of("ollama", &["--version"]),
-                false,
-                "optional: or set an OpenAI-compatible LLM in Convex env",
-            ),
+            ollama_prereq(),
         ]
     }
 }

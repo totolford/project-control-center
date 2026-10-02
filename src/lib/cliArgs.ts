@@ -109,7 +109,8 @@ export function missingArgs(command: Pick<CliCommand, "arguments">, positional: 
   return command.arguments.filter((a) => parseArgName(a.name).required && !(positional[a.name] ?? "").trim()).map((a) => parseArgName(a.name).name);
 }
 
-function quotePs(arg: string): string {
+/** Quotes one PowerShell argument (single quotes unless it is a plain word). */
+export function quotePs(arg: string): string {
   return /^[\w\-./:=@]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "''")}'`;
 }
 

@@ -3,7 +3,7 @@
 import type { Tone } from "./labels";
 import type { EventKind } from "./types";
 
-export type ActivityGroup = "agents" | "tasks" | "messages" | "tools" | "permissions" | "mcp_skills" | "git" | "safety" | "project";
+export type ActivityGroup = "agents" | "tasks" | "messages" | "tools" | "permissions" | "mcp_skills" | "git" | "safety" | "requests" | "project";
 
 export const ACTIVITY_GROUPS: { key: ActivityGroup; label: string }[] = [
   { key: "agents", label: "Agents" },
@@ -14,6 +14,7 @@ export const ACTIVITY_GROUPS: { key: ActivityGroup; label: string }[] = [
   { key: "mcp_skills", label: "MCP / skills" },
   { key: "git", label: "Git" },
   { key: "safety", label: "Safety" },
+  { key: "requests", label: "User requests" },
   { key: "project", label: "Project" },
 ];
 
@@ -46,6 +47,8 @@ const GROUP_OF: Record<EventKind, ActivityGroup> = {
   GitChanged: "git",
   EmergencyStop: "safety",
   Error: "safety",
+  UserRequested: "requests",
+  UserRequestResolved: "requests",
 };
 
 export function groupOf(kind: EventKind): ActivityGroup {
@@ -64,9 +67,11 @@ export function kindTone(kind: EventKind): Tone {
       return "accent";
     case "PermissionRequested":
     case "PermissionResolved":
+    case "UserRequested":
     case "ReviewRequested":
       return "amber";
     case "TaskCompleted":
+    case "UserRequestResolved":
       return "green";
     case "AgentMessage":
     case "ToolUsed":

@@ -9,6 +9,8 @@ import { useBackendSync } from "./state/backendSync";
 import { Toasts } from "./components/Toasts";
 import { PermissionModal } from "./components/PermissionModal";
 import { RecoveryDialog } from "./components/RecoveryDialog";
+import { MigrationDialog } from "./components/MigrationDialog";
+import { useUi } from "./state/ui";
 import { AppShell } from "./shell/AppShell";
 import { Welcome } from "./views/Welcome";
 import { Setup, type FolderInspection } from "./views/Setup";
@@ -28,6 +30,7 @@ export function App() {
   useWindowTitle();
 
   const openFolder = async (path: string) => {
+    useUi.getState().setWelcomeNotice(null);
     const inspection = await api.inspectFolder(path);
     if (inspection.isProject) {
       loadSnapshot(await api.openProject(inspection.path));
@@ -66,6 +69,7 @@ export function App() {
   return (
     <>
       {content}
+      {hasProject && !setup && <MigrationDialog />}
       {hasProject && !setup && <RecoveryDialog />}
       {hasProject && !setup && <PermissionModal />}
       <Toasts />

@@ -466,8 +466,8 @@ impl Engine {
     }
 
     pub(crate) fn finish_agent_command(&self, tool_use_id: &str, is_error: bool, text: &str) {
-        // Claude Code reports non-zero exits as errors with "Exit code N"; success means 0.
-        let exit = parse_exit_code(text).or(if is_error { None } else { Some(0) });
+        // Only an exit code Claude Code actually reports ("Exit code N") is recorded.
+        let exit = parse_exit_code(text);
         let out: String = self.redact(text).chars().take(8000).collect();
         let _ = self.store.finish_command(tool_use_id, exit, is_error, &out);
     }

@@ -8,7 +8,6 @@ import { EmptyState, PageHeader } from "../components/Common";
 import { Modal } from "../components/Modal";
 import { AddConnectionDialog } from "./connections/AddConnectionDialog";
 import { ConnectionCard } from "./connections/ConnectionCard";
-import { GithubPanel } from "./connections/GithubPanel";
 
 export function Connections() {
   const connections = useConnections();
@@ -17,6 +16,7 @@ export function Connections() {
   const [deleting, setDeleting] = useState<Connection | null>(null);
   const [busy, setBusy] = useState(false);
   const hasGithub = connections.some((c) => c.kind === "github");
+  const navigate = useStore((s) => s.navigate);
 
   const confirmDelete = async () => {
     if (!deleting) return;
@@ -49,7 +49,14 @@ export function Connections() {
           ))}
         </div>
       )}
-      {hasGithub && <GithubPanel />}
+      {hasGithub && (
+        <div className="notice">
+          <span className="grow">Account, permissions, repositories, issues, pull requests and Actions of GitHub are in the GitHub view.</span>
+          <button className="btn btn-sm" onClick={() => navigate({ name: "github" })}>
+            Open GitHub
+          </button>
+        </div>
+      )}
       {adding && <AddConnectionDialog onClose={() => setAdding(false)} />}
       {editing && <AddConnectionDialog editing={editing} onClose={() => setEditing(null)} />}
       {deleting && (

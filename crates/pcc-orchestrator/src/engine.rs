@@ -1078,7 +1078,10 @@ impl Engine {
                             self.record_decision(agent, &tool_name, Some(&class), "allowed", "policy", None);
                         }
                         self.touch_connection(&class);
-                        self.write(agent, protocol::permission_allow(&request_id, &input))?
+                        self.write(
+                            agent,
+                            protocol::permission_allow(&request_id, &self.harden_input(agent, &tool_name, &input)),
+                        )?
                     }
                     Decision::AutoApprove { reason, class } => {
                         self.record_decision(
@@ -1092,7 +1095,10 @@ impl Engine {
                         self.touch_connection(&class);
                         let row = self.session_row(agent);
                         self.log(agent, row, LogKind::System, &format!("AUTO-APPROVED {}", class.summary));
-                        self.write(agent, protocol::permission_allow(&request_id, &input))?
+                        self.write(
+                            agent,
+                            protocol::permission_allow(&request_id, &self.harden_input(agent, &tool_name, &input)),
+                        )?
                     }
                     Decision::Deny(msg) => {
                         self.record_decision(agent, &tool_name, Some(&class), "denied", "policy", Some(msg.clone()));
@@ -1131,6 +1137,37 @@ impl Engine {
         match self.sessions.get(agent) {
             Some(l) => l.handle.send_line(line),
             None => Ok(()),
+        }
+    }
+
+    /// Allowed shell commands that use SSH are made non-interactive (and get
+    /// the connection's key) so an agent never hangs on a password prompt.
+    fn harden_input(&self, agent: &str, tool: &str, input: &Value) -> Value {
+        if !matches!(tool, "Bash" | "PowerShell") {
+            return input.clone();
+        }
+        let Some(cmd) = input.get("command").and_then(Value::as_str) else { return input.clone() };
+        let class = pcc_core::permissions::classify_command(cmd);
+        let Some(host) = class.ssh_host else { return input.clone() };
+        let key = self.store.list_connections().ok().and_then(|cs| {
+            cs.into_iter()
+                .find(|c| c.config.get("host").and_then(Value::as_str).is_some_and(|h| h.eq_ignore_ascii_case(&host)))
+                .and_then(|c| c.config.get("keyPath").and_then(Value::as_str).map(str::to_string))
+        });
+        match pcc_core::permissions::harden_ssh_command(cmd, key.as_deref()) {
+            Some(hardened) => {
+                let row = self.session_row(agent);
+                self.log(
+                    agent,
+                    row,
+                    LogKind::System,
+                    &format!("NEXUS made the SSH command non-interactive: {hardened}"),
+                );
+                let mut v = input.clone();
+                v["command"] = Value::String(hardened);
+                v
+            }
+            None => input.clone(),
         }
     }
 
@@ -1184,7 +1221,10 @@ impl Engine {
             PendingKind::Tool { request_id, input, epoch } => {
                 if self.sessions.get(&agent).is_some_and(|l| l.epoch == epoch) {
                     let line = if allow {
-                        protocol::permission_allow(&request_id, &input)
+                        protocol::permission_allow(
+                            &request_id,
+                            &self.harden_input(&agent, &p.request.tool_name, &input),
+                        )
                     } else {
                         protocol::permission_deny(&request_id, "The user rejected this action. Do not retry it; continue without it or report the blocker.")
                     };

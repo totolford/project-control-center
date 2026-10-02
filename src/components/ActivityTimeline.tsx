@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { toast } from "../lib/toast";
 import { formatClock } from "../lib/format";
 import type { LucideIcon } from "lucide-react";
-import { Bot, Folder, GitBranch, ListChecks, MessageSquare, OctagonX, Plug, ShieldCheck, Wrench } from "lucide-react";
+import { Bot, Folder, GitBranch, Hand, ListChecks, MessageSquare, OctagonX, Plug, ShieldCheck, Wrench } from "lucide-react";
 import { groupOf, kindTone, toolOf, type ActivityGroup } from "../lib/activityGroups";
 import type { PccEvent } from "../lib/types";
 import { useAgents, useTimeline } from "../store";
@@ -22,6 +22,7 @@ const GROUP_ICON: Record<ActivityGroup, LucideIcon> = {
   mcp_skills: Plug,
   git: GitBranch,
   safety: OctagonX,
+  requests: Hand,
   project: Folder,
 };
 

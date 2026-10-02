@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import { attempt } from "../../lib/toast";
 import type { Connection } from "../../lib/types";
-import { useStore } from "../../store";
+import { useReadOnly, useStore } from "../../store";
 import { Modal } from "../../components/Modal";
 import { Field, Spinner } from "../../components/Common";
 import { Segmented } from "../../components/Tabs";
@@ -20,6 +20,7 @@ const KIND_OPTIONS: { value: DialogKind; label: string }[] = [...FORM_KINDS, "mc
 /** Add a connection, or edit one (MCP / Roblox Studio use the MCP wizard). */
 export function AddConnectionDialog({ onClose, editing }: { onClose: () => void; editing?: Connection }) {
   const upsertConnection = useStore((s) => s.upsertConnection);
+  const readOnly = useReadOnly();
   const [kind, setKind] = useState<DialogKind>(() => (editing ? (editing.kind as DialogKind) : "ssh"));
   const [form, setForm] = useState<ConnForm>(() => (editing ? formFromConnection(editing) : EMPTY_FORM));
   const [busy, setBusy] = useState(false);
@@ -56,7 +57,7 @@ export function AddConnectionDialog({ onClose, editing }: { onClose: () => void;
           <button className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn primary" onClick={() => void submit()} disabled={busy || problem !== null}>
+          <button className="btn primary" onClick={() => void submit()} disabled={busy || readOnly || problem !== null}>
             {busy && <Spinner size={12} />} {editing ? "Save" : "Add connection"}
           </button>
         </>

@@ -587,7 +587,7 @@ pub struct CommandRecord {
     pub decision: Option<String>,
     pub started_at: String,
     pub ended_at: Option<String>,
-    /// `None` when the tool did not report an exit code.
+    /// Only set when the tool reported it ("Exit code N"); `None` otherwise.
     pub exit_code: Option<i32>,
     pub is_error: Option<bool>,
     /// Output (truncated, secrets redacted).

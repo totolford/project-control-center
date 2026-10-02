@@ -849,6 +849,7 @@ export interface CommandRecord {
   decision: string | null;
   startedAt: string;
   endedAt: string | null;
+  /** Only when Claude Code reported it ("Exit code N"); otherwise null — use isError. */
   exitCode: number | null;
   isError: boolean | null;
   output: string | null;
@@ -1026,12 +1027,23 @@ export interface World {
   createdAt: string;
 }
 
-/** Streamed on WORLD_CHANNEL while the world runs (positions update every tick). */
+/**
+ * Streamed on WORLD_CHANNEL every tick while running, and once after worldControl/worldSave
+ * (so pauses and mode changes made anywhere reach every view).
+ */
 export interface WorldFrame {
   tick: number;
   running: boolean;
+  mode: WorldMode;
   characters: Character[];
+  /** Events since the previous frame (all of them, not only the last few). */
   events: WorldEvent[];
+  /**
+   * All conversations, only when they changed (otherwise null). Includes "real" conversations
+   * built from NEXUS messages between linked agents (hybrid/real execution) and "simulated" ones
+   * generated automatically when settings.llmConversations is on (capped by maxConversationsPerHour).
+   */
+  conversations: Conversation[] | null;
 }
 
 export interface WorldPrerequisite {

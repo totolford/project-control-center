@@ -357,11 +357,21 @@ pub fn classify_command(cmd: &str) -> CommandClass {
     let mut best: Option<Capability> = None;
     let mut ssh_host = None;
     for seg in split_segments(trimmed) {
-        let words: Vec<&str> = seg.split_whitespace().collect();
+        let all: Vec<&str> = seg.split_whitespace().collect();
+        let words = &all[program_index(&all).min(all.len())..];
+        if let Some(inner) = nested_command(words) {
+            // `powershell -Command "ssh ..."`: the inner command governs.
+            let c = classify_command(&inner);
+            if best.is_none_or(|b| rank(c.capability) > rank(b)) {
+                best = Some(c.capability);
+            }
+            ssh_host = ssh_host.or(c.ssh_host);
+            continue;
+        }
         let Some(first) = words.first() else { continue };
-        let first = first.trim_start_matches('&').to_ascii_lowercase();
+        let first = program_name(first);
         let cap = match first.as_str() {
-            "git" => git_capability(&words),
+            "git" => git_capability(words),
             "gh" => {
                 let sub = words.get(1).copied().unwrap_or("");
                 let action = words.get(2).copied().unwrap_or("");
@@ -404,7 +414,7 @@ pub fn classify_command(cmd: &str) -> CommandClass {
                 }
             }
             "ssh" | "scp" | "sftp" | "rsync" => {
-                ssh_host = extract_ssh_host(&words);
+                ssh_host = extract_ssh_host(words);
                 // `ssh host` with no remote command opens a shell; with one it runs it.
                 if first == "ssh" && words.len() <= 2 {
                     Capability::SshRead
@@ -446,6 +456,130 @@ fn git_capability(words: &[&str]) -> Capability {
         "config" if rest.iter().any(|a| matches!(*a, "--get" | "--get-all" | "--list" | "-l")) => Capability::GitRead,
         _ => Capability::GitWrite,
     }
+}
+
+/// Wrapper programs that run another command (`timeout 15 ssh ...`).
+const WRAPPERS: &[&str] = &["timeout", "env", "nohup", "time", "nice", "sudo", "stdbuf", "exec", "command", "ionice"];
+
+fn program_name(word: &str) -> String {
+    let w = word.trim_start_matches('&').trim_matches(['"', '\'']).to_ascii_lowercase();
+    let base = w.rsplit(['/', '\\']).next().unwrap_or(&w).to_string();
+    base.trim_end_matches(".exe").to_string()
+}
+
+/// Index of the real program in a segment, skipping wrappers and their options.
+pub fn program_index(words: &[&str]) -> usize {
+    let mut i = 0;
+    while i < words.len() {
+        let name = program_name(words[i]);
+        if !WRAPPERS.contains(&name.as_str()) {
+            return i;
+        }
+        i += 1;
+        // Options and arguments of the wrapper itself.
+        while i < words.len() {
+            let w = words[i];
+            let takes_value = matches!(w, "-s" | "-k" | "-n" | "-u" | "-g" | "-i" | "-o" | "-e" | "-c");
+            if w.starts_with('-') {
+                i += if takes_value { 2 } else { 1 };
+            } else if w.contains('=') && name == "env" {
+                i += 1;
+            } else if name == "timeout" && w.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                i += 1;
+                break;
+            } else {
+                break;
+            }
+        }
+    }
+    words.len().saturating_sub(1)
+}
+
+/// Command nested in `powershell -Command "..."` / `cmd /c "..."`, if any.
+fn nested_command(words: &[&str]) -> Option<String> {
+    let name = program_name(words.first()?);
+    if !matches!(name.as_str(), "powershell" | "pwsh" | "cmd" | "bash" | "sh" | "wsl") {
+        return None;
+    }
+    let at = words
+        .iter()
+        .position(|w| matches!(w.to_ascii_lowercase().as_str(), "-command" | "-c" | "/c" | "/k" | "-e" | "--"))?;
+    let rest = words[at + 1..].join(" ");
+    let rest = rest.trim().trim_matches(['"', '\'']).to_string();
+    (!rest.is_empty()).then_some(rest)
+}
+
+/// Splits a command line into segments, keeping the separators (`|`, `||`, `&&`, `;`, newline).
+fn split_keep(cmd: &str) -> Vec<(&str, &str)> {
+    let mut out = Vec::new();
+    let bytes = cmd.as_bytes();
+    let (mut start, mut i) = (0, 0);
+    while i < bytes.len() {
+        let two = &cmd[i..(i + 2).min(cmd.len())];
+        let sep_len = if two == "&&" || two == "||" {
+            2
+        } else if matches!(bytes[i], b'|' | b';' | b'\n') {
+            1
+        } else {
+            0
+        };
+        if sep_len > 0 {
+            out.push((&cmd[start..i], &cmd[i..i + sep_len]));
+            i += sep_len;
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    out.push((&cmd[start..], ""));
+    out
+}
+
+/// Makes agent `ssh`/`scp` invocations non-interactive so they fail fast
+/// instead of waiting forever for a password or a host-key confirmation, and
+/// adds the connection's key when the command has none. Wrappers (`timeout`,
+/// `env`...) are seen through. Returns `None` when nothing changes.
+pub fn harden_ssh_command(cmd: &str, key_path: Option<&str>) -> Option<String> {
+    let mut out = String::with_capacity(cmd.len() + 64);
+    let mut changed = false;
+    for (segment, sep) in split_keep(cmd) {
+        let words: Vec<&str> = segment.split_whitespace().collect();
+        let idx = program_index(&words);
+        let name = words.get(idx).map(|w| program_name(w)).unwrap_or_default();
+        if name != "ssh" && name != "scp" {
+            out.push_str(segment);
+            out.push_str(sep);
+            continue;
+        }
+        // Byte offset just after the program word.
+        let mut offset = 0;
+        for (n, w) in segment.split_whitespace().enumerate() {
+            let pos = segment[offset..].find(w).expect("word from the same segment") + offset;
+            offset = pos + w.len();
+            if n == idx {
+                break;
+            }
+        }
+        let tail = &segment[offset..];
+        let mut extra = String::new();
+        if !tail.contains("BatchMode") {
+            extra.push_str(" -o BatchMode=yes");
+        }
+        if !tail.contains("ConnectTimeout") {
+            extra.push_str(" -o ConnectTimeout=15");
+        }
+        if let Some(k) = key_path.filter(|k| !k.is_empty()) {
+            if !tail.split_whitespace().any(|w| w == "-i") {
+                extra.push_str(&format!(" -i \"{k}\""));
+            }
+        }
+        changed |= !extra.is_empty();
+        out.push_str(&segment[..offset]);
+        out.push_str(&extra);
+        out.push_str(tail);
+        out.push_str(sep);
+    }
+    changed.then_some(out)
 }
 
 /// Relative sensitivity used to pick the governing capability of a chained command.
@@ -605,6 +739,39 @@ mod tests {
         let ssh = classify_command("ssh -p 2222 admin@192.168.1.50 uptime");
         assert_eq!(ssh.capability, Capability::SshExecute);
         assert_eq!(ssh.ssh_host.as_deref(), Some("192.168.1.50"));
+    }
+
+    #[test]
+    fn wrappers_and_nested_shells_do_not_hide_ssh() {
+        let t = classify_command("timeout 15 ssh -o ConnectTimeout=5 pi@192.0.2.10 \"docker --version\" 2>&1");
+        assert_eq!((t.capability, t.ssh_host.as_deref()), (Capability::SshExecute, Some("192.0.2.10")));
+        let e = classify_command("env TERM=dumb nohup ssh admin@srv uptime");
+        assert_eq!(e.ssh_host.as_deref(), Some("srv"));
+        let p = classify_command("powershell -NoProfile -Command \"ssh pi@h uptime\"");
+        assert_eq!((p.capability, p.ssh_host.as_deref()), (Capability::SshExecute, Some("h")));
+        let c = classify_command("cmd /c git push --force origin main");
+        assert_eq!(c.capability, Capability::GithubWrite);
+        assert!(c.destructive);
+        assert_eq!(classify_command("timeout 5 npm test").capability, Capability::FsExecute);
+        assert_eq!(
+            harden_ssh_command("timeout 15 ssh pi@h uptime 2>&1 && echo ok", None).unwrap(),
+            "timeout 15 ssh -o BatchMode=yes -o ConnectTimeout=15 pi@h uptime 2>&1 && echo ok"
+        );
+    }
+
+    #[test]
+    fn ssh_commands_are_made_non_interactive() {
+        assert_eq!(
+            harden_ssh_command("ssh pi@192.168.1.157 docker --version", None).unwrap(),
+            "ssh -o BatchMode=yes -o ConnectTimeout=15 pi@192.168.1.157 docker --version"
+        );
+        assert_eq!(
+            harden_ssh_command("cd x && ssh -p 22 pi@h uptime | tail -1", Some(r"C:\k\id")).unwrap(),
+            r#"cd x && ssh -o BatchMode=yes -o ConnectTimeout=15 -i "C:\k\id" -p 22 pi@h uptime | tail -1"#
+        );
+        assert_eq!(harden_ssh_command("ssh -o BatchMode=yes -o ConnectTimeout=5 -i k h", Some("x")), None);
+        assert_eq!(harden_ssh_command("echo ssh is great", None), None);
+        assert_eq!(harden_ssh_command("npm test", None), None);
     }
 
     #[test]
