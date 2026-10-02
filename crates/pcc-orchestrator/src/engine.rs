@@ -55,7 +55,12 @@ pub(crate) struct Live {
 pub(crate) enum PendingKind {
     Tool { request_id: String, input: Value, epoch: u64 },
     Merge { agent: String },
+    Admin(Box<crate::admin::AdminAction>),
 }
+
+/// Work queued for the engine from background tasks (e.g. a finished
+/// connection test answering a deferred tool call).
+pub type Job = Box<dyn FnOnce(&mut Engine) -> Result<()> + Send>;
 
 pub(crate) struct PendingPermission {
     pub request: PermissionRequest,
@@ -81,6 +86,12 @@ pub struct Engine {
     /// Emergency stop: no auto-start, no auto-approval, no new work until released.
     pub(crate) emergency: bool,
     pub(crate) connection_touches: HashMap<String, std::time::Instant>,
+    pub(crate) user_requests: BTreeMap<String, crate::admin::UserRequest>,
+    /// Stored secret values, used only to redact logs and command outputs.
+    pub(crate) secret_values: Vec<String>,
+    pub(crate) jobs_tx: mpsc::UnboundedSender<Job>,
+    jobs_rx: Option<mpsc::UnboundedReceiver<Job>>,
+    pub(crate) compatibility: Option<pcc_store::compat::CompatibilityReport>,
 }
 
 impl Engine {
@@ -92,6 +103,7 @@ impl Engine {
         out_tx: mpsc::UnboundedSender<(Tag, SessionOutput)>,
     ) -> Result<Engine> {
         let repo = Repo::discover(store.root());
+        let (jobs_tx, jobs_rx) = mpsc::unbounded_channel();
         let mut e = Engine {
             store,
             bus,
@@ -107,7 +119,18 @@ impl Engine {
             autopilot: false,
             emergency: false,
             connection_touches: HashMap::new(),
+            user_requests: BTreeMap::new(),
+            secret_values: Vec::new(),
+            jobs_tx,
+            jobs_rx: Some(jobs_rx),
+            compatibility: None,
         };
+        e.compatibility = pcc_store::compat::analyze(e.store.root()).ok();
+        if e.store.read_only() {
+            // Compatibility mode: show the project, write nothing.
+            return Ok(e);
+        }
+        e.refresh_secret_values();
         e.emergency = e.store.meta_get("emergency_stop")?.is_some_and(|v| !v.is_empty());
         e.ensure_central()?;
         e.detect_recovery()?;
@@ -144,8 +167,14 @@ impl Engine {
         }
     }
 
+    /// Receiver of queued jobs; taken once by the orchestrator.
+    pub fn take_jobs(&mut self) -> Option<mpsc::UnboundedReceiver<Job>> {
+        self.jobs_rx.take()
+    }
+
     pub(crate) fn log(&self, agent: &str, session: i64, kind: LogKind, text: &str) {
-        match self.store.append_log(agent, session, kind, text) {
+        let text = self.redact(text);
+        match self.store.append_log(agent, session, kind, &text) {
             Ok(entry) => self.bus.publish_log(entry),
             Err(e) => tracing::error!("cannot write log: {e}"),
         }
@@ -187,6 +216,10 @@ impl Engine {
             repo: self.repo.as_ref().map(Repo::status),
             recovery: self.recovery.clone(),
             emergency: self.emergency,
+            user_requests: self.pending_user_requests(),
+            compatibility: self.compatibility.clone(),
+            read_only: self.store.read_only(),
+            migration: None,
         })
     }
 
@@ -767,6 +800,11 @@ impl Engine {
                                 LogKind::ToolUse,
                                 &format!("{prefix}{name} {}", compact_json(&input, 1200)),
                             );
+                            if matches!(name.as_str(), "Bash" | "PowerShell") {
+                                if let Some(cmd) = input.get("command").and_then(Value::as_str) {
+                                    self.record_agent_command(agent, &id, cmd);
+                                }
+                            }
                             if is_notable_tool(&name) {
                                 self.emit(
                                     Event::new(
@@ -790,6 +828,14 @@ impl Engine {
             Inbound::ToolResults { results, parent_tool_use_id } => {
                 let prefix = if parent_tool_use_id.is_some() { "↳ " } else { "" };
                 for r in results {
+                    if self
+                        .sessions
+                        .get(agent)
+                        .and_then(|l| l.tool_names.get(&r.tool_use_id))
+                        .is_some_and(|n| n == "Bash" || n == "PowerShell")
+                    {
+                        self.finish_agent_command(&r.tool_use_id, r.is_error, &r.text);
+                    }
                     let name = self
                         .sessions
                         .get(agent)
@@ -981,23 +1027,28 @@ impl Engine {
         match req {
             ControlRequest::McpMessage { server_name, message } => {
                 let reply = if server_name == launch::PCC_SERVER {
-                    crate::tools::handle_rpc(self, agent, &message)
+                    crate::tools::handle_rpc(self, agent, &request_id, &message)
                 } else {
-                    Some(
+                    crate::tools::Reply::Now(Some(
                         json!({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32601, "message": "unknown server"}}),
-                    )
+                    ))
                 };
-                self.write(agent, protocol::mcp_reply(&request_id, reply))?;
+                if let crate::tools::Reply::Now(r) = reply {
+                    self.write(agent, protocol::mcp_reply(&request_id, r))?;
+                }
             }
-            ControlRequest::CanUseTool { tool_name, input, .. } => {
+            ControlRequest::CanUseTool { tool_name, input, tool_use_id } => {
                 let a = self.store.agent(agent)?;
                 let connections = self.store.list_connections()?;
                 let store = self.store.clone();
                 let agent_id = a.id.clone();
                 let has_rule = move |k: &str| store.has_permission_rule(&agent_id, k).unwrap_or(false);
-                let mut autonomy = self.store.settings().autonomy;
+                let settings = self.store.settings();
+                let mut autonomy = settings.autonomy;
+                let mut master = settings.master_control;
                 if self.emergency {
                     autonomy.auto_approve = false;
+                    master.active = false;
                 }
                 let decision = policy::evaluate(
                     &PolicyInput {
@@ -1006,11 +1057,21 @@ impl Engine {
                         connections: &connections,
                         has_rule: &has_rule,
                         autonomy: &autonomy,
+                        master: &master,
                     },
                     &tool_name,
                     &input,
                 );
                 let class = pcc_core::permissions::classify_tool(&tool_name, &input, &[]);
+                if let Some(id) = &tool_use_id {
+                    let label = match &decision {
+                        Decision::Allow => "allowed",
+                        Decision::AutoApprove { .. } => "auto_approved",
+                        Decision::Deny(_) => "denied",
+                        Decision::Ask { .. } => "asked",
+                    };
+                    let _ = self.store.set_command_decision(id, label);
+                }
                 match decision {
                     Decision::Allow => {
                         if class.capability.is_some() {
@@ -1066,7 +1127,7 @@ impl Engine {
         Ok(())
     }
 
-    fn write(&self, agent: &str, line: String) -> Result<()> {
+    pub(crate) fn write(&self, agent: &str, line: String) -> Result<()> {
         match self.sessions.get(agent) {
             Some(l) => l.handle.send_line(line),
             None => Ok(()),
@@ -1134,6 +1195,17 @@ impl Engine {
                         self.set_status(&agent, if busy { AgentStatus::Working } else { AgentStatus::Waiting })?;
                     }
                 }
+            }
+            PendingKind::Admin(action) => {
+                let note = if allow {
+                    match self.apply_admin(*action) {
+                        Ok(n) => format!("The user approved: {n}"),
+                        Err(e) => format!("The approved change failed: {e}"),
+                    }
+                } else {
+                    format!("The user rejected: {}", p.request.summary)
+                };
+                self.post_message(SYSTEM_ID, &agent, MessageKind::System, &note, None, None)?;
             }
             PendingKind::Merge { agent: worker } => {
                 let text = if allow {

@@ -71,7 +71,15 @@ pub fn prepare(
     servers.insert(PCC_SERVER.into(), json!({"type": "sdk", "name": PCC_SERVER}));
     let mut env: Vec<(String, String)> = settings.session_env.clone().into_iter().collect();
     env.extend(agent.profile.env.clone());
-    for c in connections.iter().filter(|c| c.enabled && agent.connections.contains(&c.id)) {
+    let master = &settings.master_control;
+    let mastered = crate::policy::mastered(agent, master);
+    // MASTER CONTROL gives Central every enabled connection of the opened scopes.
+    let usable = |c: &Connection| {
+        c.enabled
+            && (agent.connections.contains(&c.id)
+                || (mastered && crate::policy::master_covers_connection(master, c.kind)))
+    };
+    for c in connections.iter().filter(|c| usable(c)) {
         if let Some(entry) = pcc_connections::mcp_server_entry(c)? {
             servers.insert(entry.name, entry.config);
             env.extend(entry.env);
@@ -103,9 +111,9 @@ pub fn prepare(
             cwd: workdir,
             model,
             system_prompt_file: Some(prompt_file),
-            tools: builtin_tools(crate::policy::effective_permissions(agent, &settings.autonomy)),
+            tools: builtin_tools(&crate::policy::effective_permissions(agent, &settings.autonomy, master)),
             effort: agent.profile.effort.clone(),
-            disable_skills: !agent.profile.skills_enabled,
+            disable_skills: !agent.profile.skills_enabled || (mastered && !master.skills),
             mcp_config_file: Some(mcp_file),
             sdk_mcp_servers: vec![PCC_SERVER.into()],
             session_id: Some(session_id.clone()),

@@ -14,6 +14,8 @@ pub const LOG_CHANNEL: &str = "pcc://log";
 
 pub struct OpenProject {
     pub orch: Orchestrator,
+    /// The project's AI World, if one was created (`.agent-project/ai-world/world.json`).
+    pub world: crate::world_commands::SharedWorld,
     forwarders: Vec<JoinHandle<()>>,
 }
 
@@ -51,7 +53,13 @@ impl OpenProject {
                 }
             }
         });
-        OpenProject { orch, forwarders: vec![ev, lg] }
+        let loaded = pcc_world::load(orch.store.root()).unwrap_or_else(|e| {
+            tracing::warn!("cannot read the AI World: {e}");
+            None
+        });
+        let world = std::sync::Arc::new(tokio::sync::Mutex::new(loaded));
+        let runner = crate::world_commands::spawn_runner(app.clone(), orch.clone(), world.clone());
+        OpenProject { orch, world, forwarders: vec![ev, lg, runner] }
     }
 
     pub async fn close(self) {

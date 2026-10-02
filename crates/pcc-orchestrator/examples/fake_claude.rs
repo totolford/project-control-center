@@ -5,6 +5,7 @@
 //! * "NEW MISSION"  -> creates agent `builder` and two dependent tasks.
 //! * "[TASK X]"     -> asks permission for `echo hi`, reports progress, completes X.
 //! * notification mentioning the second task completed -> completes the mission.
+//! * "CONNECT PI" / "CONNECT AGAIN" -> environment tools (connection, capabilities).
 //! * "DANGER"       -> asks permission for `rm -rf build` and reports the decision.
 
 use std::collections::VecDeque;
@@ -114,6 +115,20 @@ fn main() {
                     io.say(&format!("permission {decision}"));
                     io.tool("report_progress", json!({"task_id": id, "percent": 50, "action": "Building"}));
                     io.tool("complete_task", json!({"task_id": id, "summary": format!("done {id}"), "files_changed": ["a.txt"], "tests": "1 passed"}));
+                } else if text.contains("CONNECT PI") {
+                    let first = io.tool(
+                        "find_or_create_connection",
+                        json!({"kind": "ssh", "host": "192.168.1.157", "user": "pi"}),
+                    );
+                    io.say(&format!("first: {first}"));
+                    let caps = io.tool("list_capabilities", json!({}));
+                    io.say(&format!("capabilities received: {}", caps.contains("localTools")));
+                } else if text.contains("CONNECT AGAIN") {
+                    let again = io.tool(
+                        "find_or_create_connection",
+                        json!({"kind": "ssh", "host": "192.168.1.157", "user": "PI"}),
+                    );
+                    io.say(&format!("again: {again}"));
                 } else if text.contains("DANGER") {
                     let decision = io.permission("rm -rf build");
                     io.say(&format!("dangerous command {decision}"));

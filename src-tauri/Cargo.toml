@@ -26,8 +26,10 @@ pcc-git.workspace = true
 pcc-connections.workspace = true
 pcc-orchestrator.workspace = true
 pcc-pty.workspace = true
+pcc-world.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+chrono.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tauri = { version = "2", features = [] }

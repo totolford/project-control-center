@@ -8,6 +8,7 @@ import type * as T from "./types";
 export const EVENT_CHANNEL = "pcc://event";
 export const LOG_CHANNEL = "pcc://log";
 export const PTY_CHANNEL = "pcc://pty";
+export const WORLD_CHANNEL = "pcc://world";
 
 export const api = {
   // ---------------------------------------------------------------- app
@@ -176,6 +177,64 @@ export const api = {
   /** Recent output (≤256 KB) to repaint a terminal after re-mounting. */
   ptyScrollback: (id: string) => invoke<string>("pty_scrollback", { id }),
 
+
+  // ---------------------------------------------------------------- 0.2: compatibility
+  /** Works on any folder (project open or not). */
+  compatibilityReport: (path: string) => invoke<T.CompatibilityReport>("compatibility_report", { path }),
+  projectBackups: (path: string) => invoke<T.BackupInfo[]>("project_backups", { path }),
+  /** Closes the project, restores the backup (the current state is backed up first). Reopen afterwards. */
+  rollbackProject: (path: string, backupId: string) => invoke<T.BackupInfo>("rollback_project", { path, backupId }),
+  backupProject: (label: string) => invoke<T.BackupInfo>("backup_project", { label }),
+
+  // interpreter & command journal
+  interpretCommand: (line: string) => invoke<T.Interpretation>("interpret_command", { line }),
+  /** For `claude mcp add ...` and `ssh ...` lines: creates (or reuses) the connection. */
+  applyCommand: (line: string) => invoke<T.AppliedCommand>("apply_command", { line }),
+  /** Newest first. */
+  listCommands: (agentId: string | null, before: number | null, limit: number) =>
+    invoke<T.CommandRecord[]>("list_commands", { agentId, before, limit }),
+
+  // user requests (secrets, SSH key, GitHub sign-in)
+  /** Stores the value in Windows Credential Manager for the request's connection; agents never see it. */
+  provideSecret: (id: string, value: string) => invoke<void>("provide_secret", { id, value }),
+  completeUserRequest: (id: string, note?: string) => invoke<void>("complete_user_request", { id, note: note ?? null }),
+  dismissUserRequest: (id: string, reason?: string) => invoke<void>("dismiss_user_request", { id, reason: reason ?? null }),
+  /** Generates ~/.ssh/nexus_<id>, switches the connection to key auth, opens a Raw Terminal installing the key (user types the password once). */
+  sshKeySetup: (connectionId: string) => invoke<T.SshKeySetup>("ssh_key_setup", { connectionId }),
+  /** Opens `gh auth login --web` (official device flow) in a Raw Terminal. */
+  githubLogin: () => invoke<T.PtyInfo>("github_login"),
+
+  // GitHub
+  githubAccount: () => invoke<T.GithubAccount>("github_account"),
+  githubRepositories: (owner: string | null, query: string | null) =>
+    invoke<T.GithubRepo[]>("github_repositories", { owner, query }),
+  githubRepository: (repo: string) => invoke<T.RepositoryDetail>("github_repository", { repo }),
+  /** Clones owner/repo into parent/<name>; returns the folder (then offer to open it as a project). */
+  githubClone: (repo: string, parent: string) => invoke<string>("github_clone", { repo, parent }),
+  githubCreateIssue: (repo: string, title: string, body: string) => invoke<string>("github_create_issue", { repo, title, body }),
+  githubRunWorkflow: (repo: string, workflow: string, gitRef: string) =>
+    invoke<string>("github_run_workflow", { repo, workflow, gitRef }),
+
+  // MASTER CONTROL (toggle/scopes are saved with saveSettings: settings.masterControl)
+  masterStatus: () => invoke<T.MasterStatus>("master_status"),
+
+  // AI World
+  worldGet: () => invoke<T.World | null>("world_get"),
+  worldProviders: () => invoke<T.WorldProviderInfo[]>("world_providers"),
+  worldAnalyze: () => invoke<T.WorldAnalysis>("world_analyze"),
+  /** One-click conversion: backup + git snapshot, world, provider setup, optional Central mission. */
+  worldCreate: (spec: T.WorldSpec) => invoke<T.ConversionReport>("world_create", { spec }),
+  worldSave: (world: T.World) => invoke<T.World>("world_save", { world }),
+  worldControl: (opts: { running?: boolean; mode?: T.WorldMode; speed?: number }) =>
+    invoke<T.World>("world_control", { running: opts.running ?? null, mode: opts.mode ?? null, speed: opts.speed ?? null }),
+  worldDelete: () => invoke<void>("world_delete"),
+  worldCharactersFromAgents: () => invoke<T.Character[]>("world_characters_from_agents"),
+  /** Real Claude call (haiku by default): characters for a description. */
+  worldGenerateCharacters: (description: string, count: number, model?: string) =>
+    invoke<T.Character[]>("world_generate_characters", { description, count, model: model ?? null }),
+  /** Real Claude call: one simulated conversation between two characters. */
+  worldConverse: (a: string, b: string) => invoke<T.Conversation>("world_converse", { a, b }),
+
   // ---------------------------------------------------------------- misc
   /** Opens a file/folder of the project with the default app (folders open in Explorer). */
   openPath: (path: string) => invoke<void>("open_path", { path }),
@@ -204,4 +263,8 @@ export function errorMessage(e: unknown): string {
 
 export function onPty(cb: (e: T.PtyEvent) => void): Promise<UnlistenFn> {
   return listen<T.PtyEvent>(PTY_CHANNEL, (e) => cb(e.payload));
+}
+
+export function onWorld(cb: (f: T.WorldFrame) => void): Promise<UnlistenFn> {
+  return listen<T.WorldFrame>(WORLD_CHANNEL, (e) => cb(e.payload));
 }

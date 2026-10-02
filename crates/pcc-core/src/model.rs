@@ -18,6 +18,18 @@ pub struct ProjectInfo {
     pub created_at: String,
     /// Layout version of the `.agent-project` directory.
     pub format_version: u32,
+    /// NEXUS version that created the project.
+    #[serde(default)]
+    pub created_with: Option<String>,
+    /// NEXUS version that last opened it.
+    #[serde(default)]
+    pub last_opened_with: Option<String>,
+    /// Oldest NEXUS version able to open it.
+    #[serde(default)]
+    pub minimum_nexus_version: Option<String>,
+    /// Fields written by other NEXUS versions, preserved on rewrite.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -53,6 +65,33 @@ pub struct ProjectSettings {
     pub default_skills_enabled: bool,
     /// Restart sessions that were running when the app closed without asking.
     pub auto_recover: bool,
+    /// NEXUS MASTER CONTROL: Central may use every enabled connection and
+    /// manage connections, MCP and grants without asking, within the scopes.
+    pub master_control: MasterControl,
+    /// Settings written by other NEXUS versions, preserved on rewrite.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
+}
+
+/// Domains MASTER CONTROL may open to Central. Nothing here bypasses Claude
+/// Code, the OS or external services: it only groups permissions NEXUS grants.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MasterControl {
+    pub active: bool,
+    pub pc: bool,
+    pub github: bool,
+    pub mcp: bool,
+    pub ssh: bool,
+    pub skills: bool,
+    /// Central may create connections, add MCP servers and grant them without a prompt.
+    pub manage_connections: bool,
+}
+
+impl Default for MasterControl {
+    fn default() -> Self {
+        Self { active: false, pc: true, github: true, mcp: true, ssh: true, skills: true, manage_connections: true }
+    }
 }
 
 /// Maximum-autonomy mode. NEXUS never bypasses Claude Code's own safety: it
@@ -140,6 +179,8 @@ impl Default for ProjectSettings {
             default_effort: None,
             default_skills_enabled: true,
             auto_recover: false,
+            master_control: MasterControl::default(),
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -524,6 +565,33 @@ pub struct Connection {
 
 fn enabled_by_default() -> bool {
     true
+}
+
+/// One command run by an agent or the user, kept for the command journal.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandRecord {
+    pub id: i64,
+    pub agent_id: String,
+    /// `agent` (Bash/PowerShell tool), `user` (NEXUS UI) or `interpreter`.
+    pub source: String,
+    pub tool_use_id: Option<String>,
+    pub raw: String,
+    pub program: Option<String>,
+    /// Parsed command (interpreter output) as JSON.
+    pub parsed: Value,
+    /// Connection, host or repository the command targets, when known.
+    pub target: Option<String>,
+    pub capability: Option<String>,
+    /// Permission decision that let it run.
+    pub decision: Option<String>,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    /// `None` when the tool did not report an exit code.
+    pub exit_code: Option<i32>,
+    pub is_error: Option<bool>,
+    /// Output (truncated, secrets redacted).
+    pub output: Option<String>,
 }
 
 /// One permission decision, kept for the audit journal.

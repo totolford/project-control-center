@@ -3,6 +3,7 @@
 //! * `engine`  – sessions, delivery, scheduling, control requests, recovery.
 //! * `work`    – agents, tasks, missions, memory operations.
 //! * `connections` – project connections and their secrets.
+//! * `admin`   – agent-driven connections, approvals, user requests, command journal.
 //! * `autonomy` – decision journal, power, UNLOCKED, emergency stop, improvement loop.
 //! * `gitops`  – agent branches, merges, snapshots.
 //! * `tools`   – the in-process MCP server agents use to act.
@@ -12,10 +13,12 @@
 //! * `providers` – agent runtimes (Claude Code adapter, detected others).
 //! * `dto`     – shapes shared with the UI.
 
+mod admin;
 mod autonomy;
 mod connections;
 pub mod dto;
 pub mod engine;
+mod env_tools;
 mod gitops;
 pub mod launch;
 pub mod policy;
@@ -42,6 +45,7 @@ pub struct Orchestrator {
     pub bus: EventBus,
     pump: Arc<tokio::task::JoinHandle<()>>,
     ticker: Arc<tokio::task::JoinHandle<()>>,
+    jobs: Arc<tokio::task::JoinHandle<()>>,
 }
 
 impl Orchestrator {
@@ -54,7 +58,19 @@ impl Orchestrator {
     ) -> Result<Orchestrator> {
         let store = Arc::new(store);
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let engine = Arc::new(Mutex::new(Engine::new(store.clone(), bus.clone(), claude, project_types, tx)?));
+        let mut core = Engine::new(store.clone(), bus.clone(), claude, project_types, tx)?;
+        let mut jobs = core.take_jobs().expect("fresh engine");
+        let engine = Arc::new(Mutex::new(core));
+        // Jobs from background work (deferred tool answers, probes) run under the engine lock.
+        let e = engine.clone();
+        let job_runner = tokio::spawn(async move {
+            while let Some(job) = jobs.recv().await {
+                let mut guard = e.lock().await;
+                if let Err(err) = job(&mut guard) {
+                    tracing::error!("background job failed: {err}");
+                }
+            }
+        });
         let e = engine.clone();
         let pump = tokio::spawn(async move {
             while let Some((tag, out)) = rx.recv().await {
@@ -86,7 +102,14 @@ impl Orchestrator {
                 }
             }
         });
-        Ok(Orchestrator { engine, store, bus, pump: Arc::new(pump), ticker: Arc::new(ticker) })
+        Ok(Orchestrator {
+            engine,
+            store,
+            bus,
+            pump: Arc::new(pump),
+            ticker: Arc::new(ticker),
+            jobs: Arc::new(job_runner),
+        })
     }
 
     pub async fn lock(&self) -> MutexGuard<'_, Engine> {
@@ -98,5 +121,6 @@ impl Orchestrator {
         self.engine.lock().await.shutdown();
         self.pump.abort();
         self.ticker.abort();
+        self.jobs.abort();
     }
 }

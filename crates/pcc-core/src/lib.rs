@@ -5,6 +5,7 @@
 pub mod error;
 pub mod events;
 pub mod ids;
+pub mod interpreter;
 pub mod model;
 pub mod permissions;
 pub mod tasks;

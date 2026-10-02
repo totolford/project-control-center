@@ -1,0 +1,17 @@
+[package]
+name = "pcc-world"
+description = "AI World: a simulated or live 2D world representing the agent team (native engine and AI Town provider)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pcc-core.workspace = true
+pcc-claude.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

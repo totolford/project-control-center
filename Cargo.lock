@@ -2727,7 +2727,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-claude"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pcc-core",
  "serde",
@@ -2742,7 +2742,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-connections"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "keyring",
  "pcc-claude",
@@ -2759,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "regex",
@@ -2771,7 +2771,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-git"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pcc-core",
  "serde",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-orchestrator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "pcc-claude",
@@ -2800,7 +2800,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-pty"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "parking_lot",
  "pcc-claude",
@@ -2813,7 +2813,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "parking_lot",
@@ -2824,6 +2824,19 @@ dependencies = [
  "tempfile",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "pcc-world"
+version = "0.2.0"
+dependencies = [
+ "pcc-claude",
+ "pcc-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3082,8 +3095,9 @@ dependencies = [
 
 [[package]]
 name = "project-control-center"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "chrono",
  "pcc-claude",
  "pcc-connections",
  "pcc-core",
@@ -3091,6 +3105,7 @@ dependencies = [
  "pcc-orchestrator",
  "pcc-pty",
  "pcc-store",
+ "pcc-world",
  "serde",
  "serde_json",
  "tauri",

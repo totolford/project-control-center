@@ -155,8 +155,33 @@ fn worker_tools() -> Vec<Value> {
     ]
 }
 
-/// Handles one JSON-RPC message. Returns `None` for notifications.
-pub fn handle_rpc(engine: &mut Engine, agent: &str, msg: &Value) -> Option<Value> {
+/// Answer to an `mcp_message`: now (`None` for notifications) or later, when a
+/// background task finishes (the task writes the response itself).
+pub enum Reply {
+    Now(Option<Value>),
+    Later,
+}
+
+impl Reply {
+    /// JSON-RPC result carrying a text (or an error text) as tool output.
+    pub fn text(rpc_id: Value, out: Result<String>) -> Reply {
+        let result = match out {
+            Ok(text) => json!({"content": [{"type": "text", "text": text}]}),
+            Err(e) => json!({"content": [{"type": "text", "text": format!("Error: {e}")}], "isError": true}),
+        };
+        Reply::Now(Some(json!({"jsonrpc": "2.0", "id": rpc_id, "result": result})))
+    }
+
+    pub fn into_value(self) -> Option<Value> {
+        match self {
+            Reply::Now(v) => v,
+            Reply::Later => None,
+        }
+    }
+}
+
+/// Handles one JSON-RPC message from an agent's session.
+pub fn handle_rpc(engine: &mut Engine, agent: &str, request_id: &str, msg: &Value) -> Reply {
     let id = msg.get("id").cloned();
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     let is_central = engine.store.get_agent(agent).ok().flatten().is_some_and(|a| a.kind == AgentKind::Central);
@@ -166,10 +191,22 @@ pub fn handle_rpc(engine: &mut Engine, agent: &str, msg: &Value) -> Option<Value
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "project-control-center", "version": env!("CARGO_PKG_VERSION")}
         })),
-        "tools/list" => Ok(json!({"tools": if is_central { central_tools() } else { worker_tools() }})),
+        "tools/list" => Ok(json!({"tools": if is_central {
+            let mut t = central_tools();
+            t.extend(crate::env_tools::definitions());
+            t
+        } else {
+            worker_tools()
+        }})),
         "tools/call" => {
             let name = msg.pointer("/params/name").and_then(Value::as_str).unwrap_or("");
             let args = msg.pointer("/params/arguments").cloned().unwrap_or(json!({}));
+            if is_central {
+                let rpc_id = id.clone().unwrap_or(Value::Null);
+                if let Some(reply) = crate::env_tools::call(engine, agent, request_id, rpc_id, name, &args) {
+                    return reply;
+                }
+            }
             let out = if is_central {
                 call_central(engine, agent, name, &args)
             } else {
@@ -181,13 +218,13 @@ pub fn handle_rpc(engine: &mut Engine, agent: &str, msg: &Value) -> Option<Value
             })
         }
         "ping" => Ok(json!({})),
-        m if m.starts_with("notifications/") => return None,
+        m if m.starts_with("notifications/") => return Reply::Now(None),
         _ => Err(json!({"code": -32601, "message": format!("method not found: {method}")})),
     };
-    id.map(|id| match result {
+    Reply::Now(id.map(|id| match result {
         Ok(r) => json!({"jsonrpc": "2.0", "id": id, "result": r}),
         Err(e) => json!({"jsonrpc": "2.0", "id": id, "error": e}),
-    })
+    }))
 }
 
 fn s<'a>(args: &'a Value, k: &str) -> Option<&'a str> {

@@ -93,7 +93,9 @@ async fn activate(app: &AppHandle, state: &AppState, store: ProjectStore) -> Cmd
     let orch = Orchestrator::open(store, EventBus::new(), claude, project_types)?;
     let snapshot = {
         let mut e = orch.lock().await;
-        e.ensure_default_connections()?;
+        if !orch.store.read_only() {
+            e.ensure_default_connections()?;
+        }
         e.emit(Event::new(EventKind::ProjectOpened, format!("Project {name} opened"), json!({"root": root})));
         e.snapshot()?
     };
@@ -135,8 +137,23 @@ pub async fn create_project(
 pub async fn open_project(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<ProjectSnapshot> {
     let root = PathBuf::from(&path);
     state.close_project().await;
+    let report = {
+        let r = root.clone();
+        blocking(move || pcc_store::compat::analyze(&r)).await??
+    };
+    // Older format: back up, migrate, then open (the report is shown to the user).
+    let migration = if report.status == pcc_store::compat::CompatStatus::MigrationAvailable {
+        let r = root.clone();
+        let m = blocking(move || pcc_store::compat::migrate(&r)).await??;
+        tracing::info!("migrated {} from format {} to {}", root.display(), m.from_format, m.to_format);
+        Some(m)
+    } else {
+        None
+    };
     let store = blocking(move || ProjectStore::open(&root)).await??;
-    activate(&app, &state, store).await
+    let mut snapshot = activate(&app, &state, store).await?;
+    snapshot.migration = migration;
+    Ok(snapshot)
 }
 
 #[tauri::command]

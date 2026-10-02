@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use pcc_core::{ProjectInfo, ProjectSettings, Result};
 
 pub const AGENT_DIR: &str = ".agent-project";
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = crate::compat::CURRENT_FORMAT;
 
 pub const PROJECT_MEMORY_FILES: &[(&str, &str)] = &[
     ("project", "# Project\n\nWhat this project is, who it is for, and its current goals.\n"),
@@ -83,6 +83,9 @@ impl Layout {
     pub fn ensure(&self) -> Result<()> {
         for d in [
             self.dir.clone(),
+            self.dir.join("settings"),
+            self.dir.join("ai-world"),
+            self.dir.join("migrations"),
             self.memory_dir(),
             self.dir.join("agents"),
             self.tasks_dir("active"),

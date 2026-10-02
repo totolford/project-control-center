@@ -2,7 +2,9 @@
 
 mod commands;
 mod control_commands;
+mod ops_commands;
 mod state;
+mod world_commands;
 
 use tauri::{Manager, RunEvent};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -153,6 +155,35 @@ pub fn run() {
             control_commands::pty_close,
             control_commands::pty_list,
             control_commands::pty_scrollback,
+            ops_commands::compatibility_report,
+            ops_commands::project_backups,
+            ops_commands::rollback_project,
+            ops_commands::backup_project,
+            ops_commands::interpret_command,
+            ops_commands::apply_command,
+            ops_commands::list_commands,
+            ops_commands::provide_secret,
+            ops_commands::complete_user_request,
+            ops_commands::dismiss_user_request,
+            ops_commands::ssh_key_setup,
+            ops_commands::github_login,
+            ops_commands::github_account,
+            ops_commands::github_repositories,
+            ops_commands::github_repository,
+            ops_commands::github_clone,
+            ops_commands::github_create_issue,
+            ops_commands::github_run_workflow,
+            ops_commands::master_status,
+            world_commands::world_get,
+            world_commands::world_providers,
+            world_commands::world_analyze,
+            world_commands::world_create,
+            world_commands::world_save,
+            world_commands::world_control,
+            world_commands::world_delete,
+            world_commands::world_characters_from_agents,
+            world_commands::world_generate_characters,
+            world_commands::world_converse,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the application");

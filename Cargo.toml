@@ -8,11 +8,12 @@ members = [
   "crates/pcc-connections",
   "crates/pcc-orchestrator",
   "crates/pcc-pty",
+  "crates/pcc-world",
   "src-tauri",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/totolford/project-control-center"
@@ -26,6 +27,7 @@ pcc-git = { path = "crates/pcc-git" }
 pcc-connections = { path = "crates/pcc-connections" }
 pcc-orchestrator = { path = "crates/pcc-orchestrator" }
 pcc-pty = { path = "crates/pcc-pty" }
+pcc-world = { path = "crates/pcc-world" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

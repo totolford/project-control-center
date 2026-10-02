@@ -18,8 +18,9 @@ use crate::db::{self, storage};
 use crate::layout::{write_json_atomic, Layout, FORMAT_VERSION};
 use crate::memory::{self, MemoryFile, MemoryScope};
 use pcc_core::{
-    ids, Agent, Connection as ProjectConnection, DecisionRecord, Error, Event, EventKind, LogEntry, LogKind, Message,
-    Mission, MissionStatus, MissionView, ProjectInfo, ProjectSettings, Result, SessionRecord, Task, TaskStatus,
+    ids, Agent, CommandRecord, Connection as ProjectConnection, DecisionRecord, Error, Event, EventKind, LogEntry,
+    LogKind, Message, Mission, MissionStatus, MissionView, ProjectInfo, ProjectSettings, Result, SessionRecord, Task,
+    TaskStatus,
 };
 
 /// Maximum characters stored for one log line (tool results can be huge).
@@ -31,6 +32,8 @@ pub struct ProjectStore {
     info: ProjectInfo,
     settings: Mutex<ProjectSettings>,
     raw_logs: Mutex<HashMap<(String, i64), fs::File>>,
+    /// Compatibility mode for projects that need a newer NEXUS: nothing is written.
+    read_only: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -66,6 +69,10 @@ impl ProjectStore {
             root: root.to_string_lossy().into_owned(),
             created_at: pcc_core::now(),
             format_version: FORMAT_VERSION,
+            created_with: Some(crate::compat::APP_VERSION.into()),
+            last_opened_with: Some(crate::compat::APP_VERSION.into()),
+            minimum_nexus_version: Some("0.2.0".into()),
+            extra: Default::default(),
         };
         layout.write_project(&info)?;
         layout.write_settings(&ProjectSettings::default())?;
@@ -80,28 +87,40 @@ impl ProjectStore {
                 root.display()
             )));
         }
-        layout.ensure()?;
-        let mut info = layout.read_project()?;
-        if info.format_version > FORMAT_VERSION {
-            return Err(Error::Storage(format!(
-                "project format v{} is newer than this application supports",
-                info.format_version
+        let report = crate::compat::analyze(root)?;
+        let read_only = report.read_only;
+        if report.status == crate::compat::CompatStatus::MigrationAvailable {
+            return Err(Error::Conflict(format!(
+                "project format v{} must be migrated to v{} first (a backup is made automatically)",
+                report.project_format, report.supported_format
             )));
         }
-        // The folder may have been moved since creation.
-        let actual = root.to_string_lossy().into_owned();
-        if info.root != actual {
-            info.root = actual;
-            layout.write_project(&info)?;
+        let mut info = layout.read_project()?;
+        if !read_only {
+            layout.ensure()?;
+            // The folder may have been moved since creation; record the version that opened it.
+            let actual = root.to_string_lossy().into_owned();
+            let version = Some(crate::compat::APP_VERSION.to_string());
+            if info.root != actual || info.last_opened_with != version {
+                info.root = actual;
+                info.last_opened_with = version;
+                layout.write_project(&info)?;
+            }
         }
         let settings = layout.read_settings()?;
-        let conn = db::open(&layout.db_path())?;
+        let conn = match (read_only, layout.db_path().is_file()) {
+            (true, true) => db::open_read_only(&layout.db_path())?,
+            // Nothing to protect yet: an empty in-memory database keeps the project viewable.
+            (true, false) => db::open_in_memory()?,
+            (false, _) => db::open(&layout.db_path())?,
+        };
         Ok(ProjectStore {
             layout,
             conn: Mutex::new(conn),
             info,
             settings: Mutex::new(settings),
             raw_logs: Mutex::new(HashMap::new()),
+            read_only,
         })
     }
 
@@ -115,6 +134,10 @@ impl ProjectStore {
             root: root.to_string_lossy().into_owned(),
             created_at: pcc_core::now(),
             format_version: FORMAT_VERSION,
+            created_with: Some(crate::compat::APP_VERSION.into()),
+            last_opened_with: None,
+            minimum_nexus_version: None,
+            extra: Default::default(),
         };
         layout.write_project(&info)?;
         Ok(ProjectStore {
@@ -123,7 +146,21 @@ impl ProjectStore {
             info,
             settings: Mutex::new(ProjectSettings::default()),
             raw_logs: Mutex::new(HashMap::new()),
+            read_only: false,
         })
+    }
+
+    pub fn read_only(&self) -> bool {
+        self.read_only
+    }
+
+    /// Refuses writes in compatibility (read-only) mode.
+    fn writable(&self) -> Result<()> {
+        if self.read_only {
+            Err(Error::Denied("compatibility mode: this project needs a newer NEXUS, it is opened read-only".into()))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn layout(&self) -> &Layout {
@@ -139,6 +176,7 @@ impl ProjectStore {
         self.settings.lock().clone()
     }
     pub fn save_settings(&self, s: ProjectSettings) -> Result<()> {
+        self.writable()?;
         self.layout.write_settings(&s)?;
         *self.settings.lock() = s;
         Ok(())
@@ -147,6 +185,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ helpers
 
     fn next_counter(&self, name: &str) -> Result<i64> {
+        self.writable()?;
         let c = self.conn.lock();
         c.execute(
             "INSERT INTO counters(name, value) VALUES (?1, 1)
@@ -175,6 +214,7 @@ impl ProjectStore {
             .map_err(storage)
     }
     pub fn meta_set(&self, key: &str, value: &str) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -207,6 +247,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ agents
 
     pub fn upsert_agent(&self, a: &Agent) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -240,6 +281,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ missions
 
     pub fn upsert_mission(&self, m: &Mission) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -333,6 +375,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ tasks
 
     pub fn upsert_task(&self, t: &Task) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -408,6 +451,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ messages
 
     pub fn insert_message(&self, m: &Message) -> Result<()> {
+        self.writable()?;
         let seq = self.next_message_seq()?;
         self.conn
             .lock()
@@ -421,6 +465,7 @@ impl ProjectStore {
     }
 
     pub fn mark_delivered(&self, id: &str, at: &str) -> Result<Option<Message>> {
+        self.writable()?;
         let Some(mut m) = self.get_doc::<Message>("messages", id)? else {
             return Ok(None);
         };
@@ -462,6 +507,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ sessions
 
     pub fn start_session(&self, agent: &str, claude_session_id: Option<&str>, pid: Option<u32>) -> Result<i64> {
+        self.writable()?;
         let c = self.conn.lock();
         c.execute(
             "INSERT INTO sessions(agent_id, claude_session_id, pid, started_at, state) VALUES (?1, ?2, ?3, ?4, 'running')",
@@ -475,6 +521,7 @@ impl ProjectStore {
     }
 
     pub fn end_session(&self, id: i64, state: &str, exit_code: Option<i32>) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -487,6 +534,7 @@ impl ProjectStore {
     }
 
     pub fn set_session_cost(&self, id: i64, cost: f64) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute("UPDATE sessions SET cost_usd = ?2 WHERE id = ?1", params![id, cost])
@@ -533,6 +581,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ logs
 
     pub fn append_log(&self, agent: &str, session: i64, kind: LogKind, text: &str) -> Result<LogEntry> {
+        self.writable()?;
         let text = if text.chars().count() > MAX_LOG_TEXT {
             let mut t: String = text.chars().take(MAX_LOG_TEXT).collect();
             t.push_str("\n[… truncated …]");
@@ -578,6 +627,7 @@ impl ProjectStore {
 
     /// Raw stream-json line, kept on disk for debugging and audits.
     pub fn append_raw(&self, agent: &str, session: i64, line: &str) -> Result<()> {
+        self.writable()?;
         let mut files = self.raw_logs.lock();
         let key = (agent.to_string(), session);
         if !files.contains_key(&key) {
@@ -596,6 +646,7 @@ impl ProjectStore {
 
     /// Persists the event (if it belongs on the timeline) and sets its id.
     pub fn insert_event(&self, e: &mut Event) -> Result<()> {
+        self.writable()?;
         if !e.kind.is_persistent() {
             return Ok(());
         }
@@ -664,6 +715,7 @@ impl ProjectStore {
     // ------------------------------------------------------------ permission rules
 
     pub fn add_permission_rule(&self, agent: &str, rule_key: &str) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -698,6 +750,7 @@ impl ProjectStore {
     }
 
     pub fn remove_permission_rule(&self, agent: &str, rule_key: &str) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute("DELETE FROM permission_rules WHERE agent_id = ?1 AND rule_key = ?2", params![agent, rule_key])
@@ -705,10 +758,104 @@ impl ProjectStore {
         Ok(())
     }
 
+    // ------------------------------------------------------------ command journal
+
+    pub fn insert_command(&self, mut c: CommandRecord) -> Result<CommandRecord> {
+        self.writable()?;
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO commands(agent_id, source, tool_use_id, raw, program, parsed, target, capability, decision, started_at, ended_at, exit_code, is_error, output)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                c.agent_id, c.source, c.tool_use_id, c.raw, c.program, serde_json::to_string(&c.parsed)?, c.target,
+                c.capability, c.decision, c.started_at, c.ended_at, c.exit_code, c.is_error, c.output
+            ],
+        )
+        .map_err(storage)?;
+        c.id = conn.last_insert_rowid();
+        Ok(c)
+    }
+
+    /// Records the permission decision of a pending agent command.
+    pub fn set_command_decision(&self, tool_use_id: &str, decision: &str) -> Result<()> {
+        self.writable()?;
+        self.conn
+            .lock()
+            .execute(
+                "UPDATE commands SET decision = ?2 WHERE tool_use_id = ?1 AND decision IS NULL",
+                params![tool_use_id, decision],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    /// Completes an agent command from its tool result. Returns the updated record.
+    pub fn finish_command(
+        &self,
+        tool_use_id: &str,
+        exit_code: Option<i32>,
+        is_error: bool,
+        output: &str,
+    ) -> Result<Option<CommandRecord>> {
+        self.writable()?;
+        let changed = self
+            .conn
+            .lock()
+            .execute(
+                "UPDATE commands SET ended_at = ?2, exit_code = ?3, is_error = ?4, output = ?5 WHERE tool_use_id = ?1 AND ended_at IS NULL",
+                params![tool_use_id, pcc_core::now(), exit_code, is_error, output],
+            )
+            .map_err(storage)?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        Ok(self.query_commands("WHERE tool_use_id = ?1 ORDER BY id DESC LIMIT 1", &[&tool_use_id])?.into_iter().next())
+    }
+
+    /// Newest first.
+    pub fn list_commands(&self, agent: Option<&str>, before: Option<i64>, limit: u32) -> Result<Vec<CommandRecord>> {
+        self.query_commands(
+            "WHERE (?1 IS NULL OR agent_id = ?1) AND (?2 IS NULL OR id < ?2) ORDER BY id DESC LIMIT ?3",
+            &[&agent, &before, &limit.min(2000)],
+        )
+    }
+
+    fn query_commands(&self, clause: &str, p: &[&dyn rusqlite::ToSql]) -> Result<Vec<CommandRecord>> {
+        let sql = format!(
+            "SELECT id, agent_id, source, tool_use_id, raw, program, parsed, target, capability, decision, started_at, ended_at, exit_code, is_error, output FROM commands {clause}"
+        );
+        let c = self.conn.lock();
+        let mut stmt = c.prepare(&sql).map_err(storage)?;
+        let rows = stmt
+            .query_map(p, |r| {
+                let parsed: String = r.get(6)?;
+                Ok(CommandRecord {
+                    id: r.get(0)?,
+                    agent_id: r.get(1)?,
+                    source: r.get(2)?,
+                    tool_use_id: r.get(3)?,
+                    raw: r.get(4)?,
+                    program: r.get(5)?,
+                    parsed: serde_json::from_str(&parsed).unwrap_or(serde_json::Value::Null),
+                    target: r.get(7)?,
+                    capability: r.get(8)?,
+                    decision: r.get(9)?,
+                    started_at: r.get(10)?,
+                    ended_at: r.get(11)?,
+                    exit_code: r.get(12)?,
+                    is_error: r.get(13)?,
+                    output: r.get(14)?,
+                })
+            })
+            .map_err(storage)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(storage)
+    }
+
     // ------------------------------------------------------------ decision journal
 
     /// Records a permission decision and returns it with its id.
     pub fn insert_decision(&self, mut d: DecisionRecord) -> Result<DecisionRecord> {
+        self.writable()?;
         let c = self.conn.lock();
         c.execute(
             "INSERT INTO decisions(ts, agent_id, tool_name, capability, summary, decision, actor, reason)
@@ -748,12 +895,14 @@ impl ProjectStore {
     }
 
     pub fn clear_permission_rules(&self) -> Result<usize> {
+        self.writable()?;
         self.conn.lock().execute("DELETE FROM permission_rules", []).map_err(storage)
     }
 
     // ------------------------------------------------------------ connections
 
     pub fn upsert_connection(&self, c: &ProjectConnection) -> Result<()> {
+        self.writable()?;
         self.conn
             .lock()
             .execute(
@@ -775,6 +924,7 @@ impl ProjectStore {
     }
 
     pub fn delete_connection(&self, id: &str) -> Result<()> {
+        self.writable()?;
         self.conn.lock().execute("DELETE FROM connections WHERE id = ?1", params![id]).map_err(storage)?;
         Ok(())
     }
@@ -785,9 +935,11 @@ impl ProjectStore {
         memory::read(&self.layout, scope)
     }
     pub fn write_memory(&self, scope: &MemoryScope, content: &str) -> Result<()> {
+        self.writable()?;
         memory::write(&self.layout, scope, content)
     }
     pub fn append_memory(&self, scope: &MemoryScope, author: &str, entry: &str) -> Result<()> {
+        self.writable()?;
         memory::append(&self.layout, scope, author, entry)
     }
     pub fn memory_budgeted(&self, scope: &MemoryScope, max_chars: usize) -> Result<String> {
@@ -808,6 +960,7 @@ impl ProjectStore {
     }
 
     pub fn save_workspace(&self, layout: &serde_json::Value) -> Result<()> {
+        self.writable()?;
         if !layout.is_object() {
             return Err(Error::invalid("the workspace layout must be a JSON object"));
         }
@@ -983,6 +1136,38 @@ mod tests {
         s.add_permission_rule("frontend", "Bash:npm test").unwrap();
         assert!(s.has_permission_rule("frontend", "Bash:npm test").unwrap());
         assert!(!s.has_permission_rule("backend", "Bash:npm test").unwrap());
+    }
+
+    #[test]
+    fn command_journal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = ProjectStore::open_ephemeral(tmp.path(), "t").unwrap();
+        let rec = CommandRecord {
+            id: 0,
+            agent_id: "ops".into(),
+            source: "agent".into(),
+            tool_use_id: Some("toolu_1".into()),
+            raw: "docker ps".into(),
+            program: Some("docker".into()),
+            parsed: serde_json::json!({"type": "shell"}),
+            target: None,
+            capability: Some("fs_execute".into()),
+            decision: None,
+            started_at: pcc_core::now(),
+            ended_at: None,
+            exit_code: None,
+            is_error: None,
+            output: None,
+        };
+        s.insert_command(rec).unwrap();
+        s.set_command_decision("toolu_1", "allowed").unwrap();
+        let done = s.finish_command("toolu_1", Some(0), false, "CONTAINER ID").unwrap().unwrap();
+        assert_eq!(
+            (done.decision.as_deref(), done.exit_code, done.output.as_deref()),
+            (Some("allowed"), Some(0), Some("CONTAINER ID"))
+        );
+        assert!(s.finish_command("toolu_1", Some(1), true, "x").unwrap().is_none(), "finished once");
+        assert_eq!(s.list_commands(Some("ops"), None, 10).unwrap().len(), 1);
     }
 
     #[test]

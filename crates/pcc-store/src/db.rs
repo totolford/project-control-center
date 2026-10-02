@@ -50,7 +50,29 @@ const MIGRATIONS: &[&str] = &[
         actor TEXT NOT NULL, reason TEXT);
     CREATE INDEX decisions_agent ON decisions(agent_id, id);
     "#,
+    // v3: command journal
+    r#"
+    CREATE TABLE commands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT NOT NULL, source TEXT NOT NULL,
+        tool_use_id TEXT, raw TEXT NOT NULL, program TEXT, parsed TEXT NOT NULL, target TEXT,
+        capability TEXT, decision TEXT, started_at TEXT NOT NULL, ended_at TEXT, exit_code INTEGER,
+        is_error INTEGER, output TEXT);
+    CREATE INDEX commands_agent ON commands(agent_id, id);
+    CREATE INDEX commands_tool ON commands(tool_use_id);
+    "#,
 ];
+
+/// Schema version written by this build.
+pub fn schema_version() -> i64 {
+    MIGRATIONS.len() as i64
+}
+
+/// Opens a database without migrating or writing (compatibility mode).
+pub fn open_read_only(path: &Path) -> Result<Connection> {
+    let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(storage)?;
+    conn.execute_batch("PRAGMA query_only=ON; PRAGMA busy_timeout=5000;").map_err(storage)?;
+    Ok(conn)
+}
 
 pub fn open(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path).map_err(storage)?;

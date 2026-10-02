@@ -5,7 +5,10 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 use pcc_core::permissions::{classify_tool, ToolClassification};
-use pcc_core::{Access, Agent, AutonomySettings, Capability, Connection, ConnectionKind, PermissionSet};
+use pcc_core::{
+    Access, Agent, AgentKind, AutonomySettings, Capability, Connection, ConnectionKind, MasterControl, PermissionSet,
+    PowerLevel,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decision {
@@ -23,13 +26,51 @@ pub enum Decision {
     },
 }
 
-/// The permissions actually enforced for an agent.
-pub fn effective_permissions<'a>(agent: &'a Agent, autonomy: &'a AutonomySettings) -> &'a PermissionSet {
-    if autonomy.unlocked {
-        &autonomy.unlocked_permissions
-    } else {
-        &agent.permissions
+/// Whether MASTER CONTROL applies to this agent (Central only).
+pub fn mastered(agent: &Agent, master: &MasterControl) -> bool {
+    master.active && agent.kind == AgentKind::Central
+}
+
+/// Whether a MASTER CONTROL scope covers connections of this kind.
+pub fn master_covers_connection(master: &MasterControl, kind: ConnectionKind) -> bool {
+    match kind {
+        ConnectionKind::Mcp | ConnectionKind::RobloxStudio => master.mcp,
+        ConnectionKind::Ssh | ConnectionKind::Sftp => master.ssh,
+        ConnectionKind::Github | ConnectionKind::Gitlab => master.github,
+        _ => master.pc,
     }
+}
+
+/// Capabilities opened by each MASTER CONTROL scope.
+fn master_scope_allows(master: &MasterControl, c: Capability) -> bool {
+    match c {
+        Capability::FsRead
+        | Capability::FsWrite
+        | Capability::FsExecute
+        | Capability::Network
+        | Capability::GitRead
+        | Capability::GitWrite => master.pc,
+        Capability::GithubRead | Capability::GithubWrite | Capability::GithubAdmin => master.github,
+        Capability::SshRead | Capability::SshExecute => master.ssh,
+        Capability::Mcp => master.mcp,
+    }
+}
+
+/// The permissions actually enforced for an agent: MASTER CONTROL (Central,
+/// per scope) over CLAUDE UNLOCKED (everyone) over the agent's own set.
+pub fn effective_permissions(agent: &Agent, autonomy: &AutonomySettings, master: &MasterControl) -> PermissionSet {
+    let base = if autonomy.unlocked { autonomy.unlocked_permissions.clone() } else { agent.permissions.clone() };
+    if !mastered(agent, master) {
+        return base;
+    }
+    let max = PermissionSet::preset(PowerLevel::Maximum);
+    let mut out = base;
+    for c in Capability::ALL {
+        if master_scope_allows(master, c) {
+            out.set(c, max.get(c));
+        }
+    }
+    out
 }
 
 pub struct PolicyInput<'a> {
@@ -39,20 +80,20 @@ pub struct PolicyInput<'a> {
     /// Returns true when the user chose "allow for this agent" for this key.
     pub has_rule: &'a dyn Fn(&str) -> bool,
     pub autonomy: &'a AutonomySettings,
+    pub master: &'a MasterControl,
 }
 
 pub fn evaluate(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
     match evaluate_rules(p, tool, input) {
-        Decision::Ask { reason, class } if auto_approvable(p.autonomy, &class) => {
+        Decision::Ask { reason, class } if auto_approvable(p.autonomy, mastered(p.agent, p.master), &class) => {
             Decision::AutoApprove { reason, class }
         }
         d => d,
     }
 }
 
-fn auto_approvable(a: &AutonomySettings, class: &ToolClassification) -> bool {
-    a.unlocked
-        && a.auto_approve
+fn auto_approvable(a: &AutonomySettings, master: bool, class: &ToolClassification) -> bool {
+    (master || (a.unlocked && a.auto_approve))
         && !(class.destructive && a.manual_for_destructive)
         && !(class.outside_workspace && a.manual_for_outside_workspace)
         && !class.capability.is_some_and(|c| a.manual_capabilities.contains(&c))
@@ -81,6 +122,7 @@ fn evaluate_rules(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
         match conn {
             Some(c) if !c.enabled => return Decision::Deny(format!("connection `{}` is disabled", c.name)),
             Some(c) if p.agent.connections.contains(&c.id) => {}
+            Some(_) if mastered(p.agent, p.master) && p.master.mcp => {}
             Some(c) => {
                 return Decision::Deny(format!("connection `{}` is not granted to agent {}", c.name, p.agent.id))
             }
@@ -95,6 +137,7 @@ fn evaluate_rules(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
         match conn {
             Some(c) if !c.enabled => return Decision::Deny(format!("connection `{}` is disabled", c.name)),
             Some(c) if p.agent.connections.contains(&c.id) => {}
+            Some(_) if mastered(p.agent, p.master) && p.master.ssh => {}
             Some(c) => {
                 return Decision::Deny(format!("SSH connection `{}` is not granted to agent {}", c.name, p.agent.id))
             }
@@ -107,7 +150,7 @@ fn evaluate_rules(p: &PolicyInput<'_>, tool: &str, input: &Value) -> Decision {
         }
     }
 
-    let access = effective_permissions(p.agent, p.autonomy).get(cap);
+    let access = effective_permissions(p.agent, p.autonomy, p.master).get(cap);
     if access == Access::Deny {
         return Decision::Deny(format!(
             "agent {} does not have the `{}` permission; ask Central or the user if it is needed",
@@ -168,7 +211,7 @@ pub fn builtin_tools(perms: &PermissionSet) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pcc_core::{AgentKind, AgentStatus, ConnectionStatus, Isolation};
+    use pcc_core::{AgentStatus, ConnectionStatus, Isolation};
     use serde_json::json;
 
     fn agent(perms: PermissionSet, conns: &[&str]) -> Agent {
@@ -231,10 +274,48 @@ mod tests {
                 connections: conns,
                 has_rule: &has,
                 autonomy,
+                master: &MasterControl::default(),
             },
             tool,
             &input,
         )
+    }
+
+    #[test]
+    fn master_control_opens_scopes_for_central_only() {
+        let conns = vec![
+            conn("roblox-studio", ConnectionKind::RobloxStudio, json!({})),
+            conn("pi", ConnectionKind::Ssh, json!({"host": "192.168.1.157", "user": "pi"})),
+        ];
+        let mut central = agent(PermissionSet::central(), &[]);
+        central.kind = AgentKind::Central;
+        let master = MasterControl { active: true, ssh: false, ..Default::default() };
+        let run = |a: &Agent, tool: &str, input: Value| {
+            let has = |_: &str| false;
+            evaluate(
+                &PolicyInput {
+                    agent: a,
+                    project_root: PathBuf::from(r"C:\P"),
+                    connections: &conns,
+                    has_rule: &has,
+                    autonomy: &AutonomySettings::default(),
+                    master: &master,
+                },
+                tool,
+                &input,
+            )
+        };
+        // MCP scope on: any enabled MCP connection, without a grant.
+        assert_eq!(run(&central, "mcp__roblox-studio__run_code", json!({})), Decision::Allow);
+        // Network was "ask" for Central; master opens it.
+        assert_eq!(run(&central, "WebFetch", json!({"url": "https://x"})), Decision::Allow);
+        // SSH scope off: grants still required.
+        assert!(matches!(run(&central, "Bash", json!({"command": "ssh pi@192.168.1.157 uptime"})), Decision::Deny(_)));
+        // Destructive stays manual (autonomy default keeps it manual).
+        assert!(matches!(run(&central, "Bash", json!({"command": "rm -rf build"})), Decision::Ask { .. }));
+        // Workers are unaffected.
+        let worker = agent(PermissionSet::worker_default(), &[]);
+        assert!(matches!(run(&worker, "mcp__roblox-studio__run_code", json!({})), Decision::Deny(_)));
     }
 
     fn eval(a: &Agent, conns: &[Connection], tool: &str, input: Value, rules: &[&str]) -> Decision {

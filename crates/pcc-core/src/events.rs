@@ -36,6 +36,9 @@ pub enum EventKind {
     ImprovementCycle,
     McpChanged,
     SkillChanged,
+    /// An agent needs the user (secret, SSH key setup, sign-in...).
+    UserRequested,
+    UserRequestResolved,
     Error,
 }
 

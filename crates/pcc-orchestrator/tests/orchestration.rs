@@ -268,3 +268,58 @@ async fn unlocked_auto_approval_is_journaled_and_emergency_blocks_work() {
     assert!(!store.settings().autonomy.unlocked);
     o.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn central_requests_connections_with_approval_and_reuse() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    o.lock().await.send_user_message("central", "CONNECT PI").unwrap();
+    // Without MASTER CONTROL the creation waits for the user.
+    let mut perm = None;
+    let start = Instant::now();
+    while perm.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(30), "no approval request");
+        perm = o
+            .lock()
+            .await
+            .snapshot()
+            .unwrap()
+            .pending_permissions
+            .into_iter()
+            .find(|p| p.tool_name == "create_connection");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(store.list_connections().unwrap().iter().all(|c| c.kind != pcc_core::ConnectionKind::Ssh));
+    // The deferred capability report reached the session.
+    wait_for("capabilities answer", || {
+        store.list_logs("central", None, 200).unwrap().iter().any(|l| l.text.contains("capabilities received: true"))
+    })
+    .await;
+    o.lock().await.resolve_permission(&perm.unwrap().id, PermissionDecision::AllowOnce).unwrap();
+    let ssh: Vec<_> =
+        store.list_connections().unwrap().into_iter().filter(|c| c.kind == pcc_core::ConnectionKind::Ssh).collect();
+    assert_eq!(ssh.len(), 1);
+    assert_eq!(ssh[0].name, "pi@192.168.1.157");
+    wait_for("central told", || {
+        store
+            .list_messages(Some("central"), 50)
+            .unwrap()
+            .iter()
+            .any(|m| m.body.contains("The user approved") && m.delivered_at.is_some())
+    })
+    .await;
+    // Asking again reuses it (case-insensitive user, default port).
+    wait_for("central idle", || store.agent("central").unwrap().status == AgentStatus::Waiting).await;
+    o.lock().await.send_user_message("central", "CONNECT AGAIN").unwrap();
+    wait_for("reuse answer", || {
+        store
+            .list_logs("central", None, 300)
+            .unwrap()
+            .iter()
+            .any(|l| l.text.contains("again: Using the existing connection"))
+    })
+    .await;
+    assert_eq!(store.list_connections().unwrap().iter().filter(|c| c.kind == pcc_core::ConnectionKind::Ssh).count(), 1);
+    o.close().await;
+}

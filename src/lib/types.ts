@@ -24,6 +24,9 @@ export interface ProjectInfo {
   root: string;
   createdAt: string;
   formatVersion: number;
+  createdWith: string | null;
+  lastOpenedWith: string | null;
+  minimumNexusVersion: string | null;
 }
 
 export interface ProjectSettings {
@@ -43,6 +46,8 @@ export interface ProjectSettings {
   defaultEffort: string | null;
   defaultSkillsEnabled: boolean;
   autoRecover: boolean;
+  /** NEXUS MASTER CONTROL (Central only). */
+  masterControl: MasterControl;
 }
 
 export type AgentKind = "central" | "worker";
@@ -290,6 +295,8 @@ export type EventKind =
   | "ImprovementCycle"
   | "McpChanged"
   | "SkillChanged"
+  | "UserRequested"
+  | "UserRequestResolved"
   | "Error";
 
 /**
@@ -444,6 +451,13 @@ export interface ProjectSnapshot {
   recovery: RecoveryInfo | null;
   /** Emergency stop active: new work and autonomy are blocked until released. */
   emergency: boolean;
+  /** Agents waiting for the user. */
+  userRequests: UserRequest[];
+  compatibility: CompatibilityReport | null;
+  /** Compatibility mode: the project needs a newer NEXUS; every change is refused. */
+  readOnly: boolean;
+  /** Migration performed while opening (show its report once). */
+  migration: MigrationReport | null;
 }
 
 export interface AgentSpec {
@@ -735,4 +749,347 @@ export interface McpConnectionConfig {
   url: string;
   headers: Record<string, string>;
   secretHeaders: string[];
+}
+
+// ======================================================================
+// 0.2: compatibility, interpreter, autonomy, GitHub, MASTER CONTROL, AI World
+// ======================================================================
+
+export type CompatStatus = "compatible" | "migration_available" | "newer_format" | "requires_newer_nexus";
+
+export interface MigrationStep {
+  from: number;
+  to: number;
+  title: string;
+  description: string;
+}
+
+export interface CompatibilityReport {
+  status: CompatStatus;
+  projectFormat: number;
+  supportedFormat: number;
+  appVersion: string;
+  createdWith: string | null;
+  lastOpenedWith: string | null;
+  minimumNexusVersion: string | null;
+  databaseSchema: number | null;
+  supportedDatabaseSchema: number;
+  unknownFields: string[];
+  plan: MigrationStep[];
+  notes: string[];
+  readOnly: boolean;
+}
+
+export interface BackupInfo {
+  id: string;
+  path: string;
+  createdAt: string;
+  formatVersion: number | null;
+  reason: string;
+}
+
+export interface MigrationReport {
+  fromFormat: number;
+  toFormat: number;
+  backup: BackupInfo;
+  steps: string[];
+  /** lines starting with "ok:" or "error:" */
+  integrity: string[];
+  ok: boolean;
+  reportPath: string;
+}
+
+/** Interpreter output. Secret values (env/header) are NOT included in `intent` from agents' tools, but the UI's own interpretCommand returns them as typed: never display env/header values. */
+export type Intent =
+  | {
+      type: "add_mcp";
+      name: string;
+      transport: string;
+      scope: string | null;
+      command: string | null;
+      args: string[];
+      url: string | null;
+      env: [string, string][];
+      headers: [string, string][];
+    }
+  | { type: "ssh"; user: string | null; host: string; port: number | null; keyPath: string | null; remoteCommand: string | null }
+  | { type: "clone"; url: string; directory: string | null }
+  | { type: "github_login" }
+  | { type: "claude_cli"; args: string[] }
+  | { type: "shell" };
+
+export interface Interpretation {
+  raw: string;
+  program: string;
+  tokens: string[];
+  intent: Intent;
+  summary: string;
+  capability: Capability;
+  destructive: boolean;
+}
+
+export interface AppliedCommand {
+  connection: Connection | null;
+  created: boolean;
+  message: string;
+}
+
+export interface CommandRecord {
+  id: number;
+  agentId: string;
+  /** agent | user | interpreter */
+  source: string;
+  toolUseId: string | null;
+  raw: string;
+  program: string | null;
+  parsed: unknown;
+  target: string | null;
+  capability: string | null;
+  /** allowed | auto_approved | denied | asked | user */
+  decision: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  exitCode: number | null;
+  isError: boolean | null;
+  output: string | null;
+}
+
+export type UserRequestKind = "secret" | "ssh_key_setup" | "github_login" | "action";
+
+/** An agent needs a human: a secret (typed into Credential Manager), an SSH key install, a GitHub sign-in, or another step. */
+export interface UserRequest {
+  id: string;
+  agentId: string;
+  kind: UserRequestKind;
+  title: string;
+  reason: string;
+  connectionId: string | null;
+  /** secret name, e.g. "password", "token", "API_KEY" */
+  key: string | null;
+  createdAt: string;
+}
+
+export interface SshKeySetup {
+  keyPath: string;
+  createdKey: boolean;
+  /** Raw Terminal where the user types the remote password once. */
+  terminal: PtyInfo;
+}
+
+export interface MasterControl {
+  active: boolean;
+  pc: boolean;
+  github: boolean;
+  mcp: boolean;
+  ssh: boolean;
+  skills: boolean;
+  /** Central may create connections, add MCP servers and grant them without a prompt. */
+  manageConnections: boolean;
+}
+
+export interface MasterDomain {
+  key: "claude" | "pc" | "github" | "mcp" | "ssh" | "skills";
+  label: string;
+  enabled: boolean;
+  /** really usable now (e.g. gh signed in, connections exist) */
+  available: boolean;
+  /** 0..1 share of the domain's capabilities Central effectively has */
+  level: number;
+  detail: string;
+}
+
+export interface MasterStatus {
+  active: boolean;
+  domains: MasterDomain[];
+  centralPermissions: PermissionSet;
+}
+
+export interface GithubAbility {
+  action: string;
+  allowedByToken: boolean;
+  requires: string;
+}
+
+export interface GithubAccount {
+  login: string;
+  name: string | null;
+  url: string | null;
+  scopes: string[];
+  organizations: string[];
+  gitProtocol: string | null;
+  abilities: GithubAbility[];
+}
+
+/** gh JSON: { name, nameWithOwner, description, visibility, isPrivate, isFork, updatedAt, url, defaultBranchRef: { name }, primaryLanguage: { name } | null } */
+export type GithubRepo = Record<string, any>;
+
+export interface RepositoryDetail {
+  repo: string;
+  /** GitHub REST repo object */
+  info: Record<string, any>;
+  issues: Record<string, any>[];
+  pullRequests: Record<string, any>[];
+  /** { databaseId, name, status, conclusion, headBranch, event, createdAt, url } */
+  runs: Record<string, any>[];
+  /** { tagName, name, isLatest, isDraft, isPrerelease, publishedAt } */
+  releases: Record<string, any>[];
+  branches: string[];
+  /** { sha, message, author, date, url } */
+  commits: Record<string, any>[];
+  unavailable: string[];
+}
+
+// ---------------------------------------------------------------- AI World
+
+export type WorldMode = "simulation" | "hybrid" | "real_execution";
+export type RoomKind = "workshop" | "review" | "meeting" | "lounge" | "server_room" | "security" | "gate" | "infirmary" | "library";
+
+export interface Room {
+  id: string;
+  name: string;
+  kind: RoomKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface Character {
+  id: string;
+  name: string;
+  /** linked NEXUS agent id (hybrid / real execution) */
+  nexusAgent: string | null;
+  personality: string;
+  goals: string[];
+  memory: string[];
+  skills: string[];
+  tools: string[];
+  mcp: string[];
+  model: string | null;
+  autonomy: string;
+  relationships: { with: string; kind: string }[];
+  /** f1..f8 */
+  sprite: string;
+  x: number;
+  y: number;
+  room: string | null;
+  targetRoom: string | null;
+  /** real current action when linked */
+  activity: string | null;
+  /** simulated mood: simulation mode only, null for linked characters */
+  mood: string | null;
+  lastAction: string | null;
+}
+
+export interface Conversation {
+  id: string;
+  participants: string[];
+  room: string | null;
+  lines: { speaker: string; text: string; ts: string }[];
+  /** "simulated" (generated by Claude) or "real" */
+  origin: string;
+  startedAt: string;
+}
+
+export interface WorldEvent {
+  ts: string;
+  character: string | null;
+  text: string;
+}
+
+export interface WorldSettings {
+  speed: number;
+  llmConversations: boolean;
+  conversationModel: string;
+  maxConversationsPerHour: number;
+  rules: string[];
+  environment: string;
+}
+
+export interface World {
+  format: number;
+  name: string;
+  description: string;
+  /** nexus_native | ai_town_compatible | ai_town | custom */
+  provider: string;
+  mode: WorldMode;
+  running: boolean;
+  tick: number;
+  width: number;
+  height: number;
+  rooms: Room[];
+  characters: Character[];
+  conversations: Conversation[];
+  events: WorldEvent[];
+  settings: WorldSettings;
+  providerState: any;
+  createdAt: string;
+}
+
+/** Streamed on WORLD_CHANNEL while the world runs (positions update every tick). */
+export interface WorldFrame {
+  tick: number;
+  running: boolean;
+  characters: Character[];
+  events: WorldEvent[];
+}
+
+export interface WorldPrerequisite {
+  name: string;
+  met: boolean;
+  detail: string;
+  required: boolean;
+}
+
+export interface WorldProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  prerequisites: WorldPrerequisite[];
+  ready: boolean;
+}
+
+export interface AgentSeed {
+  id: string;
+  name: string;
+  role: string;
+  isCentral: boolean;
+  model: string | null;
+  power: string | null;
+  skillsEnabled: boolean;
+  connections: string[];
+  recentTasks: string[];
+}
+
+export interface WorldAnalysis {
+  projectTypes: string[];
+  agents: AgentSeed[];
+  providers: WorldProviderInfo[];
+  recommendedProvider: string;
+  reason: string;
+  existingWorld: boolean;
+}
+
+export interface WorldSpec {
+  name: string;
+  description: string;
+  provider: "nexus_native" | "ai_town_compatible" | "ai_town" | "custom";
+  mode: WorldMode;
+  environment?: string | null;
+  rules: string[];
+  speed?: number | null;
+  characters: Character[];
+  /** AI Town fork / custom world folder */
+  targetDir?: string | null;
+  letCentralFinish: boolean;
+  /** frontend, backend, database, llm, authentication, deployment */
+  infrastructure: Record<string, string>;
+}
+
+export interface ConversionReport {
+  world: World;
+  steps: string[];
+  warnings: string[];
+  missionId: string | null;
+  backup: BackupInfo | null;
 }

@@ -40,6 +40,13 @@ pub struct ProjectSnapshot {
     pub recovery: Option<RecoveryInfo>,
     /// Emergency stop active: new work and autonomy are blocked.
     pub emergency: bool,
+    /// Agents waiting for the user (secrets, SSH key setup, sign-in).
+    pub user_requests: Vec<crate::admin::UserRequest>,
+    pub compatibility: Option<pcc_store::compat::CompatibilityReport>,
+    /// Compatibility mode: the project needs a newer NEXUS and nothing is written.
+    pub read_only: bool,
+    /// Migration performed while opening this project, if any.
+    pub migration: Option<pcc_store::compat::MigrationReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
