@@ -17,6 +17,17 @@ memory and a timeline. Use your usual editor alongside it.
 
 ## Features
 
+- **AI World on the real AI Town** - your agents live in an embedded
+  [a16z-infra/ai-town](https://github.com/a16z-infra/ai-town) (MIT) world: each agent
+  is a character that walks to the building of what it is really doing, talks when it
+  really sends a message and raises its hand when it waits for your approval. Runs on
+  a local Convex backend (no account; installed only after you confirm).
+- **Central chat + command bar** - the right panel is the real Claude Code
+  conversation with Central (or any agent); the bottom bar takes quick asks and
+  slash commands (`/mission`, `/agent`, `/skill`, `/ssh`, `/model`...).
+- **Missions & Skill Market** - queued and prioritized missions with an automatic
+  analysis and skill recommendations; a Skill Market over Claude Code marketplaces,
+  the NEXUS catalog and GitHub with a security analysis before any install.
 - **Swarm workspace** — a tiling workspace of panels (agent terminals, Central,
   missions, task board, Roblox Studio / connection panels, diffs, memory, activity):
   drag & drop, resize, maximize, minimize, pin, open in a new tab. Several workspace
@@ -98,12 +109,14 @@ with the C++ workload, Git.
 git clone https://github.com/totolford/project-control-center.git
 cd project-control-center
 npm ci
+npm run install:ai-town   # AI Town dependencies
 npm run dist        # -> dist-installer\ProjectControlCenter-Setup.exe
 ```
 
 Development:
 
 ```powershell
+npm run build:ai-town   # once: builds the AI World into public/ai-town
 npm run app:dev     # hot-reloading app window
 npm test            # frontend tests
 cargo test --workspace
@@ -159,3 +172,4 @@ crates/pcc-orchestrator the engine: agents, tasks, messages, tools, policy
 
 MIT — see [LICENSE](LICENSE). Claude and Claude Code are products of Anthropic; this
 project is an independent open-source tool that drives the Claude Code CLI.
+It bundles AI Town (MIT); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

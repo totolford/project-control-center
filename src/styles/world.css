@@ -333,3 +333,209 @@
   padding: 0;
 }
 .world-sprite.active { border-color: var(--accent); }
+
+/* ------------------------------------------------------------------ integrated AI Town */
+.aitown-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.aitown-setup {
+  max-width: 980px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aitown-setup-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 0 4px;
+}
+.aitown-setup-head p { max-width: 720px; margin: 0; }
+.aitown-kv { max-width: 720px; }
+.aitown-log {
+  max-height: 220px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.aitown-consent ol,
+.aitown-consent ul { margin: 6px 0 10px; padding-left: 20px; }
+.aitown-consent li { margin: 3px 0; }
+.aitown-list { max-height: 180px; overflow-y: auto; }
+.aitown-plan { list-style: none; padding: 0; margin: 0; }
+.aitown-plan li { padding: 2px 0; }
+
+.aitown-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.aitown-host.compact { gap: 0; height: 100%; }
+.aitown-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.aitown-seg { display: inline-flex; gap: 2px; }
+.aitown-seg .btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.aitown-focus { width: auto; max-width: 190px; height: 28px; padding: 0 6px; font-size: 12px; line-height: 26px; }
+.aitown-frame {
+  position: relative;
+  flex: 1;
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* AI Town's own dark frame color while the game loads */
+  background: #181425;
+}
+.aitown-host.compact .aitown-frame { border: 0; border-radius: 0; min-height: 120px; }
+.aitown-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.aitown-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* Customize Character */
+.sprite-canvas { image-rendering: pixelated; display: block; }
+.cc-layout { display: flex; gap: 16px; min-height: 0; }
+.cc-preview {
+  width: 200px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.cc-stage {
+  width: 176px;
+  height: 176px;
+  display: grid;
+  place-items: center;
+  /* grass-like backdrop so tints read as in the town */
+  background: #3a5a2c;
+  border: 4px solid #181425;
+  image-rendering: pixelated;
+}
+.cc-nameplate { display: flex; align-items: center; gap: 6px; }
+.cc-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: #fec742;
+  color: #181425;
+  border-radius: 2px;
+}
+.cc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.cc-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.cc-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cc-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.cc-tab:focus-visible,
+.cc-skin:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cc-grid {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.cc-skin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+}
+.cc-skin:hover { border-color: var(--border-strong); background: var(--hover); }
+.cc-skin.active { border-color: var(--accent); background: var(--accent-soft); }
+.cc-skin-label { font-size: 12px; font-weight: 600; }
+.cc-skin-look {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cc-main input[type="color"] { width: 40px; height: 28px; padding: 2px; }
+.cc-import { display: flex; flex-direction: column; gap: 8px; }
+.cc-file { align-self: flex-start; position: relative; cursor: pointer; }
+.cc-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.cc-file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cc-import-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; }
+.cc-import-grid input,
+.cc-import-grid select { width: 100%; }
+.cc-walks { display: flex; gap: 12px; }
+.cc-walks figure {
+  margin: 0;
+  width: 72px;
+  height: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  background: #3a5a2c;
+  border: 2px solid #181425;
+  padding: 4px;
+}
+.sprite-missing { padding: 8px; }
+@media (max-width: 760px) {
+  .cc-layout { flex-direction: column; }
+  .cc-preview { width: 100%; }
+  .cc-import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.cc-import > .btn { align-self: flex-start; }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, ArrowLeft, Crown, FolderOpen, Hand, Play, RotateCw, Square } from "lucide-react";
+import { Archive, ArrowLeft, Crown, FolderOpen, Hand, Palette, Play, RotateCw, Square } from "lucide-react";
 import { api } from "../lib/api";
 import { run } from "../lib/toast";
 import { isLive } from "../lib/labels";
@@ -16,6 +16,8 @@ import { Terminal } from "./agent/Terminal";
 import { AgentMessages } from "./agent/AgentMessages";
 import { AgentPermissions } from "./agent/AgentPermissions";
 import { AgentSessions } from "./agent/AgentSessions";
+import { CustomizeCharacter } from "./world/CustomizeCharacter";
+import { useAiTown } from "./world/aiTownStore";
 
 type TabKey = "terminal" | "messages" | "permissions" | "memory" | "sessions";
 
@@ -112,6 +114,8 @@ export function AgentDetail({ agentId }: { agentId: string }) {
   const navigate = useStore((s) => s.navigate);
   const openTask = useStore((s) => s.openTask);
   const [tab, setTab] = useState<TabKey>("terminal");
+  const [customizing, setCustomizing] = useState(false);
+  const townWorld = useAiTown((s) => (s.status?.running ? s.world : null));
 
   if (!agent) {
     return (
@@ -141,8 +145,12 @@ export function AgentDetail({ agentId }: { agentId: string }) {
           </div>
           <div className="muted">{agent.role}</div>
         </div>
+        <button className="btn btn-sm" onClick={() => setCustomizing(true)} title="How this agent looks in AI Town">
+          <Palette size={13} /> Customize character
+        </button>
         <AgentControls agent={agent} />
       </div>
+      {customizing && <CustomizeCharacter agent={agent} world={townWorld} onClose={() => setCustomizing(false)} />}
 
       <div className="agent-meta">
         <dl className="kv kv-inline">

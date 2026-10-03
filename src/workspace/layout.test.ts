@@ -19,6 +19,10 @@ import {
   setSplitSizes,
   specKey,
   toggleMaximize,
+  openPanelTab,
+  openView,
+  viewOfTab,
+  MAX_WINDOW_TABS,
   MIN_FRACTION,
   type LayoutNode,
   type PanelNode,
@@ -43,7 +47,7 @@ const ctx: LayoutContext = {
 const term = (agentId: string, id = `p-${agentId}`): PanelNode => ({ type: "panel", id, panel: { type: "AgentTerminal", agentId } });
 
 function wsWith(root: LayoutNode | null): Workspace {
-  return { version: 1, activeTab: "t1", tabs: [{ id: "t1", title: "Main", root }], autoAddAgents: true };
+  return { version: 2, activeTab: "t1", tabs: [{ id: "t1", title: "Main", root }], autoAddAgents: true };
 }
 
 function sum(sizes: number[]): number {
@@ -161,9 +165,16 @@ describe("workspace operations", () => {
 });
 
 describe("default layout", () => {
+  it("opens on the AI World window, then a Swarm tab", () => {
+    const ws = buildDefaultWorkspace(ctx);
+    expect(getActiveTab(ws).view).toEqual({ name: "world" });
+    expect(ws.tabs).toHaveLength(2);
+    expect(ws.tabs[1].view).toBeUndefined();
+  });
+
   it("has Central + Roblox on the left and one terminal per non-retired worker", () => {
     const ws = buildDefaultWorkspace(ctx);
-    const panels = listPanels(getActiveTab(ws).root);
+    const panels = listPanels(ws.tabs[1].root);
     expect(panels.map((p) => p.panel.type)).toEqual(["CentralAgent", "RobloxStudio", "AgentTerminal", "AgentTerminal"]);
     expect(panels.filter((p) => p.panel.type === "AgentTerminal").map((p) => p.panel.agentId)).toEqual(["w1", "w2"]);
     expect(ws.autoAddAgents).toBe(true);
@@ -171,13 +182,13 @@ describe("default layout", () => {
 
   it("handles a project with no agents", () => {
     const ws = buildDefaultWorkspace({ agents: [], connections: [] });
-    expect(getActiveTab(ws).root).toBeNull();
+    expect(ws.tabs[1].root).toBeNull();
   });
 });
 
 describe("parseWorkspace", () => {
   const saved = {
-    version: 1,
+    version: 2,
     activeTab: "t1",
     autoAddAgents: false,
     tabs: [
@@ -213,14 +224,14 @@ describe("parseWorkspace", () => {
     expect(parseWorkspace(null, ctx)).toBeNull();
     expect(parseWorkspace("garbage", ctx)).toBeNull();
     expect(parseWorkspace({ version: 99, tabs: [] }, ctx)).toBeNull();
-    expect(parseWorkspace({ version: 1, tabs: [{ title: "no id" }] }, ctx)).toBeNull();
-    expect(parseWorkspace({ version: 1, tabs: "nope" }, ctx)).toBeNull();
+    expect(parseWorkspace({ version: 2, tabs: [{ title: "no id" }] }, ctx)).toBeNull();
+    expect(parseWorkspace({ version: 2, tabs: "nope" }, ctx)).toBeNull();
   });
 
   it("drops unknown panel types, duplicate ids and panels missing required refs", () => {
     const ws = parseWorkspace(
       {
-        version: 1,
+        version: 2,
         activeTab: "missing",
         tabs: [
           {
@@ -248,10 +259,34 @@ describe("parseWorkspace", () => {
     expect(tab.root).toEqual({ type: "panel", id: "b", panel: { type: "Memory" } });
   });
 
-  it("migrates pre-versioned layouts", () => {
+  it("migrates pre-versioned and 0.2 layouts, opening the AI World window in front", () => {
     const legacy = { activeTab: "t1", tabs: [{ id: "t1", title: "Old", root: { type: "panel", id: "m", panel: { type: "Memory" } } }] };
-    expect(migrateWorkspace(legacy)).toMatchObject({ version: 1 });
-    expect(parseWorkspace(legacy, ctx)?.tabs[0].title).toBe("Old");
+    expect(migrateWorkspace(legacy)).toMatchObject({ version: 2 });
+    for (const raw of [legacy, { ...legacy, version: 1 }]) {
+      const ws = parseWorkspace(raw, ctx)!;
+      expect(ws.tabs.map((t) => t.view?.name ?? t.title)).toEqual(["world", "Old"]);
+      expect(getActiveTab(ws).view).toEqual({ name: "world" });
+    }
+  });
+
+  it("keeps window tabs, drops unknown views and windows of deleted agents", () => {
+    const ws = parseWorkspace(
+      {
+        version: 2,
+        activeTab: "w-agent",
+        tabs: [
+          { id: "w-world", title: "", root: null, view: { name: "world" } },
+          { id: "w-agent", title: "", root: null, view: { name: "agent", agentId: "w1" } },
+          { id: "w-gone", title: "", root: null, view: { name: "agent", agentId: "deleted-agent" } },
+          { id: "w-bad", title: "", root: null, view: { name: "hologram" } },
+          { id: "w-tasks", title: "Mine", root: null, view: { name: "tasks", taskId: "TASK-1", extra: 1 } },
+        ],
+      },
+      ctx,
+    )!;
+    expect(ws.tabs.map((t) => t.id)).toEqual(["w-world", "w-agent", "w-tasks"]);
+    expect(ws.activeTab).toBe("w-agent");
+    expect(ws.tabs[2]).toEqual({ id: "w-tasks", title: "Mine", root: null, view: { name: "tasks", taskId: "TASK-1" } });
   });
 
   it("round-trips through JSON", () => {
@@ -263,5 +298,66 @@ describe("parseWorkspace", () => {
     const ws = wsWith({ type: "split", direction: "horizontal", sizes: [0.5, 0.5], children: [makePanel({ type: "Connection", connectionId: "gh" }), term("w1")] });
     const pruned = pruneWorkspace(ws, { ...ctx, connections: [] });
     expect(listPanels(getActiveTab(pruned).root).map((p) => specKey(p.panel))).toEqual([specKey({ type: "AgentTerminal", agentId: "w1" })]);
+  });
+});
+
+describe("window tabs", () => {
+  const base = (): Workspace => ({ version: 2, activeTab: "t1", tabs: [{ id: "t1", title: "Swarm", root: term("w1") }], autoAddAgents: true });
+
+  it("opens one window per view, next to the active tab, and re-activates it with its new selection", () => {
+    let ws = openView(base(), { name: "github" });
+    expect(ws.tabs.map((t) => viewOfTab(t).name)).toEqual(["swarm", "github"]);
+    ws = openView({ ...ws, activeTab: "t1" }, { name: "tasks", taskId: "A" });
+    expect(ws.tabs.map((t) => viewOfTab(t).name)).toEqual(["swarm", "tasks", "github"]);
+    const tasksTab = getActiveTab(ws).id;
+    ws = openView(ws, { name: "github" });
+    ws = openView(ws, { name: "tasks", taskId: "B" });
+    expect(ws.activeTab).toBe(tasksTab);
+    expect(getActiveTab(ws).view).toEqual({ name: "tasks", taskId: "B" });
+    expect(openView(ws, { name: "tasks", taskId: "B" })).toBe(ws);
+  });
+
+  it("keeps one window per agent", () => {
+    let ws = openView(base(), { name: "agent", agentId: "w1" });
+    ws = openView(ws, { name: "agent", agentId: "w2" });
+    ws = openView(ws, { name: "agent", agentId: "w1" });
+    expect(ws.tabs.filter((t) => t.view?.name === "agent").map((t) => t.view!.agentId)).toEqual(["w1", "w2"]);
+    expect(getActiveTab(ws).view?.agentId).toBe("w1");
+  });
+
+  it("sends swarm to a tiling tab, creating one when only windows are open", () => {
+    let ws = openView(base(), { name: "world" });
+    ws = openView(ws, { name: "swarm" });
+    expect(ws.activeTab).toBe("t1");
+    let windows: Workspace = { version: 2, activeTab: "w", tabs: [{ id: "w", title: "", root: null, view: { name: "world" } }], autoAddAgents: true };
+    windows = openView(windows, { name: "swarm" }, () => term("w2"));
+    expect(getActiveTab(windows).view).toBeUndefined();
+    expect(listPanels(getActiveTab(windows).root)[0].panel.agentId).toBe("w2");
+  });
+
+  it("caps open windows, closing the oldest inactive one", () => {
+    let ws = base();
+    const names = ["world", "missions", "agents", "models", "mcp", "skills", "connections", "commands", "memory", "activity", "github"] as const;
+    for (const name of names) ws = openView(ws, { name });
+    expect(ws.tabs.filter((t) => t.view)).toHaveLength(MAX_WINDOW_TABS);
+    expect(getActiveTab(ws).view?.name).toBe("github");
+    expect(ws.tabs.some((t) => t.view?.name === "world")).toBe(false);
+  });
+
+  it("adds panels to a tiling tab when a window is active, and opens panels as their own tab once", () => {
+    let ws = openView(base(), { name: "world" });
+    ws = addPanelToActive(ws, { type: "Memory" });
+    expect(getActiveTab(ws).view?.name).toBe("world");
+    expect(listPanels(ws.tabs[0].root).map((p) => p.panel.type)).toEqual(["AgentTerminal", "Memory"]);
+    ws = openPanelTab(ws, { type: "Mission", missionId: "M1" }, "Mission M1");
+    const missionTab = ws.activeTab;
+    expect(getActiveTab(ws).title).toBe("Mission M1");
+    ws = openPanelTab({ ...ws, activeTab: "t1" }, { type: "Mission", missionId: "M1" }, "Mission M1");
+    expect(ws.activeTab).toBe(missionTab);
+  });
+
+  it("closing the last tab keeps a window tab open", () => {
+    const ws: Workspace = { version: 2, activeTab: "w", tabs: [{ id: "w", title: "", root: null, view: { name: "world" } }], autoAddAgents: true };
+    expect(closeTab(ws, "w")).toBe(ws);
   });
 });

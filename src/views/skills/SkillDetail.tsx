@@ -7,6 +7,7 @@ import { Chip } from "../../components/StatusBadge";
 import { agentsWithSkills, isDiscovered, isSynced, requirements, sourceLabel, type Requirement } from "./skillModel";
 import { SkillActions } from "./SkillActions";
 import { SkillFileViewer } from "./SkillFileViewer";
+import { SKILL_LIMITATION_TEXT, SKILL_SCOPE_TEXT } from "../market/marketModel";
 
 function Req({ items, unknownHint = "" }: { items: Requirement[]; unknownHint?: string }) {
   if (items.length === 0) return <span className="muted">none</span>;
@@ -117,9 +118,9 @@ export function SkillDetail({ skill, env, onChanged }: Props) {
         ) : (
           <div className="muted small">No agent has skills enabled.</div>
         )}
+        <div className="small">{SKILL_SCOPE_TEXT}</div>
         <div className="muted small">
-          Skills are all-or-nothing per Claude Code session: agents with skills enabled in their profile load every enabled skill Claude Code
-          discovers.
+          {SKILL_LIMITATION_TEXT} Agents with skills enabled in their profile load every enabled skill Claude Code discovers.
         </div>
       </Section>
 

@@ -57,8 +57,7 @@ export function ProjectBreadcrumb({ onCloseProject, onFolder }: { onCloseProject
 
   return (
     <nav className="breadcrumb" aria-label="Project">
-      <span className="muted breadcrumb-root">Projects</span>
-      <span className="muted">›</span>
+      <span className="muted breadcrumb-sep" aria-hidden="true">/</span>
       <Menu
         trigger={
           <>

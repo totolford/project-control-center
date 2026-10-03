@@ -90,6 +90,24 @@ pub struct TaskSpec {
     pub priority: Option<Priority>,
     pub requires_review: Option<bool>,
     pub mission_id: Option<String>,
+    /// Skills the worker is told to invoke with the Skill tool.
+    pub skills: Option<Vec<String>>,
+}
+
+/// A mission as created from the New Mission flow.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MissionSpec {
+    pub prompt: String,
+    pub title: Option<String>,
+    pub priority: Option<Priority>,
+    pub model: Option<String>,
+    pub skills: Vec<String>,
+    pub mcp: Vec<String>,
+    pub connections: Vec<String>,
+    pub analysis: Option<pcc_core::MissionAnalysis>,
+    /// Send it to Central even if another mission is running (otherwise it is queued).
+    pub start_now: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

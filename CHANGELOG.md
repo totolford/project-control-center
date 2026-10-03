@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+- AI World built on the real a16z-infra/ai-town (MIT, vendored in `ai-town/`): the
+  embedded PixiJS world runs on a local Convex backend (anonymous mode, no account,
+  data on this PC), installed only after consent. Each NEXUS agent is an AI Town
+  player driven by its real state: NEXUS buildings (Central HQ, Coding Office, Skill
+  Shop...), status labels, speech bubbles from real messages, profile card with Talk /
+  View work / direct control, observer and cinematic camera modes.
+- Character customization: honest presets (real Robot / Android / Wizard / Cyberpunk
+  spritesheets), tint, badge, display name, import of AI Town-compatible spritesheets.
+- "Sync with AI Town upstream": 3-way merge plan, NEXUS changes never overwritten.
+- New layout: navigation, center window tabs, contextual right panel with the real
+  Central chat (tool calls, commands, files, MCP, skills, delegations), universal
+  command bar with slash commands. The duplicate mission composer is gone.
+- Missions: Active / Queued / Completed / Failed / Archived, priority queue, automatic
+  analysis (one Claude call, estimate), skill recommendations, selected skills passed
+  to Central and its tasks.
+- Skill Market: Claude Code marketplaces, NEXUS catalog (`skills/catalog.json`) and
+  GitHub search; file list and static security analysis before any install;
+  installs only on confirmation; deterministic skill recommendations.
+- Project format 3 (backed-up migration): projects opened with 0.3 require 0.3.
+
 ## 0.2.0
 
 - Project compatibility: versioned manifest, automatic backed-up migrations with integrity report and rollback, read-only compatibility mode, unknown fields preserved.

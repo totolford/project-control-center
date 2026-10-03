@@ -1,10 +1,12 @@
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
+import { useWorldStatus } from '../nexus/embed';
 import { useEffect } from 'react';
 import { api } from '../../convex/_generated/api';
 import { WORLD_HEARTBEAT_INTERVAL } from '../../convex/constants';
 
 export function useWorldHeartbeat() {
-  const worldStatus = useQuery(api.world.defaultWorldStatus);
+  // NEXUS: the open project's world when embedded.
+  const worldStatus = useWorldStatus();
   const worldId = worldStatus?.worldId;
 
   // Send a periodic heartbeat to our world to keep it alive.

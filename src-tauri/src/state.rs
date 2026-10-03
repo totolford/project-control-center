@@ -16,6 +16,10 @@ pub struct OpenProject {
     pub orch: Orchestrator,
     /// The project's AI World, if one was created (`.agent-project/ai-world/world.json`).
     pub world: crate::world_commands::SharedWorld,
+    /// Mirrors the agents into the integrated AI Town while it runs.
+    pub ai_town_bridge: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    /// Deployment and world of this project in the integrated AI Town.
+    pub ai_town_target: tokio::sync::Mutex<Option<(pcc_world::aitown::ConvexClient, String)>>,
     forwarders: Vec<JoinHandle<()>>,
 }
 
@@ -59,10 +63,19 @@ impl OpenProject {
         });
         let world = std::sync::Arc::new(tokio::sync::Mutex::new(loaded));
         let runner = crate::world_commands::spawn_runner(app.clone(), orch.clone(), world.clone());
-        OpenProject { orch, world, forwarders: vec![ev, lg, runner] }
+        OpenProject {
+            orch,
+            world,
+            ai_town_bridge: Default::default(),
+            ai_town_target: Default::default(),
+            forwarders: vec![ev, lg, runner],
+        }
     }
 
     pub async fn close(self) {
+        if let Some(b) = self.ai_town_bridge.lock().await.take() {
+            b.abort();
+        }
         self.orch.close().await;
         for f in self.forwarders {
             f.abort();
@@ -79,6 +92,8 @@ pub struct AppState {
     /// Unredacted MCP configs from the last Claude Code inspection; the UI only
     /// receives redacted copies (secrets stay in the backend).
     pub claude_mcp_configs: std::sync::Mutex<Vec<serde_json::Value>>,
+    /// Integrated AI Town runtime (application-wide, created on first use).
+    pub ai_town: crate::aitown_commands::SharedRuntime,
 }
 
 /// Application-level settings (not tied to a project).
@@ -97,6 +112,7 @@ impl AppState {
             log_dir,
             pty: pcc_pty::PtyManager::new(),
             claude_mcp_configs: std::sync::Mutex::new(Vec::new()),
+            ai_town: Default::default(),
         }
     }
 

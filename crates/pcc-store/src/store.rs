@@ -71,7 +71,7 @@ impl ProjectStore {
             format_version: FORMAT_VERSION,
             created_with: Some(crate::compat::APP_VERSION.into()),
             last_opened_with: Some(crate::compat::APP_VERSION.into()),
-            minimum_nexus_version: Some("0.2.0".into()),
+            minimum_nexus_version: Some(crate::compat::MINIMUM_NEXUS_FOR_CURRENT.into()),
             extra: Default::default(),
         };
         layout.write_project(&info)?;
@@ -343,16 +343,62 @@ impl ProjectStore {
             .collect())
     }
 
+    /// Queued missions in start order: highest priority first, then oldest.
+    pub fn queued_missions(&self) -> Result<Vec<Mission>> {
+        let mut v: Vec<Mission> =
+            self.list_docs("SELECT data FROM missions WHERE status = 'queued' ORDER BY created_at, id", &[])?;
+        // Stable sort keeps the creation order within a priority.
+        v.sort_by_key(|m| std::cmp::Reverse(m.priority));
+        Ok(v)
+    }
+
+    /// `Skill` and `mcp__*` tool calls logged by `agent` from `from` to `to`
+    /// (both inclusive, open-ended when `None`), oldest first.
+    pub fn tool_uses(&self, agent: &str, from: &str, to: Option<&str>, limit: u32) -> Result<Vec<LogEntry>> {
+        let c = self.conn.lock();
+        let mut stmt = c
+            .prepare(
+                r"SELECT id, agent_id, session_id, ts, kind, text FROM logs
+                 WHERE agent_id = ?1 AND kind = 'tool_use' AND ts >= ?2 AND (?3 IS NULL OR ts <= ?3)
+                   AND (text LIKE 'Skill %' OR text LIKE 'mcp\_\_%' ESCAPE '\'
+                        OR text LIKE '↳ Skill %' OR text LIKE '↳ mcp\_\_%' ESCAPE '\')
+                 ORDER BY id LIMIT ?4",
+            )
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![agent, from, to, limit], |r| {
+                Ok(LogEntry {
+                    id: r.get(0)?,
+                    agent_id: r.get(1)?,
+                    session_id: r.get(2)?,
+                    ts: r.get(3)?,
+                    kind: LogKind::parse(&r.get::<_, String>(4)?),
+                    text: r.get(5)?,
+                })
+            })
+            .map_err(storage)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(storage)
+    }
+
     fn write_mission_plan(&self, m: &Mission) -> Result<()> {
         let tasks = self.list_tasks(&TaskFilter { mission_id: Some(m.id.clone()), ..Default::default() })?;
         let mut md = format!(
-            "# {} — {}\n\nStatus: {}\nCreated: {}\n\n## Request\n\n{}\n\n## Tasks\n\n",
+            "# {} — {}\n\nStatus: {}\nPriority: {:?}\nCreated: {}\n",
             m.id,
             m.title,
             status_str(&m.status),
+            m.priority,
             m.created_at,
-            m.prompt
         );
+        for (label, list) in [("Skills", &m.skills), ("MCP", &m.mcp), ("Connections", &m.connections)] {
+            if !list.is_empty() {
+                md.push_str(&format!("{label}: {}\n", list.join(", ")));
+            }
+        }
+        if let Some(model) = &m.model {
+            md.push_str(&format!("Model: {model}\n"));
+        }
+        md.push_str(&format!("\n## Request\n\n{}\n\n## Tasks\n\n", m.prompt));
         if tasks.is_empty() {
             md.push_str("_No tasks yet._\n");
         }
@@ -991,13 +1037,7 @@ fn row_to_session(r: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
 }
 
 fn status_str(s: &MissionStatus) -> &'static str {
-    match s {
-        MissionStatus::Planning => "planning",
-        MissionStatus::Active => "active",
-        MissionStatus::Completed => "completed",
-        MissionStatus::Failed => "failed",
-        MissionStatus::Cancelled => "cancelled",
-    }
+    s.as_str()
 }
 
 #[cfg(test)]
@@ -1024,6 +1064,7 @@ mod tests {
             updated_at: pcc_core::now(),
             started_at: None,
             completed_at: None,
+            skills: vec![],
         }
     }
 
@@ -1071,6 +1112,14 @@ mod tests {
             created_at: pcc_core::now(),
             updated_at: pcc_core::now(),
             completed_at: None,
+            priority: Priority::Normal,
+            model: None,
+            skills: vec![],
+            mcp: vec![],
+            connections: vec![],
+            analysis: None,
+            started_at: None,
+            archived_at: None,
         };
         s.upsert_mission(&m).unwrap();
         s.upsert_task(&sample_task("TASK-0001", Some("M-0001"), TaskStatus::Completed)).unwrap();
@@ -1080,6 +1129,85 @@ mod tests {
         assert_eq!((v[0].task_total, v[0].task_done), (2, 1));
         let plan = fs::read_to_string(tmp.path().join(".agent-project/plans/M-0001.md")).unwrap();
         assert!(plan.contains("TASK-0002"));
+    }
+
+    /// A database written by 0.2 (schema v3, missions without the 0.3 fields)
+    /// opens without migration and its missions read with defaults.
+    #[test]
+    fn missions_from_0_2_read_with_defaults() {
+        let tmp = tempfile::tempdir().unwrap();
+        {
+            let s = ProjectStore::create(tmp.path(), "old").unwrap();
+            let old = r#"{"id":"M-0001","title":"Old","prompt":"p","status":"completed","summary":"ok",
+                "createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","completedAt":null}"#;
+            s.conn
+                .lock()
+                .execute(
+                    "INSERT INTO missions(id, status, created_at, data) VALUES ('M-0001', 'completed', '2026-01-01T00:00:00Z', ?1)",
+                    params![old],
+                )
+                .unwrap();
+            let task = r#"{"id":"TASK-0001","missionId":"M-0001","title":"t","description":"","status":"completed",
+                "priority":"normal","agent":null,"dependencies":[],"requiresReview":false,"progress":null,
+                "statusReason":null,"result":null,"createdBy":"central","createdAt":"2026-01-01T00:00:00Z",
+                "updatedAt":"2026-01-01T00:00:00Z","startedAt":null,"completedAt":null}"#;
+            s.conn
+                .lock()
+                .execute(
+                    "INSERT INTO tasks(id, mission_id, status, agent, created_at, data) VALUES ('TASK-0001', 'M-0001', 'completed', NULL, '2026', ?1)",
+                    params![task],
+                )
+                .unwrap();
+        }
+        let s = ProjectStore::open(tmp.path()).unwrap();
+        assert!(!s.read_only());
+        let v = s.list_missions().unwrap();
+        assert_eq!(v[0].mission.priority, Priority::Normal);
+        assert!(v[0].mission.skills.is_empty() && v[0].mission.archived_at.is_none());
+        assert_eq!((v[0].task_total, v[0].task_done), (1, 1));
+        assert!(s.task("TASK-0001").unwrap().skills.is_empty());
+    }
+
+    #[test]
+    fn queue_order_and_tool_uses() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = ProjectStore::open_ephemeral(tmp.path(), "t").unwrap();
+        let mk = |id: &str, created: &str, priority: Priority, status: MissionStatus| Mission {
+            id: id.into(),
+            title: id.into(),
+            prompt: "p".into(),
+            status,
+            summary: None,
+            created_at: created.into(),
+            updated_at: created.into(),
+            completed_at: None,
+            priority,
+            model: None,
+            skills: vec![],
+            mcp: vec![],
+            connections: vec![],
+            analysis: None,
+            started_at: None,
+            archived_at: None,
+        };
+        s.upsert_mission(&mk("M-1", "2026-01-01T00:00:01Z", Priority::Normal, MissionStatus::Queued)).unwrap();
+        s.upsert_mission(&mk("M-2", "2026-01-01T00:00:02Z", Priority::High, MissionStatus::Queued)).unwrap();
+        s.upsert_mission(&mk("M-3", "2026-01-01T00:00:03Z", Priority::Normal, MissionStatus::Queued)).unwrap();
+        s.upsert_mission(&mk("M-4", "2026-01-01T00:00:04Z", Priority::Critical, MissionStatus::Active)).unwrap();
+        let order: Vec<String> = s.queued_missions().unwrap().into_iter().map(|m| m.id).collect();
+        assert_eq!(order, ["M-2", "M-1", "M-3"]);
+        assert_eq!(s.active_mission_ids().unwrap(), ["M-4"]);
+
+        let sid = s.start_session("central", None, None).unwrap();
+        s.append_log("central", sid, LogKind::ToolUse, r#"Skill {"skill":"ui-ux-pro-max:ui-ux-pro-max"}"#).unwrap();
+        s.append_log("central", sid, LogKind::ToolUse, r#"Read {"file_path":"a"}"#).unwrap();
+        s.append_log("central", sid, LogKind::ToolUse, r#"↳ mcp__roblox__run {"x":1}"#).unwrap();
+        s.append_log("central", sid, LogKind::AssistantText, "Skill mention in text").unwrap();
+        s.append_log("central", sid, LogKind::ToolUse, r#"mcpish {"x":1}"#).unwrap();
+        let uses = s.tool_uses("central", "2000-01-01T00:00:00Z", None, 100).unwrap();
+        assert_eq!(uses.len(), 2);
+        assert!(uses[1].text.contains("mcp__roblox__run"));
+        assert!(s.tool_uses("central", "2999-01-01T00:00:00Z", None, 100).unwrap().is_empty());
     }
 
     #[test]

@@ -1,4 +1,6 @@
 import { Infer, ObjectType, v } from 'convex/values';
+import { isNexusPlayer } from './nexusInputs';
+import { NEXUS_SKIN_PREFIX } from '../../data/nexusSkins';
 import { Point, Vector, path, point, vector } from '../util/types';
 import { GameId, parseGameId } from './ids';
 import { playerId } from './ids';
@@ -82,7 +84,8 @@ export class Player {
   }
 
   tick(game: Game, now: number) {
-    if (this.human && this.lastInput < now - HUMAN_IDLE_TOO_LONG) {
+    // NEXUS: characters of real agents stay while NEXUS keeps them in sync.
+    if (this.human && !isNexusPlayer(this.human) && this.lastInput < now - HUMAN_IDLE_TOO_LONG) {
       this.leave(game, now);
     }
   }
@@ -209,7 +212,8 @@ export class Player {
       { dx: 0, dy: -1 },
     ];
     const facing = facingOptions[Math.floor(Math.random() * facingOptions.length)];
-    if (!characters.find((c) => c.name === character)) {
+    // NEXUS: custom skins imported in NEXUS are resolved by the frontend.
+    if (!characters.find((c) => c.name === character) && !character.startsWith(NEXUS_SKIN_PREFIX)) {
       throw new Error(`Invalid character: ${character}`);
     }
     const playerId = game.allocId('players');

@@ -294,7 +294,7 @@ pub async fn claude_plugin_set_enabled(state: State<'_, AppState>, id: String, e
 
 // ---------------------------------------------------------------- skills
 
-async fn skill_roots(state: &AppState) -> CmdResult<SkillRoots> {
+pub(crate) async fn skill_roots(state: &AppState) -> CmdResult<SkillRoots> {
     let project = state.orch().await.ok().map(|o| o.store.root().to_path_buf());
     let exe = claude().ok();
     let plugins: Vec<Value> = match exe {

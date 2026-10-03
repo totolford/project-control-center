@@ -10,6 +10,7 @@ import { useHistoricalValue } from '../hooks/useHistoricalValue.ts';
 import { PlayerDescription } from '../../convex/aiTown/playerDescription.ts';
 import { WorldMap } from '../../convex/aiTown/worldMap.ts';
 import { ServerGame } from '../hooks/serverGame.ts';
+import type { NexusDecorator } from '../nexus/NexusLayer.tsx';
 
 export type SelectElement = (element?: { kind: 'player'; id: GameId<'players'> }) => void;
 
@@ -21,6 +22,7 @@ export const Player = ({
   player,
   onClick,
   historicalTime,
+  nexus,
 }: {
   game: ServerGame;
   isViewer: boolean;
@@ -28,12 +30,17 @@ export const Player = ({
 
   onClick: SelectElement;
   historicalTime?: number;
+  // NEXUS: imported skins, label, status and bubbles of real NEXUS agents.
+  nexus?: NexusDecorator;
 }) => {
   const playerCharacter = game.playerDescriptions.get(player.id)?.character;
   if (!playerCharacter) {
     throw new Error(`Player ${player.id} has no character`);
   }
-  const character = characters.find((c) => c.name === playerCharacter);
+  // NEXUS: also resolves skins imported in NEXUS (`nexus-skin:<name>`).
+  const character = nexus
+    ? nexus.resolve(playerCharacter)
+    : characters.find((c) => c.name === playerCharacter);
 
   const locationBuffer = game.world.historicalLocations?.get(player.id);
   const historicalLocation = useHistoricalValue<Location>(
@@ -43,7 +50,8 @@ export const Player = ({
     locationBuffer,
   );
   if (!character) {
-    if (!logged.has(playerCharacter)) {
+    // NEXUS: an imported skin may still be loading; no toast when embedded.
+    if (!logged.has(playerCharacter) && !nexus) {
       logged.add(playerCharacter);
       toast.error(`Unknown character ${playerCharacter}`);
     }
@@ -64,6 +72,12 @@ export const Player = ({
     );
   const tileDim = game.worldMap.tileDim;
   const historicalFacing = { dx: historicalLocation.dx, dy: historicalLocation.dy };
+  // NEXUS: decorations of a real NEXUS agent (null for other players).
+  const deco = nexus?.decorate(
+    player.id,
+    historicalLocation.x * tileDim + tileDim / 2,
+    historicalLocation.y * tileDim + tileDim / 2,
+  );
   return (
     <>
       <Character
@@ -74,10 +88,13 @@ export const Player = ({
         isThinking={isThinking}
         isSpeaking={isSpeaking}
         emoji={
-          player.activity && player.activity.until > (historicalTime ?? Date.now())
+          // NEXUS: the overlay shows the status emoji of NEXUS agents.
+          !deco && player.activity && player.activity.until > (historicalTime ?? Date.now())
             ? player.activity?.emoji
             : undefined
         }
+        tint={deco?.tint}
+        underlay={deco?.underlay}
         isViewer={isViewer}
         textureUrl={character.textureUrl}
         spritesheetData={character.spritesheetData}
@@ -85,7 +102,9 @@ export const Player = ({
         onClick={() => {
           onClick({ kind: 'player', id: player.id });
         }}
-      />
+      >
+        {deco?.overlay}
+      </Character>
     </>
   );
 };

@@ -10,6 +10,11 @@ import { ConvexReactClient, ConvexProvider } from 'convex/react';
  * We use localStorage so that individual users stay on the same instance.
  */
 function convexUrl(): string {
+  // NEXUS: the local deployment URL is passed by NEXUS when embedded.
+  const embedded = new URLSearchParams(window.location.search).get('convex');
+  if (embedded) {
+    return embedded;
+  }
   const url = import.meta.env.VITE_CONVEX_URL as string;
   if (!url) {
     throw new Error('Couldn’t find the Convex deployment URL.');

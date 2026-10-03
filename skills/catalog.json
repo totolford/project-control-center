@@ -1,0 +1,976 @@
+{
+  "schema": 1,
+  "description": "NEXUS skill catalog. Entries point at real repositories, verified with `gh api` at the commit in securityMetadata.verifiedCommit. tags and featured are NEXUS curation; every other field is read from the repository. Third-party entries are not endorsed by Anthropic or NEXUS.",
+  "generatedAt": "2026-10-02T13:46:39Z",
+  "entries": [
+    {
+      "id": "ui-ux-pro-max",
+      "name": "ui-ux-pro-max",
+      "description": "Professional UI/UX design intelligence for AI coding assistants. Includes searchable databases of styles, colors, typography, charts, and UX guidelines for React, Next.js, Astro, Vue, Nuxt.js, Nuxt UI, Svelte, SwiftUI, React Native, Flutter, Tailwind, shadcn/ui, Jetpack Compose, Angular, Laravel, JavaFX, and Three.js.",
+      "author": "nextlevelbuilder",
+      "source": "claude-plugin",
+      "repository": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "path": "",
+      "version": "2.13.0",
+      "license": "MIT",
+      "tags": [
+        "ui",
+        "ux",
+        "design",
+        "design-system",
+        "styling",
+        "tailwind",
+        "accessibility"
+      ],
+      "featured": true,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "ui-ux-pro-max",
+        "marketplace": "ui-ux-pro-max-skill",
+        "marketplaceRepo": "nextlevelbuilder/ui-ux-pro-max-skill",
+        "skills": [
+          ".claude/skills/banner-design",
+          ".claude/skills/brand",
+          ".claude/skills/design",
+          ".claude/skills/design-system",
+          ".claude/skills/slides",
+          ".claude/skills/ui-styling",
+          ".claude/skills/ui-ux-pro-max"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "09170eec67eefd46a7ae85de61b40c194020f997",
+        "reviewedByNexus": false,
+        "files": 682,
+        "bytes": 21840310,
+        "scripts": [
+          ".claude/skills/brand/scripts/extract-colors.cjs",
+          ".claude/skills/brand/scripts/inject-brand-context.cjs",
+          ".claude/skills/brand/scripts/sync-brand-to-tokens.cjs",
+          ".claude/skills/brand/scripts/tests/test_sync_brand_to_tokens.py",
+          ".claude/skills/brand/scripts/validate-asset.cjs",
+          ".claude/skills/design-system/scripts/embed-tokens.cjs",
+          ".claude/skills/design-system/scripts/fetch-background.py",
+          ".claude/skills/design-system/scripts/generate-slide.py",
+          ".claude/skills/design-system/scripts/generate-tokens.cjs",
+          ".claude/skills/design-system/scripts/html-token-validator.py",
+          ".claude/skills/design-system/scripts/search-slides.py",
+          ".claude/skills/design-system/scripts/slide-token-validator.py",
+          ".claude/skills/design-system/scripts/slide_search_core.py",
+          ".claude/skills/design-system/scripts/tests/test_validate_tokens.py",
+          ".claude/skills/design-system/scripts/validate-tokens.cjs",
+          ".claude/skills/design/scripts/cip/core.py",
+          ".claude/skills/design/scripts/cip/generate.py",
+          ".claude/skills/design/scripts/cip/render-html.py",
+          ".claude/skills/design/scripts/cip/search.py",
+          ".claude/skills/design/scripts/icon/generate.py"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "anthropic-document-skills",
+      "name": "document-skills",
+      "description": "Collection of document processing suite including Excel, Word, PowerPoint, and PDF capabilities",
+      "author": "Keith Lazuka",
+      "source": "claude-plugin",
+      "repository": "anthropics/skills",
+      "path": "",
+      "version": null,
+      "license": null,
+      "tags": [
+        "documents",
+        "pdf",
+        "docx",
+        "xlsx",
+        "pptx",
+        "office"
+      ],
+      "featured": true,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "document-skills",
+        "marketplace": "anthropic-agent-skills",
+        "marketplaceRepo": "anthropics/skills",
+        "skills": [
+          "skills/xlsx",
+          "skills/docx",
+          "skills/pptx",
+          "skills/pdf"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4",
+        "reviewedByNexus": false,
+        "files": 430,
+        "bytes": 11670272,
+        "scripts": [
+          "skills/algorithmic-art/templates/generator_template.js",
+          "skills/claude-api/shared/evals/report/build-report-lite.mjs",
+          "skills/claude-api/shared/evals/report/runner-scaffold.mjs",
+          "skills/claude-api/shared/preserved-thinking-migration/drop_block_probe.py",
+          "skills/claude-api/shared/preserved-thinking-migration/prefix_diff.py",
+          "skills/docx/scripts/__init__.py",
+          "skills/docx/scripts/accept_changes.py",
+          "skills/docx/scripts/comment.py",
+          "skills/docx/scripts/merge_runs.py",
+          "skills/docx/scripts/office/helpers/__init__.py",
+          "skills/docx/scripts/office/helpers/pptx_chart.py",
+          "skills/docx/scripts/office/helpers/pptx_slide.py",
+          "skills/docx/scripts/office/helpers/pptx_theme.py",
+          "skills/docx/scripts/office/soffice.py",
+          "skills/docx/scripts/office/validate.py",
+          "skills/docx/scripts/office/validators/__init__.py",
+          "skills/docx/scripts/office/validators/base.py",
+          "skills/docx/scripts/office/validators/docx.py",
+          "skills/docx/scripts/office/validators/pptx.py",
+          "skills/docx/scripts/office/validators/redlining.py"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "anthropic-example-skills",
+      "name": "example-skills",
+      "description": "Collection of example skills demonstrating various capabilities including skill creation, MCP building, visual design, algorithmic art, internal communications, web testing, artifact building, Slack GIFs, and theme styling",
+      "author": "Keith Lazuka",
+      "source": "claude-plugin",
+      "repository": "anthropics/skills",
+      "path": "",
+      "version": null,
+      "license": null,
+      "tags": [
+        "design",
+        "frontend",
+        "testing",
+        "mcp",
+        "skills",
+        "art",
+        "branding"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "example-skills",
+        "marketplace": "anthropic-agent-skills",
+        "marketplaceRepo": "anthropics/skills",
+        "skills": [
+          "skills/algorithmic-art",
+          "skills/brand-guidelines",
+          "skills/canvas-design",
+          "skills/doc-coauthoring",
+          "skills/frontend-design",
+          "skills/internal-comms",
+          "skills/mcp-builder",
+          "skills/skill-creator",
+          "skills/slack-gif-creator",
+          "skills/theme-factory",
+          "skills/web-artifacts-builder",
+          "skills/webapp-testing"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4",
+        "reviewedByNexus": false,
+        "files": 430,
+        "bytes": 11670272,
+        "scripts": [
+          "skills/algorithmic-art/templates/generator_template.js",
+          "skills/claude-api/shared/evals/report/build-report-lite.mjs",
+          "skills/claude-api/shared/evals/report/runner-scaffold.mjs",
+          "skills/claude-api/shared/preserved-thinking-migration/drop_block_probe.py",
+          "skills/claude-api/shared/preserved-thinking-migration/prefix_diff.py",
+          "skills/docx/scripts/__init__.py",
+          "skills/docx/scripts/accept_changes.py",
+          "skills/docx/scripts/comment.py",
+          "skills/docx/scripts/merge_runs.py",
+          "skills/docx/scripts/office/helpers/__init__.py",
+          "skills/docx/scripts/office/helpers/pptx_chart.py",
+          "skills/docx/scripts/office/helpers/pptx_slide.py",
+          "skills/docx/scripts/office/helpers/pptx_theme.py",
+          "skills/docx/scripts/office/soffice.py",
+          "skills/docx/scripts/office/validate.py",
+          "skills/docx/scripts/office/validators/__init__.py",
+          "skills/docx/scripts/office/validators/base.py",
+          "skills/docx/scripts/office/validators/docx.py",
+          "skills/docx/scripts/office/validators/pptx.py",
+          "skills/docx/scripts/office/validators/redlining.py"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "anthropic-claude-api",
+      "name": "claude-api",
+      "description": "Claude API and SDK documentation skill for building LLM-powered applications",
+      "author": "Keith Lazuka",
+      "source": "claude-plugin",
+      "repository": "anthropics/skills",
+      "path": "",
+      "version": null,
+      "license": null,
+      "tags": [
+        "ai",
+        "llm",
+        "claude",
+        "api",
+        "sdk"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "claude-api",
+        "marketplace": "anthropic-agent-skills",
+        "marketplaceRepo": "anthropics/skills",
+        "skills": [
+          "skills/claude-api"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4",
+        "reviewedByNexus": false,
+        "files": 430,
+        "bytes": 11670272,
+        "scripts": [
+          "skills/algorithmic-art/templates/generator_template.js",
+          "skills/claude-api/shared/evals/report/build-report-lite.mjs",
+          "skills/claude-api/shared/evals/report/runner-scaffold.mjs",
+          "skills/claude-api/shared/preserved-thinking-migration/drop_block_probe.py",
+          "skills/claude-api/shared/preserved-thinking-migration/prefix_diff.py",
+          "skills/docx/scripts/__init__.py",
+          "skills/docx/scripts/accept_changes.py",
+          "skills/docx/scripts/comment.py",
+          "skills/docx/scripts/merge_runs.py",
+          "skills/docx/scripts/office/helpers/__init__.py",
+          "skills/docx/scripts/office/helpers/pptx_chart.py",
+          "skills/docx/scripts/office/helpers/pptx_slide.py",
+          "skills/docx/scripts/office/helpers/pptx_theme.py",
+          "skills/docx/scripts/office/soffice.py",
+          "skills/docx/scripts/office/validate.py",
+          "skills/docx/scripts/office/validators/__init__.py",
+          "skills/docx/scripts/office/validators/base.py",
+          "skills/docx/scripts/office/validators/docx.py",
+          "skills/docx/scripts/office/validators/pptx.py",
+          "skills/docx/scripts/office/validators/redlining.py"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "frontend-design",
+      "name": "frontend-design",
+      "description": "Create distinctive, production-grade frontend interfaces with high design quality. Generates creative, polished code that avoids generic AI aesthetics.",
+      "author": "Anthropic",
+      "source": "claude-plugin",
+      "repository": "anthropics/claude-plugins-official",
+      "path": "plugins/frontend-design",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "ui",
+        "frontend",
+        "design",
+        "web"
+      ],
+      "featured": true,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "frontend-design",
+        "marketplace": "claude-plugins-official",
+        "marketplaceRepo": "anthropics/claude-plugins-official",
+        "skills": [
+          "skills/frontend-design"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "ab024cdcfa7ca80be204acd4907656ba5a968589",
+        "reviewedByNexus": false,
+        "files": 5,
+        "bytes": 32079,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "superpowers",
+      "name": "superpowers",
+      "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
+      "author": "Jesse Vincent",
+      "source": "claude-plugin",
+      "repository": "obra/superpowers",
+      "path": "",
+      "version": "6.4.2",
+      "license": "MIT",
+      "tags": [
+        "coding",
+        "tdd",
+        "testing",
+        "debugging",
+        "git",
+        "planning",
+        "code-review"
+      ],
+      "featured": true,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "superpowers",
+        "marketplace": "superpowers-dev",
+        "marketplaceRepo": "obra/superpowers",
+        "skills": [
+          "skills/brainstorming",
+          "skills/diagnosing-superpowers",
+          "skills/dispatching-parallel-agents",
+          "skills/executing-plans",
+          "skills/finishing-a-development-branch",
+          "skills/receiving-code-review",
+          "skills/requesting-code-review",
+          "skills/subagent-driven-development",
+          "skills/systematic-debugging",
+          "skills/test-driven-development",
+          "skills/using-git-worktrees",
+          "skills/using-superpowers",
+          "skills/verification-before-completion",
+          "skills/writing-plans",
+          "skills/writing-skills"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "8ca22dba9a94f28898bbce59f2537ff4d87c747d",
+        "reviewedByNexus": false,
+        "files": 229,
+        "bytes": 1974678,
+        "scripts": [
+          ".hermes-plugin/__init__.py",
+          ".opencode/plugins/superpowers.js",
+          ".pi/extensions/superpowers.ts",
+          "hooks/run-hook.cmd",
+          "index.js",
+          "scripts/bump-version.sh",
+          "scripts/lint-shell.sh",
+          "scripts/package-codex-plugin.sh",
+          "scripts/sync-to-codex-plugin.sh",
+          "skills/brainstorming/scripts/helper.js",
+          "skills/brainstorming/scripts/server.cjs",
+          "skills/brainstorming/scripts/start-server.sh",
+          "skills/brainstorming/scripts/stop-server.sh",
+          "skills/systematic-debugging/condition-based-waiting-example.ts",
+          "skills/systematic-debugging/find-polluter.sh",
+          "skills/writing-skills/render-graphs.js",
+          "tests/antigravity/run-tests.sh",
+          "tests/antigravity/test-antigravity-tools.sh",
+          "tests/brainstorm-server/auth.test.js",
+          "tests/brainstorm-server/branding.test.js"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "trailofbits-audit-context-building",
+      "name": "audit-context-building",
+      "description": "Understand a codebase before looking for bugs in it. Reads it function by function, records what each one assumes and depends on, and saves the write-ups to files instead of filling up the conversation.",
+      "author": "Omar Inuwa",
+      "source": "claude-plugin",
+      "repository": "trailofbits/skills",
+      "path": "plugins/audit-context-building",
+      "version": "2.0.2",
+      "license": "CC-BY-SA-4.0",
+      "tags": [
+        "security",
+        "audit",
+        "code-review"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "audit-context-building",
+        "marketplace": "trailofbits",
+        "marketplaceRepo": "trailofbits/skills",
+        "skills": [
+          "skills/audit-context-building"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "82fe8226252622fa807643bdca1710901198553a",
+        "reviewedByNexus": false,
+        "files": 37,
+        "bytes": 77835,
+        "scripts": [
+          "workflows/audit-context.js"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "trailofbits-differential-review",
+      "name": "differential-review",
+      "description": "Security-focused differential review of code changes with git history analysis and blast radius estimation",
+      "author": "Omar Inuwa",
+      "source": "claude-plugin",
+      "repository": "trailofbits/skills",
+      "path": "plugins/differential-review",
+      "version": "1.1.4",
+      "license": "CC-BY-SA-4.0",
+      "tags": [
+        "security",
+        "code-review",
+        "git",
+        "diff"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "differential-review",
+        "marketplace": "trailofbits",
+        "marketplaceRepo": "trailofbits/skills",
+        "skills": [
+          "skills/differential-review"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "82fe8226252622fa807643bdca1710901198553a",
+        "reviewedByNexus": false,
+        "files": 11,
+        "bytes": 47640,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "trailofbits-building-secure-contracts",
+      "name": "building-secure-contracts",
+      "description": "Comprehensive smart contract security toolkit based on Trail of Bits' Building Secure Contracts framework. Includes vulnerability scanners for 6 blockchains and 5 development guideline assistants.",
+      "author": "Omar Inuwa && Paweł Płatek",
+      "source": "claude-plugin",
+      "repository": "trailofbits/skills",
+      "path": "plugins/building-secure-contracts",
+      "version": "1.2.2",
+      "license": "CC-BY-SA-4.0",
+      "tags": [
+        "security",
+        "smart-contracts",
+        "blockchain"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "plugin",
+      "plugin": {
+        "name": "building-secure-contracts",
+        "marketplace": "trailofbits",
+        "marketplaceRepo": "trailofbits/skills",
+        "skills": [
+          "skills/algorand-vulnerability-scanner",
+          "skills/audit-prep-assistant",
+          "skills/cairo-vulnerability-scanner",
+          "skills/code-maturity-assessor",
+          "skills/cosmos-vulnerability-scanner",
+          "skills/guidelines-advisor",
+          "skills/secure-workflow-guide",
+          "skills/solana-vulnerability-scanner",
+          "skills/substrate-vulnerability-scanner",
+          "skills/token-integration-analyzer",
+          "skills/ton-vulnerability-scanner"
+        ]
+      },
+      "compatibility": "Claude Code plugin (claude plugin install)",
+      "securityMetadata": {
+        "verifiedCommit": "82fe8226252622fa807643bdca1710901198553a",
+        "reviewedByNexus": false,
+        "files": 58,
+        "bytes": 471937,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "vercel-react-best-practices",
+      "name": "vercel-react-best-practices",
+      "description": "React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns. Triggers on tasks involving React components, Next.js pages, data fetching, bundle optimization, or performance improvements.",
+      "author": "vercel",
+      "source": "github",
+      "repository": "vercel-labs/agent-skills",
+      "path": "skills/react-best-practices",
+      "version": "1.0.0",
+      "license": "MIT",
+      "tags": [
+        "web",
+        "react",
+        "nextjs",
+        "performance",
+        "coding"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+        "reviewedByNexus": false,
+        "files": 76,
+        "bytes": 230383,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "vercel-web-design-guidelines",
+      "name": "web-design-guidelines",
+      "description": "Review UI code for Web Interface Guidelines compliance. Use when asked to \"review my UI\", \"check accessibility\", \"audit design\", \"review UX\", or \"check my site against best practices\".",
+      "author": "vercel",
+      "source": "github",
+      "repository": "vercel-labs/agent-skills",
+      "path": "skills/web-design-guidelines",
+      "version": "1.0.0",
+      "license": null,
+      "tags": [
+        "web",
+        "ui",
+        "ux",
+        "accessibility",
+        "review"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+        "reviewedByNexus": false,
+        "files": 1,
+        "bytes": 1231,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "vercel-deploy-to-vercel",
+      "name": "deploy-to-vercel",
+      "description": "Deploy applications and websites to Vercel. Use when the user requests deployment actions like \"deploy my app\", \"deploy and give me the link\", \"push this live\", or \"create a preview deployment\".",
+      "author": "vercel",
+      "source": "github",
+      "repository": "vercel-labs/agent-skills",
+      "path": "skills/deploy-to-vercel",
+      "version": "3.0.0",
+      "license": null,
+      "tags": [
+        "web",
+        "devops",
+        "deployment",
+        "hosting"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+        "reviewedByNexus": false,
+        "files": 4,
+        "bytes": 40796,
+        "scripts": [
+          "resources/deploy-codex.sh",
+          "resources/deploy.sh"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-roblox-luau",
+      "name": "roblox-luau",
+      "description": "Script a Roblox experience in Luau: get services, create and parent Instances, connect events, run server Scripts vs client LocalScripts, and communicate across the client/server boundary with RemoteEvents/RemoteFunctions (server-authoritative). Use when building or debugging Roblox Studio scripts — when the user mentions Roblox, Luau, services, RemoteEvent, Instance.new, PlayerAdded, or client vs server. For saving player data use roblox-datastores.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/other-engines/roblox-luau",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "roblox",
+        "luau",
+        "game-development"
+      ],
+      "featured": true,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 2,
+        "bytes": 13609,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-roblox-ui",
+      "name": "roblox-ui",
+      "description": "Build production Roblox interfaces with ScreenGui/PlayerGui lifecycle, responsive UDim2 layouts, safe insets, reusable editable Instances, cross-device input and selection, restrained motion, cleanup, and multi-viewport verification. Use for Roblox HUDs, inventories, shops, settings, ability bars, ScrollingFrames, AutomaticSize, GuiService, gamepad focus, touch UI, or UI that clips, resets on respawn, looks generic, or was generated as one giant LocalScript.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/other-engines/roblox-ui",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "roblox",
+        "ui",
+        "game-development"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 6,
+        "bytes": 35562,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-roblox-datastores",
+      "name": "roblox-datastores",
+      "description": "Persist player data in Roblox with DataStoreService: GetDataStore, GetAsync/ SetAsync/UpdateAsync/IncrementAsync wrapped in pcall, load-on-join and save-on-leave plus BindToClose, retries, and OrderedDataStore leaderboards. Use when saving or loading persistent data in a Roblox experience — when the user mentions DataStore, DataStoreService, GetAsync, SetAsync, UpdateAsync, save player data, or leaderboards. For general Luau scripting use roblox-luau.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/other-engines/roblox-datastores",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "roblox",
+        "data",
+        "game-development"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 2,
+        "bytes": 13222,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-roblox-networking",
+      "name": "roblox-networking",
+      "description": "Design and harden Roblox client/server networking with RemoteEvent, RemoteFunction, and UnreliableRemoteEvent; server authority, argument and Instance validation, rate limits, proximity/ownership checks, targeted replication, streaming, lifecycle, prediction, and reconciliation. Use for Roblox remotes, exploits, request spam, multiplayer replication, network ownership, high-frequency cosmetic updates, or server/client desynchronization.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/other-engines/roblox-networking",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "roblox",
+        "networking",
+        "multiplayer",
+        "game-development"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 3,
+        "bytes": 12808,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "nevermore-strict-typing-luau",
+      "name": "strict-typing-luau",
+      "description": "Convert a Nevermore Luau file from --!nonstrict (or untyped/--!nocheck) to --!strict, adding the project's explicit type annotations and fixing every type error the checker reports. Use this whenever the user asks to \"strictly type\", \"add types to\", \"make strict\", \"type-annotate\", \"convert to --!strict\", or clean up the typing on a .lua/.luau file in this repo — including when they just select a file with a `--!nonstrict` header and say \"type this\" or point you at a legacy module. Also use it when a strict file is throwing luau-lsp type errors and the user wants them resolved following Nevermore conventions.",
+      "author": "Quenty",
+      "source": "github",
+      "repository": "Quenty/NevermoreEngine",
+      "path": "tools/nevermore-claude/skills/strict-typing-luau",
+      "version": null,
+      "license": "MIT",
+      "tags": [
+        "roblox",
+        "luau",
+        "typing",
+        "coding"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "de6ba8b56a04f9f1e423c94a88095653a0207817",
+        "reviewedByNexus": false,
+        "files": 18,
+        "bytes": 86161,
+        "scripts": [
+          "evals/lib/convert.sh",
+          "evals/lib/judge.js",
+          "evals/lib/judge.sh",
+          "evals/lib/parallelism.js",
+          "evals/lib/plan.js",
+          "evals/lib/routing.js",
+          "evals/lib/run.sh",
+          "evals/lib/score.sh",
+          "evals/lib/tooling.js",
+          "evals/lib/triggers.js"
+        ],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-godot-gdscript",
+      "name": "godot-gdscript",
+      "description": "Write idiomatic GDScript for Godot 4.7: static typing, the node lifecycle (_ready/_process/_physics_process), @export/@onready/@tool annotations, signals, and await for asynchronous flow. Use when editing .gd scripts in a Godot project (project.godot), writing or debugging GDScript, or porting 3.x GDScript to 4.x (function signatures, yield to await, export to @export).",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/godot/godot-gdscript",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "godot",
+        "gdscript",
+        "game-development"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 2,
+        "bytes": 8645,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-godot-3d-essentials",
+      "name": "godot-3d-essentials",
+      "description": "Set up a Godot 4.7 3D scene: Node3D transforms, Camera3D, lighting (DirectionalLight3D/OmniLight3D), WorldEnvironment for sky/ambient/tonemap/post, MeshInstance3D materials, and GridMap for tile-based 3D levels. Use when building a 3D scene in a Godot project, placing cameras/lights, configuring environment and post-processing, or working with Node3D/.tscn 3D content and GridMap.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/godot/godot-3d-essentials",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "godot",
+        "3d",
+        "game-development"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 2,
+        "bytes": 9582,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-shader-programming",
+      "name": "shader-programming",
+      "description": "Write game shaders from cross-engine fundamentals — the vertex→fragment pipeline, coordinate spaces, UV math, and common 2D/3D effects (tint, UV scroll, dissolve, outline, fresnel rim, vignette) in GLSL with HLSL equivalents. Use when the user mentions shaders, fragment/pixel shader, vertex shader, UV, GLSL, HLSL, or effects like dissolve, outline, or rim light.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/disciplines/shader-programming",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "shaders",
+        "3d",
+        "graphics",
+        "game-development"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 2,
+        "bytes": 11943,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "gamedev-game-feel",
+      "name": "game-feel",
+      "description": "Add \"juice\" and game feel that makes actions satisfying — screen shake, hit-stop/freeze frames, tweened/eased motion, squash & stretch, knockback, and layered audio-visual feedback — as engine-neutral techniques that pair with the detected engine's tween, particle, and camera APIs. Use when the user mentions game feel, juice, \"make it feel good/punchy\", screen shake, hit stop, screen freeze, easing, squash and stretch, impact frames, or feedback/polish on hits, jumps, pickups, and deaths.",
+      "author": "gamedev-skills",
+      "source": "github",
+      "repository": "gamedev-skills/awesome-gamedev-agent-skills",
+      "path": "skills/disciplines/game-feel",
+      "version": null,
+      "license": "Apache-2.0",
+      "tags": [
+        "game-development",
+        "design",
+        "juice"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+        "reviewedByNexus": false,
+        "files": 2,
+        "bytes": 14528,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "timoni",
+      "name": "timoni",
+      "description": "Use when deploying applications to Kubernetes with Timoni. Covers installing and upgrading module instances from OCI registries, composing multi-app deployments with bundles, injecting values from clusters or CI with runtimes, targeting multiple clusters, and authoring, testing, signing and publishing modules with CUE.",
+      "author": "Stefan Prodan",
+      "source": "github",
+      "repository": "stefanprodan/timoni",
+      "path": "skills/timoni",
+      "version": "0.3.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "devops",
+        "kubernetes",
+        "cue",
+        "deployment"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "995401ec3e45829b519208d8340a09a6b88c20a3",
+        "reviewedByNexus": false,
+        "files": 1,
+        "bytes": 23111,
+        "scripts": [],
+        "binaries": []
+      }
+    },
+    {
+      "id": "kubernetes-skill",
+      "name": "kubernetes-skill",
+      "description": "Prevent Kubernetes hallucinations by diagnosing and fixing failure modes: insecure workload defaults, resource starvation, network exposure, privilege sprawl, fragile rollouts, and API drift. Use when generating, reviewing, refactoring, or migrating manifests, Helm charts, Kustomize overlays, cluster policies, and platform-specific Kubernetes work for EKS, GKE, AKS, OpenShift, GitOps controllers, or observability stacks.",
+      "author": "LukasNiessen",
+      "source": "github",
+      "repository": "LukasNiessen/kubernetes-skill",
+      "path": "",
+      "version": null,
+      "license": "MIT",
+      "tags": [
+        "devops",
+        "kubernetes",
+        "infrastructure"
+      ],
+      "featured": false,
+      "dependencies": [],
+      "permissions": [],
+      "requiredMcp": [],
+      "installMethod": "github-skill",
+      "plugin": null,
+      "compatibility": "Claude Code (standalone skill folder in ~/.claude/skills or <project>/.claude/skills)",
+      "securityMetadata": {
+        "verifiedCommit": "34f93c1e409156958cc7c410ab1aa88ab512f10f",
+        "reviewedByNexus": false,
+        "files": 75,
+        "bytes": 2250022,
+        "scripts": [],
+        "binaries": []
+      }
+    }
+  ]
+}

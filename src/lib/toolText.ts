@@ -18,7 +18,7 @@ function basename(p: string): string {
 }
 
 /** Reads a string field from parsed JSON, or from truncated JSON text as a fallback. */
-function field(input: Record<string, unknown> | null, raw: string, key: string): string {
+export function field(input: Record<string, unknown> | null, raw: string, key: string): string {
   const v = input?.[key];
   if (typeof v === "string") return v;
   const m = raw.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`));

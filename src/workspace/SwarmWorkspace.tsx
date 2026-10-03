@@ -10,7 +10,6 @@ import { AddPanelMenu } from "./AddPanelMenu";
 import { PanelFrame } from "./PanelFrame";
 import { NodeView } from "./SplitView";
 import { useDrag, useWorkspace } from "./store";
-import { WorkspaceTabs } from "./WorkspaceTabs";
 
 const EDGE = 0.25;
 
@@ -70,25 +69,34 @@ function useEscapeRestores() {
   }, []);
 }
 
-/** The Swarm view: workspace tabs + the tiling layout of the active tab. */
+/** Swarm actions shown on the right of the center tab bar while a tiling tab is active. */
+export function SwarmTools() {
+  const railOpen = useUi((s) => s.railOpen);
+  const toggleRail = useUi((s) => s.toggleRail);
+  return (
+    <>
+      <AddAgentMenu />
+      <AddPanelMenu />
+      <button className="icon-btn" onClick={toggleRail} title={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"} aria-label={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"}>
+        {railOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+      </button>
+    </>
+  );
+}
+
+/** The Swarm view: the tiling layout of the active tab (the tab bar is the center's, see AppShell). */
 export function SwarmWorkspace() {
   const ws = useWorkspace((s) => s.ws);
   const railOpen = useUi((s) => s.railOpen);
-  const toggleRail = useUi((s) => s.toggleRail);
   usePanelDragging();
   useEscapeRestores();
   if (!ws) return <Loading text="Loading workspace…" />;
-  const tab = getActiveTab(ws);
+  // While a window tab is active (the center is switching), show the first tiling tab.
+  const active = getActiveTab(ws);
+  const tab = active.view ? (ws.tabs.find((t) => !t.view) ?? active) : active;
   const maximized = tab.maximized ? listPanels(tab.root).find((p) => p.id === tab.maximized) : undefined;
   return (
     <div className="swarm">
-      <WorkspaceTabs>
-        <AddAgentMenu />
-        <AddPanelMenu />
-        <button className="icon-btn" onClick={toggleRail} title={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"} aria-label={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"}>
-          {railOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-        </button>
-      </WorkspaceTabs>
       <div className="swarm-row">
         <div className="swarm-body">
           {maximized ? (

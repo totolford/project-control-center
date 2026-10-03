@@ -9,7 +9,7 @@ use pcc_core::{
 };
 use pcc_store::{MemoryScope, TaskFilter};
 
-use crate::dto::{AgentPatch, AgentSpec, TaskPatch, TaskSpec};
+use crate::dto::{AgentPatch, AgentSpec, MissionSpec, TaskPatch, TaskSpec};
 use crate::engine::{first_line, valid_agent_id, Engine};
 
 impl Engine {
@@ -214,6 +214,10 @@ impl Engine {
             updated_at: now,
             started_at: None,
             completed_at: None,
+            skills: spec
+                .skills
+                .map(|v| v.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+                .unwrap_or_default(),
         };
         self.store.upsert_task(&t)?;
         self.emit_task(EventKind::TaskCreated, &t, format!("{} created {}: {}", created_by, t.id, t.title));
@@ -456,38 +460,21 @@ impl Engine {
 
     // ------------------------------------------------------------ missions
 
+    /// Plain mission (composer, improvement cycle): queued when another one runs.
     pub fn create_mission(&mut self, prompt: &str, title: Option<String>) -> Result<Mission> {
-        self.ensure_not_emergency()?;
-        let prompt = prompt.trim();
-        if prompt.is_empty() {
-            return Err(Error::invalid("describe the mission"));
-        }
-        let now = pcc_core::now();
-        let m = Mission {
-            id: self.store.next_mission_id()?,
-            title: title.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| first_line(prompt, 80)),
-            prompt: prompt.into(),
-            status: MissionStatus::Planning,
-            summary: None,
-            created_at: now.clone(),
-            updated_at: now,
-            completed_at: None,
-        };
-        self.store.upsert_mission(&m)?;
-        self.emit_mission(EventKind::MissionCreated, &m.id, format!("Mission {} created: {}", m.id, m.title));
-        self.autopilot = true;
-        let body = format!(
-            "NEW MISSION {}\n\n{}\n\nPlan it: inspect what you need, create or reuse agents, then create tasks (mission_id \"{}\") with dependencies. Finish with complete_mission when everything is done and verified.",
-            m.id, m.prompt, m.id
-        );
-        self.wake(CENTRAL_ID)?;
-        self.post_message(pcc_core::USER_ID, CENTRAL_ID, pcc_core::MessageKind::User, &body, None, Some(m.id.clone()))?;
+        self.create_mission_from(MissionSpec { prompt: prompt.into(), title, ..Default::default() })
+    }
+
+    /// Closes a mission, then hands the next queued one to Central.
+    pub fn finish_mission(&mut self, id: &str, status: MissionStatus, summary: &str) -> Result<Mission> {
+        let m = self.close_mission(id, status, summary)?;
+        self.start_next_queued()?;
         Ok(m)
     }
 
-    pub fn finish_mission(&mut self, id: &str, status: MissionStatus, summary: &str) -> Result<Mission> {
+    fn close_mission(&mut self, id: &str, status: MissionStatus, summary: &str) -> Result<Mission> {
         let mut m = self.store.get_mission(id)?.ok_or_else(|| Error::not_found(format!("mission {id}")))?;
-        if matches!(m.status, MissionStatus::Completed | MissionStatus::Cancelled | MissionStatus::Failed) {
+        if m.status.is_closed() {
             return Err(Error::invalid(format!("{id} is already closed")));
         }
         if status == MissionStatus::Completed {
@@ -524,12 +511,18 @@ impl Engine {
                 )?;
             }
         }
-        self.finish_mission(id, MissionStatus::Cancelled, "Cancelled by the user.")?;
-        self.notify_central(
-            &format!("The user cancelled mission {id}; its open tasks were cancelled."),
-            None,
-            Some(id.into()),
-        )
+        let was_queued = self.store.get_mission(id)?.is_some_and(|m| m.status == MissionStatus::Queued);
+        self.close_mission(id, MissionStatus::Cancelled, "Cancelled by the user.")?;
+        // Central never received a queued mission: nothing to tell it.
+        if !was_queued {
+            self.notify_central(
+                &format!("The user cancelled mission {id}; its open tasks were cancelled."),
+                None,
+                Some(id.into()),
+            )?;
+        }
+        self.start_next_queued()?;
+        Ok(())
     }
 
     // ------------------------------------------------------------ memory

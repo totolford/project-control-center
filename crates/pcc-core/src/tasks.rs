@@ -107,6 +107,7 @@ mod tests {
             updated_at: String::new(),
             started_at: None,
             completed_at: None,
+            skills: vec![],
         }
     }
 

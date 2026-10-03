@@ -15,13 +15,13 @@ import { ConversionResult, StepReview } from "./StepReview";
 import { StepWorld } from "./StepWorld";
 
 interface Props {
-  /** "Make this project an AI Town": recommended defaults, straight to the review. */
+  /** One click: recommended defaults, straight to the review. */
   oneClick: boolean;
   onClose: () => void;
   onOpenWorld: (w: World) => void;
 }
 
-/** Convert → AI World: analysis, 5 steps and a review, then api.worldCreate. */
+/** Native world wizard: analysis, 5 steps and a review, then api.worldCreate. */
 export function ConversionWizard({ oneClick, onClose, onOpenWorld }: Props) {
   const projectName = useStore((s) => s.project?.info.name ?? "");
   const agents = useAgents();
@@ -57,7 +57,7 @@ export function ConversionWizard({ oneClick, onClose, onOpenWorld }: Props) {
     if (r) setReport(r);
   };
 
-  const title = report ? "AI World created" : oneClick && step === "review" ? "Make this project an AI Town" : "Convert → AI World";
+  const title = report ? "Native world created" : "Create the native 2D world";
 
   let body: React.ReactNode;
   if (loadError) body = <div className="notice notice-error">Cannot analyse the project: {loadError}</div>;

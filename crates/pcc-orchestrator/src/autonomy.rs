@@ -272,6 +272,16 @@ impl Engine {
 
     /// Called every minute: runs the improvement loop when it is due.
     pub fn tick(&mut self) -> Result<()> {
+        // Queued missions left behind (app closed, emergency released) start here.
+        if !self.store.read_only() {
+            if let Err(err) = self.start_next_queued() {
+                self.emit(pcc_core::Event::new(
+                    pcc_core::EventKind::Error,
+                    format!("Queued mission not started: {err}"),
+                    serde_json::Value::Null,
+                ));
+            }
+        }
         let s = self.store.settings().improvement;
         if !s.enabled || self.emergency {
             return Ok(());

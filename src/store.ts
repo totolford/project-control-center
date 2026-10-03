@@ -38,6 +38,7 @@ export type ViewName =
   | "github"
   | "master"
   | "world"
+  | "market"
   | "settings";
 
 export interface View {

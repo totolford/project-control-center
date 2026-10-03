@@ -25,7 +25,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm run install:ai-town
 
       - name: Check version matches tag
         if: startsWith(github.ref, 'refs/tags/v')

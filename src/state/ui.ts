@@ -4,8 +4,6 @@ import { create } from "zustand";
 import { isBool, readPref, writePref } from "../lib/prefs";
 import type { Message } from "../lib/types";
 
-export type ComposerMode = "mission" | "central" | "command";
-
 export type Dialog = { type: "newAgent"; provider: string } | { type: "addConnection" } | null;
 
 interface UiState {
@@ -21,8 +19,10 @@ interface UiState {
   navCollapsed: boolean;
   /** CONTROL rail of the Swarm view is shown (remembered per machine). */
   railOpen: boolean;
-  /** Bottom composer mode (the command bar can switch it). */
-  composerMode: ComposerMode;
+  /** The Missions view opens its "+ New Mission" flow (read and cleared by src/views/missions). */
+  newMission: boolean;
+  /** Objective typed in the command bar (/mission <text>) to prefill New Mission; "" when none. */
+  newMissionText: string;
   /** User-request cards are folded into a single pill (they come back when a new request arrives). */
   requestsCollapsed: boolean;
   /** Explanation shown once on the welcome screen (e.g. after a rollback closed the project). */
@@ -37,7 +37,8 @@ interface UiState {
   openDialog: (d: Dialog) => void;
   toggleNav: () => void;
   toggleRail: () => void;
-  setComposerMode: (mode: ComposerMode) => void;
+  /** Opens (text = prefill) or clears the New Mission request. */
+  setNewMission: (open: boolean, text?: string) => void;
   setRequestsCollapsed: (collapsed: boolean) => void;
   setWelcomeNotice: (text: string | null) => void;
   setAiWorldWizard: (open: boolean) => void;
@@ -52,7 +53,8 @@ export const useUi = create<UiState>((set) => ({
   dialog: null,
   navCollapsed: readPref("navCollapsed", false, isBool),
   railOpen: readPref("railOpen", true, isBool),
-  composerMode: "mission",
+  newMission: false,
+  newMissionText: "",
   requestsCollapsed: false,
   welcomeNotice: null,
   aiWorldWizard: false,
@@ -72,7 +74,7 @@ export const useUi = create<UiState>((set) => ({
       writePref("railOpen", !s.railOpen);
       return { railOpen: !s.railOpen };
     }),
-  setComposerMode: (composerMode) => set({ composerMode }),
+  setNewMission: (newMission, text = "") => set({ newMission, newMissionText: newMission ? text : "" }),
   setRequestsCollapsed: (requestsCollapsed) => set({ requestsCollapsed }),
   setWelcomeNotice: (welcomeNotice) => set({ welcomeNotice }),
   setAiWorldWizard: (aiWorldWizard) => set({ aiWorldWizard }),

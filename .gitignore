@@ -8,3 +8,9 @@ dist-installer/
 .vscode/*
 !.vscode/extensions.json
 *.tsbuildinfo
+
+# AI Town sync backups
+ai-town-backup-*/
+
+# Built AI Town frontend (npm run build:ai-town)
+public/ai-town/

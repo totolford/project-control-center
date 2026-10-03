@@ -1,5 +1,8 @@
-// Pure tiling-layout model for the Swarm workspace: layout tree and workspace/tab operations.
+// Pure model of the center workspace: tabs that either tile panels (layout tree) or show one full
+// view ("window" tabs: AI World, an agent, GitHub…), and the workspace/tab operations.
 // Default layout and validation of saved layouts live in layoutPersist.ts.
+
+import type { ViewName } from "../store";
 
 export type PanelType =
   | "AgentTerminal"
@@ -64,15 +67,26 @@ export interface SplitNode {
 
 export type LayoutNode = PanelNode | SplitNode;
 
+/** What a window tab shows: a main view and its selection (mirrors `View` in store.ts). */
+export interface TabView {
+  name: ViewName;
+  agentId?: string;
+  taskId?: string;
+  section?: string;
+}
+
 export interface WorkspaceTab {
   id: string;
   title: string;
+  /** Tiling tabs only (window tabs keep null). */
   root: LayoutNode | null;
   maximized?: string;
+  /** Window tab: shows this view instead of a tiling layout. */
+  view?: TabView;
 }
 
 export interface Workspace {
-  version: 1;
+  version: 2;
   activeTab: string;
   tabs: WorkspaceTab[];
   /** Add a terminal panel automatically when a new agent appears. */
@@ -260,11 +274,11 @@ export function addTab(ws: Workspace, root: LayoutNode | null = null, title?: st
   return { ...ws, tabs: [...ws.tabs, tab], activeTab: tab.id };
 }
 
-/** Closes a tab; pinned panels keep the tab open. The last tab is emptied instead of removed. */
+/** Closes a tab; pinned panels keep the tab open. The last tab is emptied instead of removed (a last window tab stays). */
 export function closeTab(ws: Workspace, tabId: string): Workspace {
   const tab = ws.tabs.find((t) => t.id === tabId);
   if (!tab || listPanels(tab.root).some((p) => p.pinned)) return ws;
-  if (ws.tabs.length === 1) return withTab(ws, tabId, (t) => withRoot(t, null));
+  if (ws.tabs.length === 1) return tab.view ? ws : withTab(ws, tabId, (t) => withRoot(t, null));
   const idx = ws.tabs.indexOf(tab);
   const tabs = ws.tabs.filter((t) => t.id !== tabId);
   const activeTab = ws.activeTab === tabId ? tabs[Math.max(0, idx - 1)].id : ws.activeTab;
@@ -333,9 +347,91 @@ export function tabHasSpec(tab: WorkspaceTab, spec: PanelSpec): boolean {
   return listPanels(tab.root).some((p) => specKey(p.panel) === key);
 }
 
-/** Adds a panel to the active tab's grid (no-op if the tab already shows it). */
+/**
+ * Adds a panel to the grid of the active tiling tab (no-op if the tab already shows it). When a window
+ * tab is active, the panel goes to the first tiling tab (created, not activated, if there is none).
+ */
 export function addPanelToActive(ws: Workspace, spec: PanelSpec): Workspace {
-  const tab = getActiveTab(ws);
-  if (tabHasSpec(tab, spec)) return ws;
-  return withTab(ws, tab.id, (t) => ({ ...withRoot(t, appendToGrid(t.root, makePanel(spec))), maximized: undefined }));
+  const active = getActiveTab(ws);
+  let target = active.view ? ws.tabs.find((t) => !t.view) : active;
+  let base = ws;
+  if (!target) {
+    target = { id: uid("t"), title: "Swarm", root: null };
+    base = { ...ws, tabs: [...ws.tabs, target] };
+  }
+  if (tabHasSpec(target, spec)) return ws;
+  return withTab(base, target.id, (t) => ({ ...withRoot(t, appendToGrid(t.root, makePanel(spec))), maximized: undefined }));
+}
+
+// ------------------------------------------------------------------ window tabs (one full view each)
+
+/** At most this many window tabs stay open; opening one more closes the oldest inactive one. */
+export const MAX_WINDOW_TABS = 10;
+
+/** Identity of a window: one tab per view, one per agent. */
+export function viewKey(v: Pick<TabView, "name" | "agentId">): string {
+  return v.name === "agent" ? `agent:${v.agentId ?? ""}` : v.name;
+}
+
+/** The view a tab stands for ("swarm" for tiling tabs). */
+export function viewOfTab(tab: WorkspaceTab): TabView {
+  return tab.view ?? { name: "swarm" };
+}
+
+export function tabMatchesView(tab: WorkspaceTab, view: Pick<TabView, "name" | "agentId">): boolean {
+  if (view.name === "swarm") return !tab.view;
+  return Boolean(tab.view) && viewKey(tab.view!) === viewKey(view);
+}
+
+export function sameView(a: TabView, b: TabView): boolean {
+  return a.name === b.name && a.agentId === b.agentId && a.taskId === b.taskId && a.section === b.section;
+}
+
+function cleanView(v: TabView): TabView {
+  const out: TabView = { name: v.name };
+  if (v.agentId) out.agentId = v.agentId;
+  if (v.taskId) out.taskId = v.taskId;
+  if (v.section) out.section = v.section;
+  return out;
+}
+
+/** Activates a tiling tab (the active one, else the first, else a new one built by `buildRoot`). */
+export function focusTiling(ws: Workspace, buildRoot: () => LayoutNode | null): Workspace {
+  if (!getActiveTab(ws).view) return ws;
+  const tiling = ws.tabs.find((t) => !t.view);
+  if (tiling) return { ...ws, activeTab: tiling.id };
+  return addTab(ws, buildRoot(), "Swarm");
+}
+
+/**
+ * Shows a view in the center: activates its window tab (updating its selection), or opens a new
+ * window tab. "swarm" goes to a tiling tab. Returns `ws` itself when nothing changes.
+ */
+export function openView(ws: Workspace, view: TabView, buildRoot: () => LayoutNode | null = () => null): Workspace {
+  if (view.name === "swarm") return focusTiling(ws, buildRoot);
+  const next = cleanView(view);
+  const existing = ws.tabs.find((t) => tabMatchesView(t, next));
+  if (existing) {
+    if (existing.id === ws.activeTab && sameView(existing.view!, next)) return ws;
+    return { ...ws, activeTab: existing.id, tabs: ws.tabs.map((t) => (t.id === existing.id ? { ...t, view: next } : t)) };
+  }
+  const tab: WorkspaceTab = { id: uid("t"), title: "", root: null, view: next };
+  const activeIdx = ws.tabs.findIndex((t) => t.id === ws.activeTab);
+  const tabs = ws.tabs.slice();
+  tabs.splice(activeIdx + 1, 0, tab);
+  let out: Workspace = { ...ws, tabs, activeTab: tab.id };
+  const windows = out.tabs.filter((t) => t.view);
+  if (windows.length > MAX_WINDOW_TABS) {
+    const drop = windows.find((t) => t.id !== tab.id && t.id !== ws.activeTab) ?? windows.find((t) => t.id !== tab.id);
+    if (drop) out = { ...out, tabs: out.tabs.filter((t) => t.id !== drop.id) };
+  }
+  return out;
+}
+
+/** Opens a new tiling tab showing one panel (e.g. a mission or Roblox Studio as its own window). */
+export function openPanelTab(ws: Workspace, spec: PanelSpec, title: string): Workspace {
+  const key = specKey(spec);
+  const existing = ws.tabs.find((t) => !t.view && t.root?.type === "panel" && specKey(t.root.panel) === key);
+  if (existing) return existing.id === ws.activeTab ? ws : { ...ws, activeTab: existing.id };
+  return addTab(ws, makePanel(spec), title);
 }

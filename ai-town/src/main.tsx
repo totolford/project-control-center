@@ -1,3 +1,5 @@
+// NEXUS: PixiJS without eval, so the world runs under NEXUS's strict CSP (no 'unsafe-eval').
+import '@pixi/unsafe-eval';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Home from './App.tsx';

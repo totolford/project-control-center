@@ -1,17 +1,13 @@
-//! World providers. NEXUS is never tied to one: the native engine runs inside
-//! NEXUS; AI Town (a16z-infra/ai-town, MIT) is an optional fork; custom points
-//! to any existing world project.
+//! World providers. NEXUS is never tied to one: AI Town (a16z-infra/ai-town,
+//! MIT, bundled and run locally) is the main world; the native engine runs
+//! inside NEXUS as a fallback when Node.js is missing; custom points to any
+//! existing world project.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use pcc_claude::process::std_command;
-use pcc_core::{Error, Result};
-
-use crate::model::Character;
-
-pub const AI_TOWN_REPO: &str = "https://github.com/a16z-infra/ai-town.git";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -62,25 +58,6 @@ fn prereq(name: &str, found: Option<String>, required: bool, missing: &str) -> P
     Prerequisite { name: name.into(), met: found.is_some(), detail: found.unwrap_or_else(|| missing.into()), required }
 }
 
-/// Ollama is only useful when its server answers; `ollama --version` still
-/// succeeds without one and says so in its output.
-fn ollama_prereq() -> Prerequisite {
-    let out = std_command("ollama").arg("--version").output().ok().filter(|o| o.status.success());
-    let (met, detail) = match out {
-        None => (false, "optional: or set an OpenAI-compatible LLM in Convex env".to_string()),
-        Some(o) => {
-            let text = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
-            let version = text.lines().find_map(|l| l.split("version is ").nth(1)).unwrap_or("").trim().to_string();
-            if text.contains("could not connect") {
-                (false, format!("installed ({version}) but not running: start it with `ollama serve`"))
-            } else {
-                (true, format!("running ({version})"))
-            }
-        }
-    };
-    Prerequisite { name: "Ollama (local LLM)".into(), met, detail, required: false }
-}
-
 pub struct NexusNative;
 
 impl AIWorldProvider for NexusNative {
@@ -98,52 +75,26 @@ impl AIWorldProvider for NexusNative {
     }
 }
 
-pub struct AiTownCompatible;
+/// The real a16z-infra/ai-town bundled with NEXUS (`ai-town/`), run locally by
+/// `crate::aitown` (Convex local backend, no account). It is not created by the
+/// wizard: the AI World page installs (after consent) and starts it.
+pub struct AiTown;
 
-impl AIWorldProvider for AiTownCompatible {
-    fn id(&self) -> &'static str {
-        "ai_town_compatible"
-    }
-    fn name(&self) -> &'static str {
-        "AI Town compatible"
-    }
-    fn description(&self) -> &'static str {
-        "Native world plus an export of the characters in AI Town's format (data/characters.ts), ready to drop into an AI Town deployment."
-    }
-    fn prerequisites(&self, _root: &Path) -> Vec<Prerequisite> {
-        vec![]
-    }
-}
-
-pub struct AiTownFork;
-
-impl AIWorldProvider for AiTownFork {
+impl AIWorldProvider for AiTown {
     fn id(&self) -> &'static str {
         "ai_town"
     }
     fn name(&self) -> &'static str {
-        "AI Town fork"
+        "AI Town (integrated)"
     }
     fn description(&self) -> &'static str {
-        "Clones a16z-infra/ai-town (MIT) and generates its characters from your world. AI Town runs on Convex (cloud or self-hosted with Docker) and an Ollama or OpenAI-compatible LLM with embeddings; Claude subscriptions cannot drive it directly."
+        "The real AI Town (a16z-infra/ai-town, MIT) bundled with NEXUS and run locally: pixel-art town, every NEXUS agent is a character. Needs Node.js; data stays on this PC, no Convex account."
     }
     fn prerequisites(&self, _root: &Path) -> Vec<Prerequisite> {
-        let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
-        let convex_login = home
-            .map(|h| h.join(".convex").join("config.json"))
-            .filter(|p| p.is_file())
-            .map(|_| "logged in (~/.convex)".to_string());
         vec![
-            prereq("Git", version_of("git", &["--version"]), true, "not installed"),
             prereq(
                 "Node.js 18+",
-                version_of("node", &["--version"]).filter(|v| {
-                    v.trim_start_matches('v')
-                        .split('.')
-                        .next()
-                        .and_then(|m| m.parse::<u32>().ok())
-                        .is_some_and(|m| m >= 18)
-                }),
+                version_of("node", &["--version"]).filter(|v| node_major(v).is_some_and(|m| m >= 18)),
                 true,
                 "Node 18 or newer required",
             ),
@@ -153,16 +104,12 @@ impl AIWorldProvider for AiTownFork {
                 true,
                 "not installed",
             ),
-            prereq("Convex account", convex_login, false, "run `npx convex login` (or self-host with Docker)"),
-            prereq(
-                "Docker (self-hosted Convex)",
-                version_of("docker", &["--version"]),
-                false,
-                "optional: needed only to self-host",
-            ),
-            ollama_prereq(),
         ]
     }
+}
+
+fn node_major(version: &str) -> Option<u32> {
+    version.trim().trim_start_matches('v').split('.').next()?.parse().ok()
 }
 
 pub struct CustomWorld;
@@ -183,112 +130,34 @@ impl AIWorldProvider for CustomWorld {
 }
 
 pub fn registry() -> Vec<Box<dyn AIWorldProvider>> {
-    vec![Box::new(NexusNative), Box::new(AiTownCompatible), Box::new(AiTownFork), Box::new(CustomWorld)]
+    vec![Box::new(NexusNative), Box::new(AiTown), Box::new(CustomWorld)]
 }
 
 pub fn list(root: &Path) -> Vec<ProviderInfo> {
     registry().iter().map(|p| p.info(root)).collect()
 }
 
-// ------------------------------------------------------------ AI Town format
-
-fn ts_string(s: &str) -> String {
-    format!("`{}`", s.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${"))
-}
-
-/// The `Descriptions` array of AI Town's `data/characters.ts`.
-pub fn ai_town_descriptions(characters: &[Character]) -> String {
-    let mut out = String::from("export const Descriptions = [\n");
-    for (i, c) in characters.iter().enumerate() {
-        let sprite = if c.sprite.starts_with('f') { c.sprite.clone() } else { format!("f{}", i % 8 + 1) };
-        let mut identity = format!("{} is {}.", c.name, c.personality.trim().trim_end_matches('.'));
-        if !c.skills.is_empty() {
-            identity.push_str(&format!(" Skills: {}.", c.skills.join(", ")));
-        }
-        if !c.relationships.is_empty() {
-            let rel: Vec<String> = c.relationships.iter().map(|r| format!("{} ({})", r.with, r.kind)).collect();
-            identity.push_str(&format!(" Works with {}.", rel.join(", ")));
-        }
-        let plan = c.goals.first().cloned().unwrap_or_else(|| "You want to help the team.".into());
-        out.push_str(&format!(
-            "  {{\n    name: {},\n    character: '{sprite}',\n    identity: {},\n    plan: {},\n  }},\n",
-            ts_string(&c.name),
-            ts_string(&identity),
-            ts_string(&plan)
-        ));
-    }
-    out.push_str("];");
-    out
-}
-
-/// Replaces the `Descriptions` array in an AI Town `characters.ts`, keeping the rest.
-pub fn patch_characters_ts(source: &str, characters: &[Character]) -> Result<String> {
-    let start = source
-        .find("export const Descriptions = [")
-        .ok_or_else(|| Error::invalid("Descriptions array not found in characters.ts"))?;
-    let rest = &source[start..];
-    let end_rel = rest.find("\n];").ok_or_else(|| Error::invalid("end of Descriptions array not found"))? + 3;
-    Ok(format!("{}{}{}", &source[..start], ai_town_descriptions(characters), &rest[end_rel..]))
-}
-
-/// Clones AI Town into `dest` and writes the characters. Blocking (network).
-pub fn create_ai_town_fork(dest: &Path, characters: &[Character]) -> Result<Vec<String>> {
-    let mut steps = Vec::new();
-    if dest.join("package.json").is_file() {
-        steps.push(format!("Reusing existing AI Town folder {}", dest.display()));
-    } else {
-        if dest.exists() && dest.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false) {
-            return Err(Error::Conflict(format!("{} is not empty", dest.display())));
-        }
-        let out = std_command("git")
-            .args(["clone", "--depth", "1", AI_TOWN_REPO, &dest.to_string_lossy()])
-            .output()
-            .map_err(|e| Error::Process(format!("git: {e}")))?;
-        if !out.status.success() {
-            return Err(Error::Process(format!("git clone failed: {}", String::from_utf8_lossy(&out.stderr).trim())));
-        }
-        steps.push(format!("Cloned {AI_TOWN_REPO} into {}", dest.display()));
-    }
-    let file = dest.join("data").join("characters.ts");
-    let source = std::fs::read_to_string(&file)?;
-    std::fs::write(&file, patch_characters_ts(&source, characters)?)?;
-    steps.push(format!("Wrote {} characters to data/characters.ts", characters.len()));
-    Ok(steps)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Relationship;
 
     #[test]
-    fn patches_only_the_descriptions_array() {
-        let src = "import x from './a';\n\nexport const Descriptions = [\n  {\n    name: 'Lucky',\n  },\n];\n\nexport const characters = [1];\n";
-        let c = Character {
-            name: "Roblox Agent".into(),
-            personality: "technical and precise".into(),
-            goals: vec!["Maintain Roblox systems".into()],
-            skills: vec!["Roblox".into(), "Lua".into()],
-            relationships: vec![Relationship { with: "Central".into(), kind: "reports to".into() }],
-            ..Default::default()
-        };
-        let out = patch_characters_ts(src, &[c]).unwrap();
-        assert!(out.starts_with("import x from './a';"));
-        assert!(out.contains("name: `Roblox Agent`"));
-        assert!(out.contains("character: 'f1'"));
-        assert!(out.contains("Skills: Roblox, Lua."));
-        assert!(out.contains("Works with Central (reports to)."));
-        assert!(out.contains("plan: `Maintain Roblox systems`"));
-        assert!(out.ends_with("export const characters = [1];\n"));
-        assert!(!out.contains("Lucky"));
-        assert!(patch_characters_ts("nothing", &[]).is_err());
-        assert_eq!(ts_string("a`b${c}"), "`a\\`b\\${c}`");
+    fn registry_has_three_providers() {
+        let ids: Vec<&str> = registry().iter().map(|p| p.id()).collect();
+        assert_eq!(ids, ["nexus_native", "ai_town", "custom"]);
+        assert!(NexusNative.info(Path::new(".")).ready);
     }
 
     #[test]
-    fn registry_has_four_providers() {
-        let ids: Vec<&str> = registry().iter().map(|p| p.id()).collect();
-        assert_eq!(ids, ["nexus_native", "ai_town_compatible", "ai_town", "custom"]);
-        assert!(NexusNative.info(Path::new(".")).ready);
+    fn reads_node_major_versions() {
+        assert_eq!(node_major("v20.11.1"), Some(20));
+        assert_eq!(
+            node_major(
+                "18.0.0
+"
+            ),
+            Some(18)
+        );
+        assert_eq!(node_major("garbage"), None);
     }
 }

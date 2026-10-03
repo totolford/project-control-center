@@ -1,7 +1,7 @@
 {
   "name": "project-control-center",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Windows control center for orchestrating multiple Claude Code agents on a project",
   "license": "MIT",
@@ -13,7 +13,9 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "dist": "node scripts/dist.mjs"
+    "dist": "node scripts/dist.mjs",
+    "build:ai-town": "npm --prefix ai-town run build:nexus",
+    "install:ai-town": "npm ci --prefix ai-town --no-audit --no-fund"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.13",

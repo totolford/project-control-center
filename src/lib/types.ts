@@ -127,9 +127,12 @@ export interface Task {
   updatedAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  /** Skills the worker is told to invoke with the Skill tool (0.3). */
+  skills?: string[];
 }
 
-export type MissionStatus = "planning" | "active" | "completed" | "failed" | "cancelled";
+/** `queued`: waiting for the running mission to finish (0.3). */
+export type MissionStatus = "queued" | "planning" | "active" | "completed" | "failed" | "cancelled";
 
 export interface Mission {
   id: string;
@@ -140,6 +143,15 @@ export interface Mission {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  // 0.3 fields (see the "Missions (0.3)" section below); older missions read with defaults.
+  priority: Priority;
+  model: string | null;
+  skills: string[];
+  mcp: string[];
+  connections: string[];
+  analysis: MissionAnalysis | null;
+  startedAt: string | null;
+  archivedAt: string | null;
   // Counters computed from tasks (MissionView).
   taskTotal: number;
   taskDone: number;
@@ -564,6 +576,19 @@ export interface AgentProfile {
   skillsEnabled: boolean;
   /** Non-secret environment variables of the agent's session. */
   env: Record<string, string>;
+  /** How the agent's character looks in the AI World (missing on old projects). */
+  appearance?: AgentAppearance;
+}
+
+/** "Customize Character". A skin is a whole AI Town spritesheet. */
+export interface AgentAppearance {
+  /** AI Town character "f1".."f8" or an imported "nexus-skin:<name>". */
+  skin?: string | null;
+  preset?: string | null;
+  displayName?: string | null;
+  badge?: string | null;
+  /** "#rrggbb" tint applied to the sprite. */
+  tint?: string | null;
 }
 
 export interface DecisionRecord {
@@ -1011,7 +1036,7 @@ export interface World {
   format: number;
   name: string;
   description: string;
-  /** nexus_native | ai_town_compatible | ai_town | custom */
+  /** nexus_native | custom (older worlds may say ai_town_compatible / ai_town) */
   provider: string;
   mode: WorldMode;
   running: boolean;
@@ -1085,15 +1110,15 @@ export interface WorldAnalysis {
 export interface WorldSpec {
   name: string;
   description: string;
-  provider: "nexus_native" | "ai_town_compatible" | "ai_town" | "custom";
+  /** The integrated AI Town is not created by the wizard (AI World page). */
+  provider: "nexus_native" | "custom";
   mode: WorldMode;
   environment?: string | null;
   rules: string[];
   speed?: number | null;
   characters: Character[];
-  /** AI Town fork / custom world folder */
+  /** Custom world folder */
   targetDir?: string | null;
-  letCentralFinish: boolean;
   /** frontend, backend, database, llm, authentication, deployment */
   infrastructure: Record<string, string>;
 }
@@ -1102,6 +1127,385 @@ export interface ConversionReport {
   world: World;
   steps: string[];
   warnings: string[];
-  missionId: string | null;
   backup: BackupInfo | null;
+}
+
+// ---------------------------------------------------------------- integrated AI Town (0.3)
+
+export interface AiTownStatus {
+  node: string | null;
+  npm: string | null;
+  /** Bundled ai-town/ folder. */
+  source: string | null;
+  /** a16z-infra/ai-town commit the NEXUS copy is based on. */
+  upstreamCommit: string | null;
+  runtimeDir: string;
+  /** npm dependencies installed (requires the user's consent: npm ci). */
+  installed: boolean;
+  needsReinstall: boolean;
+  running: boolean;
+  url: string | null;
+  lastError: string | null;
+  log: string[];
+}
+
+export interface AiTownWorld {
+  /** Local Convex deployment, e.g. http://127.0.0.1:3210 */
+  url: string;
+  worldId: string;
+  engineId: string;
+  /** Embedded frontend path with its query string, for an <iframe>. */
+  frontend: string;
+}
+
+export interface AiTownProgress {
+  stage: "install" | "start" | "ready" | "upstream";
+  message: string;
+}
+
+export type UpstreamPlanAction = "take_upstream" | "add" | "delete" | "merge_clean" | "conflict";
+
+export interface UpstreamReport {
+  base: string;
+  head: string;
+  upToDate: boolean;
+  upstreamCommits: string[];
+  upstreamChanges: string[];
+  localChanges: string[];
+  plan: { path: string; action: UpstreamPlanAction; conflicts?: number }[];
+  conflicts: number;
+  writable: boolean;
+}
+
+export interface UpstreamApplyResult {
+  backup: string;
+  applied: string[];
+  leftForReview: string[];
+  newBase: string | null;
+}
+
+/** Zone (building) of the NEXUS AI World, see ai-town/data/nexusZones.ts. */
+export type NexusZoneKind =
+  | "central_hq"
+  | "coding_office"
+  | "design_studio"
+  | "roblox_studio"
+  | "github_office"
+  | "server_room"
+  | "mcp_lab"
+  | "skill_shop"
+  | "testing_lab"
+  | "review_room"
+  | "archive";
+
+/** Messages from the embedded AI Town iframe to NEXUS (window.postMessage). */
+export type AiTownToNexus =
+  | { source: "ai-town"; type: "ready" }
+  | { source: "ai-town"; type: "select"; nexusId: string | null }
+  | { source: "ai-town"; type: "talk"; nexusId: string }
+  | { source: "ai-town"; type: "viewWork"; nexusId: string }
+  | { source: "ai-town"; type: "openBuilding"; zone: NexusZoneKind }
+  | {
+      source: "ai-town";
+      type: "action";
+      nexusId: string;
+      action:
+        | "assignMission"
+        | "pause"
+        | "stop"
+        | "follow"
+        | "inspect"
+        | "customize"
+        | "changeModel"
+        | "changeSkills"
+        | "changeMcp"
+        | "changeConnections";
+    }
+  /** The camera mode changed inside the world (e.g. a drag ends Follow). */
+  | { source: "ai-town"; type: "camera"; mode: "free" | "follow" | "cinematic" | "overview"; nexusId?: string };
+
+/** Messages from NEXUS to the embedded AI Town iframe. */
+export type NexusToAiTown =
+  | { source: "nexus"; type: "select"; nexusId: string | null }
+  | { source: "nexus"; type: "focus"; nexusId: string }
+  | { source: "nexus"; type: "focusZone"; zone: NexusZoneKind }
+  | { source: "nexus"; type: "camera"; mode: "free" | "follow" | "cinematic" | "overview"; nexusId?: string }
+  | { source: "nexus"; type: "zoom"; delta: number };
+
+// ---------------------------------------------------------------- Missions (0.3, workstream "missions")
+
+/** One required skill, MCP server or connection. `available` is computed by NEXUS, never by the model. */
+export interface MissionRequirement {
+  name: string;
+  reason: string;
+  available: boolean;
+  /** "not installed", "installed but disabled", "configured, status failed", ... */
+  detail: string | null;
+}
+
+export interface RequiredAgent {
+  role: string;
+  reason: string;
+  /** Id of an existing agent whose role fits. */
+  existing: string | null;
+}
+
+/** Estimate made by one short Claude Code call before the mission starts. */
+export interface MissionAnalysis {
+  title: string;
+  summary: string;
+  agents: RequiredAgent[];
+  skills: MissionRequirement[];
+  mcp: MissionRequirement[];
+  connections: MissionRequirement[];
+  model: string | null;
+  modelReason: string | null;
+  steps: string[];
+  estimatedSteps: number;
+  analyzedWith: string;
+  analyzedAt: string;
+  costUsd: number | null;
+}
+
+export interface MissionSpec {
+  prompt: string;
+  title?: string | null;
+  priority?: Priority | null;
+  model?: string | null;
+  skills?: string[];
+  mcp?: string[];
+  connections?: string[];
+  analysis?: MissionAnalysis | null;
+  /** Send to Central even if another mission is running (otherwise queued). */
+  startNow?: boolean;
+}
+
+/** What the UI knows about Claude Code, passed to the analysis (null = unknown). */
+export interface MissionClaudeContext {
+  mcpServers: { name: string; status: string | null }[] | null;
+  models: string[];
+}
+
+export interface ToolUsage {
+  /** Skill name or MCP server name. */
+  name: string;
+  agents: string[];
+  count: number;
+  last: string;
+}
+
+/** Skills / MCP really invoked by the mission's agents, read from their logs. */
+export interface MissionActivity {
+  missionId: string;
+  agents: string[];
+  skillsUsed: ToolUsage[];
+  mcpUsed: ToolUsage[];
+  from: string;
+  to: string | null;
+}
+
+// ---------------------------------------------------------------- Skill Market (0.3, market workstream)
+// One-to-one with crates/pcc-claude/src/market*.rs and src-tauri/src/market_commands.rs.
+
+export type MarketInstallMethod = "plugin" | "github-skill" | "local";
+export type MarketDiscovery = "installed" | "discovered";
+export type MarketSourceKind = "marketplace" | "catalog" | "github_search" | "user_repo" | "local";
+
+export interface MarketSourceRef {
+  id: string;
+  kind: MarketSourceKind;
+  label: string;
+}
+
+/** A real popularity signal (never estimated). */
+export interface MarketSignal {
+  /** "installs" (Claude Code plugin catalog) or "github-stars". */
+  kind: string;
+  value: number;
+  label: string;
+  fetchedAt: string | null;
+}
+
+export interface MarketSkillSummary {
+  name: string;
+  description: string;
+  path: string;
+  allowedTools: string[];
+}
+
+export interface MarketRemoteSource {
+  kind: string;
+  url: string | null;
+  repo: string | null;
+  path: string | null;
+  ref: string | null;
+  sha: string | null;
+}
+
+export interface MarketEntry {
+  id: string;
+  name: string;
+  description: string;
+  author: string | null;
+  version: string | null;
+  license: string | null;
+  /** owner/repo on GitHub */
+  repository: string | null;
+  path: string | null;
+  homepage: string | null;
+  tags: string[];
+  /** Topic categories: ui-ux, coding, roblox, web, devops, git, testing, security, documentation, automation, ai, 3d, game-development. */
+  categories: string[];
+  featured: boolean;
+  sources: MarketSourceRef[];
+  /** Published by Anthropic in an Anthropic repository: the only case shown as "Official (Anthropic)". */
+  official: boolean;
+  installMethod: MarketInstallMethod;
+  pluginId: string | null;
+  marketplace: string | null;
+  marketplaceRepo: string | null;
+  marketplaceConfigured: boolean;
+  skills: MarketSkillSummary[];
+  permissions: string[];
+  requiredMcp: string[];
+  dependencies: string[];
+  compatibility: string;
+  signal: MarketSignal | null;
+  lastUpdated: string | null;
+  installed: boolean;
+  enabled: boolean | null;
+  discovery: MarketDiscovery | null;
+  installedSkillIds: string[];
+  installedDirs: string[];
+  installedVersion: string | null;
+  installedScope: string | null;
+  localPath: string | null;
+  installedRef: string | null;
+  remote: MarketRemoteSource | null;
+}
+
+export interface MarketSourceStatus {
+  id: string;
+  kind: MarketSourceKind;
+  label: string;
+  official: boolean;
+  repo: string | null;
+  location: string | null;
+  updatedAt: string | null;
+  entries: number;
+  error: string | null;
+}
+
+export interface MarketIndex {
+  entries: MarketEntry[];
+  sources: MarketSourceStatus[];
+  signalsFetchedAt: string | null;
+  pluginStatsFetchedAt: string | null;
+  catalogGeneratedAt: string;
+}
+
+export interface MarketRefresh {
+  index: MarketIndex;
+  marketplaceRun: CliRun | null;
+  errors: string[];
+}
+
+export interface MarketSearch {
+  index: MarketIndex;
+  /** Entry ids of the hits. */
+  hits: string[];
+}
+
+export type SecurityLevel = "ok" | "info" | "warn" | "danger";
+
+export interface SecurityFinding {
+  level: SecurityLevel;
+  code: string;
+  title: string;
+  detail: string;
+  files: string[];
+}
+
+export interface SecurityReport {
+  findings: SecurityFinding[];
+  totalFiles: number;
+  inspectedFiles: number;
+  totalBytes: number;
+  /** Installing needs an explicit "Install anyway". */
+  needsConfirmation: boolean;
+  status: "clean" | "review" | "danger" | "incomplete";
+  allowedTools: string[];
+  requiredMcp: string[];
+  dependencies: string[];
+  hooks: boolean;
+}
+
+export interface MarketPlanFile {
+  path: string;
+  size: number;
+  kind: "skill" | "text" | "script" | "data" | "asset" | "archive" | "binary";
+  inspected: boolean;
+}
+
+export interface MarketAnalysis {
+  files: MarketPlanFile[];
+  /** "local" (marketplace clone / installed folder) or "github". */
+  filesSource: "local" | "github";
+  location: string;
+  /** Commit the GitHub files were read at (pass it back to install). */
+  reference: string | null;
+  security: SecurityReport;
+  truncated: boolean;
+}
+
+export interface MarketDetails {
+  entry: MarketEntry;
+  analysis: MarketAnalysis | null;
+  analysisError: string | null;
+  updateAvailable: boolean | null;
+  /** Analysis of the newer version (standalone skills with an update available). */
+  updateAnalysis: MarketAnalysis | null;
+}
+
+export interface MarketInstallOptions {
+  /** "user" | "project" (plugins also "local"). */
+  scope: string;
+  reference: string | null;
+  /** The user confirmed "Install anyway". */
+  confirmed: boolean;
+}
+
+export interface MarketAction {
+  message: string;
+  runs: CliRun[];
+  dir: string | null;
+  ok: boolean;
+}
+
+export interface MarketSettings {
+  /** GitHub repositories (owner/repo) scanned for SKILL.md folders. */
+  userRepos: string[];
+  /** Refresh GitHub signals once a day when the market opens. */
+  autoRefresh: boolean;
+}
+
+export interface MarketStatus {
+  lastRefresh: string | null;
+  gh: boolean;
+  claude: boolean;
+  project: boolean;
+}
+
+/** Deterministic recommendation (installed skills + market), used by missions. */
+export interface SkillRecommendation {
+  skill: string;
+  source: string;
+  score: number;
+  reason: string;
+  installed: boolean;
+  enabled: boolean;
+  /** Skill.id when installed. */
+  skillId?: string | null;
+  /** Market entry id (details / install). */
+  marketId?: string | null;
 }

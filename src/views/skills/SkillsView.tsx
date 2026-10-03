@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Plus, RefreshCw, RotateCw, Search, X } from "lucide-react";
+import { BookOpen, Check, Plus, RefreshCw, RotateCw, Search, Store, X } from "lucide-react";
 import { api, errorMessage } from "../../lib/api";
 import { attempt } from "../../lib/toast";
 import { fuzzyFilter } from "../../lib/fuzzy";
@@ -18,6 +18,7 @@ export function SkillsView() {
   const connections = useConnections();
   const agents = useAgents();
   const toolsVersion = useStore((s) => s.project?.toolsVersion ?? 0);
+  const navigate = useStore((s) => s.navigate);
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SkillFilter>("all");
@@ -89,9 +90,9 @@ export function SkillsView() {
           <Search size={14} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search skills" aria-label="Search skills" />
         </div>
-        <span className="muted small">
-          Marketplace installs are not exposed here: install plugins from the Command Center (<code>claude plugin install …</code>).
-        </span>
+        <button className="btn" onClick={() => navigate({ name: "market" })} title="Find and install skills and plugins">
+          <Store size={14} /> Skill Market
+        </button>
       </div>
       {loadError && <div className="notice notice-error">Skills unavailable: {loadError}</div>}
       {!skills && !loadError ? (

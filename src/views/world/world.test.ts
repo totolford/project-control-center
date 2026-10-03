@@ -6,7 +6,7 @@ import { makeCharacter, makeWorld } from "./fixtures";
 import { applyFrame, mergeEvents, newestFirst } from "./frames";
 import { avatarRadius, fitViewport, frameProgress, hitTest, interpolate, toCanvas, toPointMap, toWorld, truncate } from "./geometry";
 import { characterRing, initials, isLiveMode, liveAgent, spriteFill, TONE_COLOR, CANVAS_COLORS } from "./status";
-import { DEFAULT_TARGET, buildSpec, defaultInfrastructure, initialWizard, validateStep, withProvider } from "./wizard";
+import { buildSpec, defaultInfrastructure, initialWizard, validateStep, withProvider } from "./wizard";
 
 describe("geometry", () => {
   it("fits the world uniformly and centers it", () => {
@@ -145,22 +145,25 @@ describe("wizard", () => {
     projectTypes: ["node"],
     agents: [],
     providers: [],
-    recommendedProvider: "ai_town",
+    recommendedProvider: "nexus_native",
     reason: "",
     existingWorld: false,
   };
 
   it("pre-fills recommended defaults", () => {
     const s = initialWizard("Drone", analysis, [makeCharacter("c", { nexusAgent: "w1" })]);
-    expect(s).toMatchObject({ provider: "ai_town", mode: "hybrid", name: "Drone Town", targetDir: DEFAULT_TARGET, letCentralFinish: true });
-    expect(s.infrastructure).toEqual(defaultInfrastructure("ai_town"));
-    expect(initialWizard("", { ...analysis, recommendedProvider: "bogus" }).provider).toBe("nexus_native");
+    expect(s).toMatchObject({ provider: "nexus_native", mode: "hybrid", name: "Drone Town", targetDir: "" });
+    expect(s.infrastructure).toEqual(defaultInfrastructure("nexus_native"));
+    // The integrated AI Town (and the removed fork / export providers) is not a wizard choice.
+    expect(initialWizard("", { ...analysis, recommendedProvider: "ai_town" }).provider).toBe("nexus_native");
+    expect(initialWizard("", { ...analysis, recommendedProvider: "ai_town_compatible" }).provider).toBe("nexus_native");
   });
 
   it("resets provider-specific fields when switching", () => {
-    const s = withProvider(initialWizard("P", analysis), "custom");
-    expect(s).toMatchObject({ provider: "custom", targetDir: "", letCentralFinish: false });
-    expect(s.infrastructure.backend).toBe("NEXUS");
+    const s = withProvider({ ...initialWizard("P", analysis), targetDir: "D:/x" }, "custom");
+    expect(s).toMatchObject({ provider: "custom", targetDir: "D:/x" });
+    expect(s.infrastructure.backend).toBe("Your world project");
+    expect(withProvider(s, "nexus_native")).toMatchObject({ targetDir: "" });
   });
 
   it("validates each step", () => {
@@ -180,10 +183,9 @@ describe("wizard", () => {
       rules: ["be nice", ""],
     };
     const spec = buildSpec(s);
-    expect(spec).toMatchObject({ name: "P Town", rules: ["be nice"], targetDir: null, letCentralFinish: true, provider: "ai_town" });
+    expect(spec).toMatchObject({ name: "P Town", rules: ["be nice"], targetDir: null, provider: "nexus_native" });
     expect(spec.characters[0]).toMatchObject({ name: "Ann", goals: ["x"], relationships: [] });
-    expect(buildSpec({ ...s, targetDir: "D:/town" }).targetDir).toBe("D:/town");
-    expect(buildSpec(withProvider(s, "nexus_native")).targetDir).toBeNull();
-    expect(buildSpec(withProvider(s, "nexus_native")).letCentralFinish).toBe(false);
+    expect(buildSpec({ ...withProvider(s, "custom"), targetDir: "D:/town" }).targetDir).toBe("D:/town");
+    expect(buildSpec({ ...s, targetDir: "D:/town" }).targetDir).toBeNull();
   });
 });

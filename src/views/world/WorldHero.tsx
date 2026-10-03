@@ -6,30 +6,31 @@ import { attempt } from "../../lib/toast";
 import type { WorldProviderInfo } from "../../lib/types";
 import { Prerequisites } from "./Prerequisites";
 
-/** No world yet: the two ways in, and what each provider honestly needs. */
+/** No native world yet: the two ways in, and what each native provider honestly needs. */
 export function WorldHero({ onOneClick, onConvert }: { onOneClick: () => void; onConvert: () => void }) {
   const [providers, setProviders] = useState<WorldProviderInfo[] | null>(null);
 
   useEffect(() => {
-    void attempt(() => api.worldProviders()).then((p) => setProviders(p ?? []));
+    // The integrated AI Town has its own tab; this page is the native fallback.
+    void attempt(() => api.worldProviders()).then((p) => setProviders((p ?? []).filter((x) => x.id !== "ai_town")));
   }, []);
 
   return (
     <div className="world-hero">
       <div className="world-hero-head">
         <MapIcon size={28} className="tone-accent-fg" />
-        <h1>AI World</h1>
+        <h1>Native 2D world</h1>
         <p className="muted">
-          A living map of your project: each NEXUS agent becomes a character that walks to the room matching what it is
-          really doing — the Workshop while it runs a turn, the Security Desk while it waits for your permission. Characters
-          you create yourself are simulated and labelled as such.
+          The fallback world, drawn by NEXUS itself (no Node.js needed): each NEXUS agent becomes a character that walks to
+          the room matching what it is really doing — the Workshop while it runs a turn, the Security Desk while it waits for
+          your permission. Characters you create yourself are simulated and labelled as such.
         </p>
         <div className="row">
           <button className="btn primary world-hero-cta" onClick={onOneClick}>
-            <Wand2 size={15} /> MAKE THIS PROJECT AN AI TOWN
+            <Wand2 size={15} /> CREATE THE NATIVE WORLD
           </button>
           <button className="btn" onClick={onConvert}>
-            Convert → AI World
+            Customize step by step
           </button>
         </div>
         <div className="tiny muted">
@@ -37,7 +38,7 @@ export function WorldHero({ onOneClick, onConvert }: { onOneClick: () => void; o
           modified; .agent-project is backed up first.
         </div>
       </div>
-      <div className="section-label">World providers</div>
+      <div className="section-label">Native world providers</div>
       {providers === null ? (
         <Loading text="Checking providers…" />
       ) : (

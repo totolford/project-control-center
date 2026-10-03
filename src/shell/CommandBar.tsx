@@ -9,7 +9,9 @@ import {
   Hand,
   ListChecks,
   LogIn,
+  MessageSquare,
   OctagonX,
+  PanelRight,
   PanelRightOpen,
   Plus,
   RefreshCw,
@@ -24,10 +26,12 @@ import { githubSignIn } from "../state/opsActions";
 import { api } from "../lib/api";
 import { run } from "../lib/toast";
 import { fuzzyFilter } from "../lib/fuzzy";
+import { useRightContext } from "../state/context";
 import { useUi } from "../state/ui";
 import { useStore } from "../store";
 import { useClaude } from "../state/claude";
 import { ALL_NAV_ITEMS } from "./navItems";
+import { focusCommandBar } from "./UniversalBar";
 import { availableProviderId, useLayoutContext, useProviders } from "../workspace/hooks";
 import { confirmResetLayout } from "../workspace/store";
 
@@ -39,14 +43,10 @@ interface Command {
   run: () => void;
 }
 
-function focusComposer() {
-  document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus();
-}
-
-function composeIn(mode: "mission" | "command") {
-  useUi.getState().setComposerMode(mode);
-  // The textarea re-renders for the new mode before it can take focus.
-  window.setTimeout(focusComposer, 0);
+/** Opens the structured "+ New Mission" flow of the Missions view. */
+function newMission() {
+  useUi.getState().setNewMission(true);
+  useStore.getState().navigate({ name: "missions" });
 }
 
 function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
@@ -56,8 +56,19 @@ function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
   const provider = availableProviderId();
   if (!p) return [];
   return [
-    { id: "cmd:mission", label: "Start mission…", group: "Command", icon: Sparkles, run: () => composeIn("mission") },
-    { id: "cmd:interpret", label: "Interpret a command line…", group: "Command", icon: SquareTerminal, run: () => composeIn("command") },
+    { id: "cmd:mission", label: "New mission…", group: "Command", icon: Sparkles, run: newMission },
+    { id: "cmd:ask", label: "Ask Central…", group: "Command", icon: MessageSquare, run: () => focusCommandBar("") },
+    { id: "cmd:interpret", label: "Interpret a command line…", group: "Command", icon: SquareTerminal, run: () => focusCommandBar("/run ") },
+    {
+      id: "cmd:right",
+      label: "Toggle right panel (Central chat)",
+      group: "Command",
+      icon: PanelRight,
+      run: () => {
+        const r = useRightContext.getState();
+        r.setRightOpen(!r.rightOpen);
+      },
+    },
     { id: "cmd:journal", label: "Command journal", group: "Command", icon: ScrollText, run: () => s.navigate({ name: "commands", section: "journal" }) },
     { id: "cmd:world", label: "Open AI World", group: "Command", icon: Globe2, run: () => s.navigate({ name: "world" }) },
     {
@@ -86,13 +97,31 @@ function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
     { id: "cmd:reset", label: "Reset workspace layout", group: "Command", icon: RotateCcw, run: () => void confirmResetLayout(ctx) },
     ...ALL_NAV_ITEMS.map((item) => ({ id: `view:${item.name}`, label: `Go to ${item.label}`, group: "View", icon: item.icon, run: () => s.navigate({ name: item.name }) })),
     ...p.agents.map((a) => ({ id: `agent:${a.id}`, label: `${a.name} — ${a.role}`, group: "Agent", icon: Bot, run: () => s.openAgent(a.id) })),
-    ...p.missions.map((m) => ({ id: `mission:${m.id}`, label: m.title, group: "Mission", icon: Target, run: () => s.navigate({ name: "missions" }) })),
+    ...p.agents
+      .filter((a) => a.status !== "retired")
+      .map((a) => ({
+        id: `talk:${a.id}`,
+        label: `Talk to ${a.name}`,
+        group: "Chat",
+        icon: MessageSquare,
+        run: () => useRightContext.getState().openContext(a.id === "central" ? { kind: "central" } : { kind: "agent", agentId: a.id, tab: "chat" }),
+      })),
+    ...p.missions.map((m) => ({
+      id: `mission:${m.id}`,
+      label: m.title,
+      group: "Mission",
+      icon: Target,
+      run: () => {
+        s.navigate({ name: "missions" });
+        useRightContext.getState().openContext({ kind: "mission", missionId: m.id });
+      },
+    })),
     ...p.tasks.map((t) => ({ id: `task:${t.id}`, label: t.title, group: "Task", icon: ListChecks, run: () => s.openTask(t.id) })),
     ...p.connections.map((c) => ({ id: `conn:${c.id}`, label: `${c.name} (${c.kind})`, group: "Connection", icon: Cable, run: () => s.navigate({ name: "connections" }) })),
   ];
 }
 
-/** Ctrl+K command bar: fuzzy search over agents, tasks, missions, connections, views and commands. */
+/** Ctrl+K palette: fuzzy search over agents, tasks, missions, connections, views and commands. */
 export function CommandBar() {
   const open = useUi((s) => s.commandOpen);
   const setOpen = useUi((s) => s.setCommandOpen);

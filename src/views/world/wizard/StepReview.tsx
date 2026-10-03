@@ -1,6 +1,5 @@
 import { TriangleAlert } from "lucide-react";
 import type { Agent, ConversionReport } from "../../../lib/types";
-import { useStore } from "../../../store";
 import { MODE_META, PROVIDER_LABEL } from "../status";
 import type { Validation, WizardState } from "../wizard";
 
@@ -33,16 +32,10 @@ export function StepReview({ state, agents, validation }: { state: WizardState; 
             {state.characters.map((c) => (c.nexusAgent ? `${c.name} → ${agentName(c.nexusAgent)}` : c.name)).join(", ")}
           </div>
         </dd>
-        {(state.provider === "ai_town" || state.provider === "custom") && (
+        {state.provider === "custom" && (
           <>
             <dt>Folder</dt>
             <dd className="mono">{state.targetDir || "—"}</dd>
-          </>
-        )}
-        {state.provider === "ai_town" && (
-          <>
-            <dt>Setup mission</dt>
-            <dd>{state.letCentralFinish ? "Central finishes the setup (real Claude turns)" : "No — you finish the setup"}</dd>
           </>
         )}
       </dl>
@@ -64,7 +57,6 @@ export function StepReview({ state, agents, validation }: { state: WizardState; 
 }
 
 export function ConversionResult({ report }: { report: ConversionReport }) {
-  const navigate = useStore((s) => s.navigate);
   return (
     <div className="world-step">
       <div className="section-label">Steps</div>
@@ -86,14 +78,6 @@ export function ConversionResult({ report }: { report: ConversionReport }) {
       {report.backup && (
         <div className="small">
           Backup: <span className="mono">{report.backup.path}</span>
-        </div>
-      )}
-      {report.missionId && (
-        <div className="small world-gap">
-          Setup mission <span className="mono">{report.missionId}</span> created.{" "}
-          <button type="button" className="link-btn" onClick={() => navigate({ name: "missions" })}>
-            Open missions
-          </button>
         </div>
       )}
     </div>

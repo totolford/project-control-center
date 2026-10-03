@@ -84,8 +84,8 @@ export const MODE_META: Record<WorldMode, { label: string; explain: string }> = 
 
 export const PROVIDER_LABEL: Record<string, string> = {
   nexus_native: "NEXUS Native",
-  ai_town_compatible: "AI Town compatible",
-  ai_town: "AI Town fork",
+  ai_town_compatible: "AI Town compatible (retired export)",
+  ai_town: "AI Town",
   custom: "Custom world",
 };
 

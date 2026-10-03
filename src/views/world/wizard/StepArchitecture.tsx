@@ -1,4 +1,4 @@
-import { FolderOpen, TriangleAlert } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { attempt } from "../../../lib/toast";
 import type { WorldAnalysis, WorldProviderInfo } from "../../../lib/types";
@@ -10,16 +10,6 @@ const CHOICES: { id: ProviderId; title: string; summary: string }[] = [
     id: "nexus_native",
     title: "NEXUS Native AI World",
     summary: "Runs inside NEXUS with no extra infrastructure; linked characters mirror your real agents.",
-  },
-  {
-    id: "ai_town_compatible",
-    title: "AI Town compatible",
-    summary: "Native world, plus an export of your characters as AI Town's data/characters.ts.",
-  },
-  {
-    id: "ai_town",
-    title: "AI Town fork",
-    summary: "Clones a16z-infra/ai-town (MIT) into the project and writes your characters into it.",
   },
   {
     id: "custom",
@@ -55,6 +45,10 @@ export function StepArchitecture({ state, set, analysis, providers }: {
           </div>
         </div>
       )}
+      <div className="tiny muted">
+        This wizard creates the NEXUS native 2D world (the fallback). The integrated AI Town is installed and started from the
+        AI Town tab of the AI World page.
+      </div>
       <div className="world-choices" role="radiogroup" aria-label="World architecture">
         {CHOICES.map((c) => {
           const info = providers.find((p) => p.id === c.id);
@@ -70,15 +64,6 @@ export function StepArchitecture({ state, set, analysis, providers }: {
                 </div>
                 <div className="small muted">{info?.description || c.summary}</div>
                 {info && info.prerequisites.length > 0 && <Prerequisites items={info.prerequisites} />}
-                {c.id === "ai_town" && checked && (
-                  <div className="notice notice-warn world-gap">
-                    <TriangleAlert size={14} />
-                    <span>
-                      AI Town needs Convex (cloud account or self-hosted Docker) and an Ollama or OpenAI-compatible LLM. A Claude
-                      subscription cannot drive AI Town directly.
-                    </span>
-                  </div>
-                )}
                 {c.id === "custom" && checked && (
                   <div className="row world-gap">
                     <input className="grow mono" value={state.targetDir} placeholder="Choose a folder…" readOnly />

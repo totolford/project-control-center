@@ -16,8 +16,19 @@ import InteractButton from './components/buttons/InteractButton.tsx';
 import FreezeButton from './components/FreezeButton.tsx';
 import { MAX_HUMAN_PLAYERS } from '../convex/constants.ts';
 import PoweredByConvex from './components/PoweredByConvex.tsx';
+import { EMBEDDED } from './nexus/embed.ts';
+import NexusGame from './nexus/NexusGame.tsx';
 
 export default function Home() {
+  // NEXUS: inside NEXUS only the game itself, full-bleed (no header, footer,
+  // buttons or details column: NEXUS provides those).
+  if (EMBEDDED) {
+    return <NexusGame />;
+  }
+  return <AiTownHome />;
+}
+
+function AiTownHome() {
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-between font-body game-background">

@@ -1,0 +1,338 @@
+/* Missions page, New Mission flow and right-panel mission view (workstream "missions"). */
+
+.missions-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .missions-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mission-tab-count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.tab.active .mission-tab-count {
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ list */
+.mission-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mission-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.mission-row:hover {
+  background: var(--hover);
+}
+.mission-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.mission-row.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.mission-row-title {
+  font-weight: 600;
+}
+.mission-num {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ detail */
+.mission-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mission-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mission-detail-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.mission-pct {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.mission-objective {
+  color: var(--text);
+  line-height: 1.5;
+}
+.mission-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mission-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.mission-tree-root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+.mission-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.mission-tree-row:hover {
+  background: var(--hover);
+}
+.mission-tree-branch {
+  font-family: var(--mono);
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.mission-tree-mark {
+  width: 14px;
+  text-align: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mark-done {
+  color: var(--green);
+}
+.mark-running {
+  color: var(--green);
+  animation: mission-pulse 1.6s ease-in-out infinite;
+}
+.mark-review {
+  color: var(--accent);
+}
+.mark-waiting {
+  color: var(--grey);
+}
+.mark-problem {
+  color: var(--red);
+}
+.mark-cancelled {
+  color: var(--dim);
+}
+@keyframes mission-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mark-running {
+    animation: none;
+  }
+}
+
+.mission-uses {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: start;
+  font-size: 12.5px;
+}
+.mission-uses dt {
+  color: var(--muted);
+}
+.mission-uses dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.use-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mission-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.mission-log li {
+  display: flex;
+  gap: 8px;
+}
+.mission-log time {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ New Mission */
+.newm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.newm-steps {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--dim);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.newm-steps li[aria-current="step"] {
+  color: var(--text);
+  font-weight: 600;
+}
+.newm-steps li.done {
+  color: var(--muted);
+}
+.newm-question {
+  font-size: 15px;
+  font-weight: 600;
+}
+.newm textarea {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.newm-estimate {
+  font-size: 11px;
+  color: var(--amber);
+}
+.newm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .newm-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.newm-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel-2, var(--panel));
+  min-width: 0;
+}
+.newm-box h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.req-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.req {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.req input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+.req-name {
+  font-weight: 500;
+  word-break: break-word;
+}
+.req-reason {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.req-missing {
+  color: var(--orange);
+  font-size: 11.5px;
+}
+.newm-error {
+  border: 1px solid color-mix(in srgb, var(--orange) 45%, transparent);
+  background: color-mix(in srgb, var(--orange) 9%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.newm-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ------------------------------------------------------------------ right panel */
+.mission-panel {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+}
+.mission-panel .mission-detail-head h2 {
+  font-size: 14px;
+}
+.mission-panel .mission-pct {
+  font-size: 18px;
+}
+
+.mission-detail .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

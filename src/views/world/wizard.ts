@@ -15,7 +15,6 @@ export const STEPS: { id: StepId; label: string }[] = [
   { id: "review", label: "Review" },
 ];
 
-export const DEFAULT_TARGET = ".agent-project/ai-world/ai-town";
 export const MIN_SPEED = 0.5;
 export const MAX_SPEED = 5;
 
@@ -24,14 +23,14 @@ export type InfraKey = (typeof INFRA_KEYS)[number];
 
 /** Choices per infrastructure field; the first one is the default. */
 export function infraOptions(provider: ProviderId): Record<InfraKey, string[]> {
-  if (provider === "ai_town") {
+  if (provider === "custom") {
     return {
-      frontend: ["React + Pixi (AI Town)"],
-      backend: ["Convex cloud", "Convex self-hosted (Docker)"],
-      database: ["Convex"],
-      llm: ["Ollama", "OpenAI-compatible endpoint"],
-      authentication: ["None (local)", "Clerk (AI Town optional)"],
-      deployment: ["Local (npm run dev)", "Vercel + Convex cloud"],
+      frontend: ["Your world project"],
+      backend: ["Your world project"],
+      database: [".agent-project/ai-world (JSON)"],
+      llm: ["None (native)", "Claude Code for conversations"],
+      authentication: ["NEXUS (local)"],
+      deployment: ["Your world project"],
     };
   }
   return {
@@ -59,13 +58,12 @@ export interface WizardState {
   mode: WorldMode;
   source: CharacterSource;
   characters: Character[];
-  /** AI Town fork folder (default relative path) or custom world folder. */
+  /** Custom world folder. */
   targetDir: string;
-  letCentralFinish: boolean;
   infrastructure: Record<string, string>;
 }
 
-const PROVIDERS: ProviderId[] = ["nexus_native", "ai_town_compatible", "ai_town", "custom"];
+const PROVIDERS: ProviderId[] = ["nexus_native", "custom"];
 
 export function asProvider(id: string): ProviderId {
   return (PROVIDERS as string[]).includes(id) ? (id as ProviderId) : "nexus_native";
@@ -83,8 +81,7 @@ export function initialWizard(projectName: string, analysis?: WorldAnalysis, cha
     mode: "hybrid",
     source: "agents",
     characters,
-    targetDir: provider === "ai_town" ? DEFAULT_TARGET : "",
-    letCentralFinish: provider === "ai_town",
+    targetDir: "",
     infrastructure: defaultInfrastructure(provider),
   };
 }
@@ -94,8 +91,7 @@ export function withProvider(s: WizardState, provider: ProviderId): WizardState 
   return {
     ...s,
     provider,
-    targetDir: provider === "ai_town" ? DEFAULT_TARGET : provider === "custom" ? "" : s.targetDir,
-    letCentralFinish: provider === "ai_town" ? s.letCentralFinish : false,
+    targetDir: provider === "custom" ? s.targetDir : "",
     infrastructure: defaultInfrastructure(provider),
   };
 }
@@ -130,9 +126,6 @@ export function validateStep(step: StepId, s: WizardState): Validation {
       names.add(c.name.trim().toLowerCase());
     }
   }
-  if ((step === "infrastructure" || step === "review") && s.provider === "ai_town" && !s.targetDir.trim()) {
-    errors.push("Choose the folder of the AI Town fork.");
-  }
   return { errors: [...new Set(errors)], warnings };
 }
 
@@ -141,7 +134,6 @@ function cleanList(items: string[]): string[] {
 }
 
 export function buildSpec(s: WizardState): WorldSpec {
-  const usesFolder = s.provider === "ai_town" || s.provider === "custom";
   const dir = s.targetDir.trim();
   return {
     name: s.name.trim(),
@@ -158,9 +150,7 @@ export function buildSpec(s: WizardState): WorldSpec {
       memory: cleanList(c.memory),
       relationships: c.relationships.filter((r) => r.with.trim() && r.kind.trim()),
     })),
-    // The backend resolves the default AI Town folder inside the project.
-    targetDir: usesFolder && dir && dir !== DEFAULT_TARGET ? dir : null,
-    letCentralFinish: s.provider === "ai_town" && s.letCentralFinish,
+    targetDir: s.provider === "custom" && dir ? dir : null,
     infrastructure: s.infrastructure,
   };
 }

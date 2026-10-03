@@ -117,5 +117,15 @@ export const characters = [
   },
 ];
 
+// NEXUS: built-in NEXUS skins (scripts/nexus_skins.py), redrawn from the folk
+// sprites above with the same frame layout as f1.
+export const nexusCharacters = ['robot', 'android', 'wizard', 'cyberpunk'].map((look) => ({
+  name: `nexus-${look}`,
+  textureUrl: `/ai-town/assets/nexus-skins/${look}.png`,
+  spritesheetData: f1SpritesheetData,
+  speed: 0.1,
+}));
+characters.push(...nexusCharacters);
+
 // Characters move at 0.75 tiles per second.
 export const movementSpeed = 0.75;

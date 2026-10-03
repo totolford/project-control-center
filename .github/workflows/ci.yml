@@ -27,15 +27,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm run install:ai-town
 
       - name: Typecheck and test frontend
         run: |
           npm run typecheck
           npm test
 
-      - name: Build frontend
-        run: npm run build
+      - name: Build frontend (AI Town world + NEXUS)
+        run: |
+          npm run build:ai-town
+          npm run build
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

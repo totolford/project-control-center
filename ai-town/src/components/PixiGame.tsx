@@ -14,6 +14,8 @@ import { DebugPath } from './DebugPath.tsx';
 import { PositionIndicator } from './PositionIndicator.tsx';
 import { SHOW_DEBUG_UI } from './Game.tsx';
 import { ServerGame } from '../hooks/serverGame.ts';
+import type { NexusPixi } from '../nexus/NexusLayer.tsx';
+import { Buildings } from '../nexus/Buildings.tsx';
 
 export const PixiGame = (props: {
   worldId: Id<'worlds'>;
@@ -23,10 +25,13 @@ export const PixiGame = (props: {
   width: number;
   height: number;
   setSelectedElement: SelectElement;
+  // NEXUS: buildings, decorations and camera of the embedded world.
+  nexus?: NexusPixi;
 }) => {
   // PIXI setup.
   const pixiApp = useApp();
-  const viewportRef = useRef<Viewport | undefined>();
+  const ownViewportRef = useRef<Viewport | undefined>();
+  const viewportRef = props.nexus?.viewportRef ?? ownViewportRef;
 
   const humanTokenIdentifier = useQuery(api.world.userStatus, { worldId: props.worldId }) ?? null;
   const humanPlayerId = [...props.game.world.players.values()].find(
@@ -58,6 +63,8 @@ export const PixiGame = (props: {
         return;
       }
     }
+    // NEXUS: a click on the ground closes the profile card.
+    props.nexus?.onMapClick();
     if (!humanPlayerId) {
       return;
     }
@@ -107,6 +114,13 @@ export const PixiGame = (props: {
         onpointerup={onMapPointerUp}
         onpointerdown={onMapPointerDown}
       />
+      {props.nexus && (
+        <Buildings
+          zones={props.nexus.zones}
+          counts={props.nexus.counts}
+          onOpen={props.nexus.onOpenBuilding}
+        />
+      )}
       {players.map(
         (p) =>
           // Only show the path for the human player in non-debug mode.
@@ -123,6 +137,7 @@ export const PixiGame = (props: {
           isViewer={p.id === humanPlayerId}
           onClick={props.setSelectedElement}
           historicalTime={props.historicalTime}
+          nexus={props.nexus?.decorator}
         />
       ))}
     </PixiViewport>

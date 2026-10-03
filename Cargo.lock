@@ -2727,7 +2727,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-claude"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pcc-core",
  "serde",
@@ -2742,7 +2742,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-connections"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "keyring",
  "pcc-claude",
@@ -2759,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "regex",
@@ -2771,7 +2771,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-git"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pcc-core",
  "serde",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-orchestrator"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "pcc-claude",
@@ -2800,7 +2800,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-pty"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "parking_lot",
  "pcc-claude",
@@ -2813,7 +2813,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-store"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "parking_lot",
@@ -2828,7 +2828,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-world"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pcc-claude",
  "pcc-core",
@@ -2837,6 +2837,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "ureq",
 ]
 
 [[package]]
@@ -3095,7 +3096,7 @@ dependencies = [
 
 [[package]]
 name = "project-control-center"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "pcc-claude",
@@ -4919,6 +4920,8 @@ dependencies = [
  "once_cell",
  "rustls",
  "rustls-pki-types",
+ "serde",
+ "serde_json",
  "url",
  "webpki-roots 0.26.11",
 ]

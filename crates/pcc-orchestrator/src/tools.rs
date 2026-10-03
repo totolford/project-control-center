@@ -56,7 +56,8 @@ fn central_tools() -> Vec<Value> {
                 "dependencies": {"type": "array", "items": {"type": "string"}, "description": "Task ids that must be completed first"},
                 "priority": {"type": "string", "enum": ["low", "normal", "high", "critical"]},
                 "requires_review": {"type": "boolean", "description": "Completion goes to `review` until you approve it"},
-                "mission_id": {"type": "string", "description": "Defaults to the single active mission"}
+                "mission_id": {"type": "string", "description": "Defaults to the single active mission"},
+                "skills": {"type": "array", "items": {"type": "string"}, "description": "Skills the worker must invoke with the Skill tool for this task (exact names, e.g. the ones selected for the mission)."}
             }),
             &["title", "description", "agent"],
         ),
@@ -320,13 +321,23 @@ fn call_central(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<St
                     priority,
                     requires_review: args.get("requires_review").and_then(Value::as_bool),
                     mission_id: s(args, "mission_id").map(str::to_string),
+                    skills: Some(strings(args, "skills")),
                 },
                 me,
             )?;
+            // Skills are all-or-nothing per session: say so when the worker cannot use them.
+            let agent = t.agent.clone().unwrap_or_default();
+            let skills_note = match e.store.get_agent(&agent)? {
+                Some(a) if !t.skills.is_empty() && !a.profile.skills_enabled => format!(
+                    " Warning: {agent} runs with skills disabled, it cannot invoke {}; enable skills on the agent or pick another one.",
+                    t.skills.join(", ")
+                ),
+                _ => String::new(),
+            };
             Ok(format!(
-                "{} created for {} (status {}{}).",
+                "{} created for {} (status {}{}).{skills_note}",
                 t.id,
-                t.agent.unwrap_or_default(),
+                agent,
                 t.status.as_str(),
                 t.mission_id.map(|m| format!(", mission {m}")).unwrap_or_default()
             ))

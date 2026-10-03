@@ -312,6 +312,31 @@ releases, branches and commits, clones repositories, creates issues and dispatch
 workflows on explicit user actions. Agents use `gh`/`git` through their
 `github_*` capabilities.
 
+## AI World on AI Town (0.3)
+
+`ai-town/` is a16z-infra/ai-town imported unmodified (base commit in
+`ai-town/nexus-upstream.json`), then changed in separate commits; NEXUS edits to
+upstream files are marked `NEXUS:` and new code lives in `ai-town/convex/nexus*.ts`,
+`ai-town/convex/aiTown/nexusInputs.ts`, `ai-town/data/nexus*.ts` and `ai-town/src/nexus/`.
+
+* **Runtime** (`pcc-world::aitown::runtime`): the backend part of `ai-town/` is copied
+  to `%LOCALAPPDATA%\NEXUS\ai-town`, `npm ci` runs after the user's consent, and
+  `convex dev` runs in anonymous local mode (127.0.0.1, no Convex account). The
+  frontend is built into `public/ai-town/`, served by NEXUS at `/ai-town/` and embedded
+  in an iframe (same origin, strict CSP; PixiJS uses `@pixi/unsafe-eval` instead of eval).
+* **One world per project** (`nexus:ensureWorld`). Each NEXUS agent is an AI Town human
+  player `nexus:<agentId>` with no LLM. The bridge (`src-tauri/src/aitown_commands.rs`)
+  calls `nexus:syncAgents` every second with facts derived only from real state
+  (`pcc-world::aitown::bridge`: zone, label, emoji) and forwards real messages and
+  assistant text to `nexus:say` (bubbles; the speaker walks to the listener and an
+  AI Town conversation records the text).
+* **iframe protocol**: `AiTownToNexus` / `NexusToAiTown` in `src/lib/types.ts`
+  (select, talk, view work, buildings, direct-control actions, camera).
+* **Upstream sync** (`pcc-world::aitown::upstream`): clone upstream, compare with the
+  base, 3-way merge with `git merge-file`; conflicts are written as `<file>.upstream`
+  and the base only moves when nothing is left for review.
+* The native 2D world below remains as a fallback when Node.js is missing.
+
 ## AI World (`pcc-world`)
 
 Inspired by the architecture of a16z-infra/ai-town (MIT): world state, a tick-based
@@ -327,10 +352,6 @@ and streams frames on `pcc://world`.
 * **Simulation**: unlinked behaviour follows a deterministic routine; mood and
   conversations are simulated, conversations being generated on request by a
   one-shot Claude Code call (no tools, budget-capped).
-* **Providers** (`AIWorldProvider`): NEXUS Native; AI Town compatible (native world
-  + `characters.ts` export); AI Town fork (clones the repository and rewrites only
-  the `Descriptions` array of `data/characters.ts`; AI Town needs Convex and an
-  Ollama/OpenAI-compatible LLM with embeddings, which a Claude subscription cannot
-  provide — prerequisites are checked and reported, and Central can finish the setup
-  as a mission); Custom (an existing world project folder). Conversions back up
-  `.agent-project` and take a git snapshot first, and never modify project files.
+* **Providers** (`AIWorldProvider`): integrated AI Town (above), NEXUS Native, and
+  Custom (an existing world project folder). Conversions back up `.agent-project`
+  first and never modify project files.

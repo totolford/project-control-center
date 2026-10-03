@@ -284,11 +284,31 @@ pub struct AgentProfile {
     pub skills_enabled: bool,
     /// Non-secret environment variables for this agent's session.
     pub env: BTreeMap<String, String>,
+    /// How the agent's character looks in the AI World.
+    pub appearance: AgentAppearance,
+}
+
+/// Character customization ("Customize Character"). The sprite is a whole
+/// AI Town spritesheet: hair or clothes can only differ through another
+/// spritesheet, so there are no separate hair/clothes fields.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgentAppearance {
+    /// AI Town character (`f1`..`f8`) or an imported `nexus-skin:<name>`.
+    pub skin: Option<String>,
+    /// Preset id the skin came from (`developer`, `robot`...), informational.
+    pub preset: Option<String>,
+    /// Name shown above the character instead of the agent name.
+    pub display_name: Option<String>,
+    /// Short badge shown next to the name (e.g. "QA", "★").
+    pub badge: Option<String>,
+    /// Tint applied to the sprite, `#rrggbb`.
+    pub tint: Option<String>,
 }
 
 impl Default for AgentProfile {
     fn default() -> Self {
-        Self { effort: None, skills_enabled: true, env: BTreeMap::new() }
+        Self { effort: None, skills_enabled: true, env: BTreeMap::new(), appearance: AgentAppearance::default() }
     }
 }
 
@@ -400,6 +420,10 @@ pub struct Task {
     pub updated_at: String,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
+    /// Skills the worker is asked to invoke with the Skill tool (set by Central,
+    /// usually from the mission's selection). Empty for tasks created before 0.3.
+    #[serde(default)]
+    pub skills: Vec<String>,
 }
 
 // ---------------------------------------------------------------- missions
@@ -407,6 +431,8 @@ pub struct Task {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MissionStatus {
+    /// Waiting for the running mission to finish (Central has not received it yet).
+    Queued,
     Planning,
     Active,
     Completed,
@@ -414,17 +440,111 @@ pub enum MissionStatus {
     Cancelled,
 }
 
+impl MissionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MissionStatus::Queued => "queued",
+            MissionStatus::Planning => "planning",
+            MissionStatus::Active => "active",
+            MissionStatus::Completed => "completed",
+            MissionStatus::Failed => "failed",
+            MissionStatus::Cancelled => "cancelled",
+        }
+    }
+    /// Central is working on it.
+    pub fn is_running(self) -> bool {
+        matches!(self, MissionStatus::Planning | MissionStatus::Active)
+    }
+    pub fn is_closed(self) -> bool {
+        matches!(self, MissionStatus::Completed | MissionStatus::Failed | MissionStatus::Cancelled)
+    }
+}
+
+fn normal_priority() -> Priority {
+    Priority::Normal
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Mission {
     pub id: String,
     pub title: String,
+    /// The objective, as written by the user.
     pub prompt: String,
     pub status: MissionStatus,
     pub summary: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
+    // Fields below were added in 0.3; older missions read with their defaults.
+    /// Orders the queue (higher first, then oldest first).
+    #[serde(default = "normal_priority")]
+    pub priority: Priority,
+    /// Model the user wants for the workers of this mission (told to Central).
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Skills selected by the user; Central is asked to invoke them with the Skill tool.
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// MCP servers selected by the user (names as Claude Code reports them).
+    #[serde(default)]
+    pub mcp: Vec<String>,
+    /// Project connection ids selected by the user.
+    #[serde(default)]
+    pub connections: Vec<String>,
+    /// Pre-mission analysis (an estimate made by one Claude call), if one was run.
+    #[serde(default)]
+    pub analysis: Option<MissionAnalysis>,
+    /// When the mission was handed to Central.
+    #[serde(default)]
+    pub started_at: Option<String>,
+    /// Hidden from the main lists; recoverable.
+    #[serde(default)]
+    pub archived_at: Option<String>,
+}
+
+/// What a mission probably needs, estimated by Claude from the objective and the
+/// real project context. Availability flags are computed by NEXUS, not by Claude.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MissionAnalysis {
+    pub title: String,
+    pub summary: String,
+    pub agents: Vec<RequiredAgent>,
+    pub skills: Vec<Requirement>,
+    pub mcp: Vec<Requirement>,
+    pub connections: Vec<Requirement>,
+    pub model: Option<String>,
+    pub model_reason: Option<String>,
+    pub steps: Vec<String>,
+    pub estimated_steps: u32,
+    /// Model that produced the estimate.
+    pub analyzed_with: String,
+    pub analyzed_at: String,
+    pub cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RequiredAgent {
+    pub role: String,
+    pub reason: String,
+    /// Id of an existing agent whose role fits, when Claude named a real one.
+    pub existing: Option<String>,
+}
+
+/// One required skill, MCP server or connection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Requirement {
+    /// Exact name (skill `plugin:name`, MCP server name, connection id) when it
+    /// matches something real, otherwise what Claude suggested.
+    pub name: String,
+    pub reason: String,
+    /// Exists in this environment (installed skill, configured server, project connection).
+    pub available: bool,
+    /// Exists but is disabled / not connected.
+    pub detail: Option<String>,
 }
 
 /// Mission with task counters, computed from the task table.

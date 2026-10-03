@@ -199,6 +199,14 @@ pub fn task_dispatch(task: &Task, deps: &[Task], resumed: bool, sync_note: Optio
         if task.requires_review { " · Will be reviewed" } else { "" },
         task.description.trim()
     );
+    if !task.skills.is_empty() {
+        s.push_str("\n## Skills to use\n");
+        for k in &task.skills {
+            s.push_str(&format!(
+                "- Invoke the skill `{k}` with the Skill tool before working on the part it covers.\n"
+            ));
+        }
+    }
     if !deps.is_empty() {
         s.push_str("\n## Results of the tasks this one depends on\n");
         for d in deps {
@@ -258,8 +266,12 @@ mod tests {
             updated_at: String::new(),
             started_at: None,
             completed_at: None,
+            skills: vec![],
         };
-        let text = task_dispatch(&mk("TASK-0002"), &[mk("TASK-0001")], false, None);
+        let mut task = mk("TASK-0002");
+        task.skills = vec!["ui-ux-pro-max:ui-ux-pro-max".into()];
+        let text = task_dispatch(&task, &[mk("TASK-0001")], false, None);
+        assert!(text.contains("Invoke the skill `ui-ux-pro-max:ui-ux-pro-max` with the Skill tool"));
         assert!(text.starts_with("[TASK TASK-0002] tTASK-0002"));
         assert!(text.contains("API ready"));
         assert!(text.contains("src/api/assets.ts"));

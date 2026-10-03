@@ -2,7 +2,7 @@ import { Fragment, memo } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useUi } from "../state/ui";
 import { useStore, type ViewName } from "../store";
-import { NAV_GROUPS, SETTINGS_ITEM, type NavItem } from "./navItems";
+import { NAV_SECTIONS, SETTINGS_ITEM, type NavItem } from "./navItems";
 
 function isActive(item: ViewName, current: ViewName): boolean {
   return item === current || (item === "agents" && current === "agent");
@@ -25,7 +25,7 @@ const NavButton = memo(function NavButton({ item, active, collapsed, badge }: { 
   );
 });
 
-/** Vertical main navigation; collapsible to icons. */
+/** Vertical main navigation in labelled groups; collapsible to icons. */
 export function MainNav() {
   const current = useStore((s) => s.view.name);
   const review = useStore((s) => s.project?.tasks.filter((t) => t.status === "review").length ?? 0);
@@ -33,10 +33,10 @@ export function MainNav() {
   const toggleNav = useUi((s) => s.toggleNav);
   return (
     <nav className={`mainnav${collapsed ? " collapsed" : ""}`} aria-label="Views">
-      {NAV_GROUPS.map((group, i) => (
-        <Fragment key={i}>
-          {i > 0 && <span className="nav-sep" />}
-          {group.map((item) => (
+      {NAV_SECTIONS.map((section, i) => (
+        <Fragment key={section.label}>
+          {collapsed ? i > 0 && <span className="nav-sep" /> : <span className="nav-section">{section.label}</span>}
+          {section.items.map((item) => (
             <NavButton key={item.name} item={item} active={isActive(item.name, current)} collapsed={collapsed} badge={item.name === "tasks" ? review : undefined} />
           ))}
         </Fragment>

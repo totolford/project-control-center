@@ -22,7 +22,10 @@ use crate::layout::{write_atomic, write_json_atomic, Layout};
 use pcc_core::{Error, Result};
 
 /// Layout format written by this version.
-pub const CURRENT_FORMAT: u32 = 2;
+pub const CURRENT_FORMAT: u32 = 3;
+
+/// Oldest NEXUS that understands the current format (written to new and migrated projects).
+pub const MINIMUM_NEXUS_FOR_CURRENT: &str = "0.3.0";
 /// Version of NEXUS (workspace version).
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Folder next to `.agent-project` holding migration backups.
@@ -107,7 +110,20 @@ fn migrations() -> Vec<Migration> {
         title: "Versioned manifest and new folders",
         description: "Adds createdWith / lastOpenedWith / minimumNexusVersion to project.json and creates settings/ (workspace layout), ai-world/ and migrations/.",
         apply: migrate_1_to_2,
+    },
+    Migration {
+        from: 2,
+        to: 3,
+        title: "Mission queue and skills",
+        description: "Missions can be queued, prioritized, archived and carry selected skills/MCP/connections (0.3). Older NEXUS versions cannot read such missions, so the minimum version becomes 0.3.0. Existing data is unchanged.",
+        apply: migrate_2_to_3,
     }]
+}
+
+fn migrate_2_to_3(_layout: &Layout, manifest: &mut Value) -> Result<Vec<String>> {
+    let obj = manifest.as_object_mut().ok_or_else(|| Error::invalid("project.json is not an object"))?;
+    obj.insert("minimumNexusVersion".into(), json!(MINIMUM_NEXUS_FOR_CURRENT));
+    Ok(vec![format!("minimumNexusVersion set to {MINIMUM_NEXUS_FOR_CURRENT} (queued missions are unknown to 0.2)")])
 }
 
 fn migrate_1_to_2(layout: &Layout, manifest: &mut Value) -> Result<Vec<String>> {
@@ -423,16 +439,17 @@ mod tests {
         v1_project(tmp.path());
         let a = analyze(tmp.path()).unwrap();
         assert_eq!(a.status, CompatStatus::MigrationAvailable);
-        assert_eq!(a.plan.len(), 1);
+        assert_eq!(a.plan.len(), 2);
         assert_eq!(a.unknown_fields, vec!["futureThing"]);
 
         let r = migrate(tmp.path()).unwrap();
         assert!(r.ok, "{:?}", r.integrity);
-        assert_eq!((r.from_format, r.to_format), (1, 2));
+        assert_eq!((r.from_format, r.to_format), (1, 3));
         assert!(Path::new(&r.report_path).is_file());
         let m: Value =
             serde_json::from_str(&fs::read_to_string(Layout::new(tmp.path()).project_json()).unwrap()).unwrap();
-        assert_eq!(m["formatVersion"], 2);
+        assert_eq!(m["formatVersion"], 3);
+        assert_eq!(m["minimumNexusVersion"], MINIMUM_NEXUS_FOR_CURRENT);
         assert_eq!(m["futureThing"]["a"], 1, "unknown data preserved");
         assert_eq!(analyze(tmp.path()).unwrap().status, CompatStatus::Compatible);
         assert_eq!(list_backups(tmp.path()).len(), 1);

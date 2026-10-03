@@ -1,7 +1,10 @@
 //! Project Control Center desktop application.
 
+mod aitown_commands;
 mod commands;
 mod control_commands;
+mod market_commands;
+mod mission_commands;
 mod ops_commands;
 mod state;
 mod world_commands;
@@ -56,6 +59,19 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            market_commands::market_index,
+            market_commands::market_refresh,
+            market_commands::market_search_github,
+            market_commands::market_details,
+            market_commands::market_install,
+            market_commands::market_uninstall,
+            market_commands::market_update,
+            market_commands::market_set_enabled,
+            market_commands::market_plugin_options,
+            market_commands::market_settings,
+            market_commands::market_save_settings,
+            market_commands::market_recommend,
+            market_commands::market_status,
             commands::app_info,
             commands::detect_claude,
             commands::recent_projects,
@@ -174,6 +190,14 @@ pub fn run() {
             ops_commands::github_create_issue,
             ops_commands::github_run_workflow,
             ops_commands::master_status,
+            aitown_commands::ai_town_status,
+            aitown_commands::ai_town_install,
+            aitown_commands::ai_town_start,
+            aitown_commands::ai_town_stop,
+            aitown_commands::ai_town_say,
+            aitown_commands::ai_town_upstream_check,
+            aitown_commands::ai_town_upstream_apply,
+            aitown_commands::set_agent_appearance,
             world_commands::world_get,
             world_commands::world_providers,
             world_commands::world_analyze,
@@ -184,6 +208,12 @@ pub fn run() {
             world_commands::world_characters_from_agents,
             world_commands::world_generate_characters,
             world_commands::world_converse,
+            mission_commands::analyze_mission,
+            mission_commands::create_mission_with,
+            mission_commands::start_mission,
+            mission_commands::set_mission_priority,
+            mission_commands::archive_mission,
+            mission_commands::mission_activity,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the application");

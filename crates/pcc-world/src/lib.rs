@@ -8,6 +8,7 @@
 //! Inspired by the architecture of a16z-infra/ai-town (MIT): world state,
 //! simulation engine stepping by ticks, agents with memory/goals, client.
 
+pub mod aitown;
 pub mod characters;
 pub mod engine;
 pub mod model;

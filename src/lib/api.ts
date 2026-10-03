@@ -38,6 +38,18 @@ export const api = {
   // ---------------------------------------------------------------- missions
   createMission: (prompt: string, title?: string) => invoke<T.Mission>("create_mission", { prompt, title: title ?? null }),
   cancelMission: (id: string) => invoke<void>("cancel_mission", { id }),
+  // Missions 0.3 (src-tauri/src/mission_commands.rs)
+  /** One short Claude Code call (haiku by default, tools disabled): an estimate, costs tokens. */
+  analyzeMission: (objective: string, model: string | null, claude: T.MissionClaudeContext | null) =>
+    invoke<T.MissionAnalysis>("analyze_mission", { objective, model, claude }),
+  /** Sent to Central now, or queued while another mission runs (unless spec.startNow). */
+  createMissionWith: (spec: T.MissionSpec) => invoke<T.Mission>("create_mission_with", { spec }),
+  /** Hands a queued mission to Central even if another one runs. */
+  startMission: (id: string) => invoke<T.Mission>("start_mission", { id }),
+  setMissionPriority: (id: string, priority: T.Priority) => invoke<T.Mission>("set_mission_priority", { id, priority }),
+  /** Finished missions only; archived = false restores. */
+  archiveMission: (id: string, archived: boolean) => invoke<T.Mission>("archive_mission", { id, archived }),
+  missionActivity: (id: string) => invoke<T.MissionActivity>("mission_activity", { id }),
 
   // ---------------------------------------------------------------- agents
   createAgent: (spec: T.AgentSpec) => invoke<T.Agent>("create_agent", { spec }),
@@ -150,6 +162,27 @@ export const api = {
   skillExport: (dir: string, destination: string) => invoke<string>("skill_export", { dir, destination }),
   skillTest: (dir: string) => invoke<T.SkillTest>("skill_test", { dir }),
 
+  // ---------------------------------------------------------------- Skill Market (market workstream)
+  /** Marketplaces, catalog, cached GitHub results and what is on disk (no network). */
+  marketIndex: () => invoke<T.MarketIndex>("market_index"),
+  /** User action: `claude plugin marketplace update` (optional), user repositories and GitHub stars. */
+  marketRefresh: (updateMarketplaces: boolean) => invoke<T.MarketRefresh>("market_refresh", { updateMarketplaces }),
+  marketSearchGithub: (query: string) => invoke<T.MarketSearch>("market_search_github", { query }),
+  /** Files and security analysis from the real files (local clone or GitHub). */
+  marketDetails: (id: string) => invoke<T.MarketDetails>("market_details", { id }),
+  /** Only after the user saw the analysis; `confirmed` = "Install anyway". */
+  marketInstall: (id: string, options: T.MarketInstallOptions) => invoke<T.MarketAction>("market_install", { id, options }),
+  marketUninstall: (id: string) => invoke<T.MarketAction>("market_uninstall", { id }),
+  marketUpdate: (id: string, options: T.MarketInstallOptions) => invoke<T.MarketAction>("market_update", { id, options }),
+  marketSetEnabled: (id: string, enabled: boolean) => invoke<T.MarketAction>("market_set_enabled", { id, enabled }),
+  /** `claude plugin configure <id>` (read-only listing of the plugin's options). */
+  marketPluginOptions: (id: string) => invoke<T.CliRun>("market_plugin_options", { id }),
+  marketSettings: () => invoke<T.MarketSettings>("market_settings"),
+  marketSaveSettings: (settings: T.MarketSettings) => invoke<T.MarketSettings>("market_save_settings", { settings }),
+  marketStatus: () => invoke<T.MarketStatus>("market_status"),
+  /** Deterministic, explainable recommendations for a text (fixed signature, used by missions). */
+  recommendSkills: (text: string) => invoke<T.SkillRecommendation[]>("market_recommend", { text }),
+
   // Models, power, autonomy
   /** true = the running session switched immediately; false = applies at next start. */
   setAgentModel: (agentId: string, model: string | null) => invoke<boolean>("set_agent_model", { agentId, model }),
@@ -240,7 +273,27 @@ export const api = {
   openPath: (path: string) => invoke<void>("open_path", { path }),
   /** Shows the item selected in Windows Explorer. */
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
+
+  // ---------------------------------------------------------------- integrated AI Town
+  aiTownStatus: () => invoke<T.AiTownStatus>("ai_town_status"),
+  /** Runs npm ci for AI Town. Ask the user first: it downloads npm packages. */
+  aiTownInstall: () => invoke<T.AiTownStatus>("ai_town_install"),
+  /** Starts the local Convex backend, the project world and the agent bridge. */
+  aiTownStart: () => invoke<T.AiTownWorld>("ai_town_start"),
+  aiTownStop: () => invoke<T.AiTownStatus>("ai_town_stop"),
+  /** Speech bubble for what the user said to an agent (Talk). */
+  aiTownSay: (agentId: string, text: string) => invoke<void>("ai_town_say", { agentId, text }),
+  aiTownUpstreamCheck: () => invoke<T.UpstreamReport>("ai_town_upstream_check"),
+  aiTownUpstreamApply: () => invoke<T.UpstreamApplyResult>("ai_town_upstream_apply"),
+  setAgentAppearance: (agentId: string, appearance: T.AgentAppearance) =>
+    invoke<T.Agent>("set_agent_appearance", { agentId, appearance }),
 };
+
+export const AI_TOWN_CHANNEL = "pcc://ai-town";
+
+export function onAiTown(cb: (p: T.AiTownProgress) => void): Promise<UnlistenFn> {
+  return listen<T.AiTownProgress>(AI_TOWN_CHANNEL, (e) => cb(e.payload));
+}
 
 export function onEvent(cb: (e: T.PccEvent) => void): Promise<UnlistenFn> {
   return listen<T.PccEvent>(EVENT_CHANNEL, (e) => cb(e.payload));

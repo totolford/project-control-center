@@ -10,6 +10,7 @@ pub mod cli_help;
 pub mod control;
 pub mod detect;
 pub mod inspect;
+pub mod market;
 pub mod process;
 pub mod protocol;
 pub mod session;

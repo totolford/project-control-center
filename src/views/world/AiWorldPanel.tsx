@@ -1,15 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Maximize2, Pause, Play } from "lucide-react";
 import { Loading } from "../../components/Common";
 import { api } from "../../lib/api";
 import { attempt } from "../../lib/toast";
 import { useAgents, useStore } from "../../store";
+import { AiTownHost } from "./AiTownHost";
+import { useAiTown } from "./aiTownStore";
 import { characterRing, liveAgent, MODE_META } from "./status";
 import { useWorld } from "./useWorld";
 import { WorldCanvas } from "./WorldCanvas";
 
-/** Compact AI World for a workspace panel: same map, run / pause and the selected character. */
+/** Compact AI World for a workspace panel: the running AI Town, else the native map. */
 export function AiWorldPanel() {
+  const town = useAiTown();
+  const projectId = useStore((s) => s.project?.info.id ?? null);
+  const navigate = useStore((s) => s.navigate);
+  useEffect(() => {
+    useAiTown.getState().forProject(projectId);
+    void useAiTown.getState().refresh();
+  }, [projectId]);
+
+  if (town.status?.running && town.world && town.projectId === projectId) {
+    return (
+      <div className="world-panel">
+        <div className="world-panel-bar">
+          <span className="chip tone-accent">AI Town</span>
+          <span className="spacer" />
+          <button className="icon-btn" title="Open full view" aria-label="Open full view" onClick={() => navigate({ name: "world" })}>
+            <Maximize2 size={13} />
+          </button>
+        </div>
+        <div className="world-panel-map">
+          <AiTownHost world={town.world} compact />
+        </div>
+      </div>
+    );
+  }
+  return <NativePanel />;
+}
+
+function NativePanel() {
   const { world, loading, publish } = useWorld();
   const agents = useAgents();
   const navigate = useStore((s) => s.navigate);

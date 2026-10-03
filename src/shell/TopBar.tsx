@@ -1,44 +1,66 @@
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import logo from "../assets/icon.svg";
 import { APP_NAME, APP_TAGLINE } from "../lib/brand";
 import { isLive } from "../lib/labels";
 import { useUi } from "../state/ui";
-import { useAgents, useConnections, useMissions, useStore } from "../store";
+import { useAgents, useConnections, useReadOnly, useStore } from "../store";
 import { StatusDot } from "../components/StatusBadge";
 import { NotificationCenter } from "./NotificationCenter";
 import { ProjectBreadcrumb } from "./ProjectBreadcrumb";
 import { SafetyControls } from "./SafetyControls";
 
+/** `● n agents  ● n MCP`: live agent sessions and connected MCP servers (NEXUS connections). */
 function Indicators() {
   const agents = useAgents();
   const connections = useConnections();
-  const missions = useMissions();
   const navigate = useStore((s) => s.navigate);
   const active = agents.filter((a) => a.status !== "retired");
   const working = active.filter((a) => a.status === "working").length;
   const live = active.filter((a) => isLive(a.status)).length;
-  const ok = connections.filter((c) => c.status === "connected").length;
-  const failing = connections.some((c) => c.status === "error");
-  const mission = missions.find((m) => m.status === "active" || m.status === "planning");
+  const mcp = connections.filter((c) => c.kind === "mcp" || c.kind === "roblox_studio");
+  const mcpOk = mcp.filter((c) => c.status === "connected").length;
+  const mcpFailing = mcp.some((c) => c.status === "error");
   return (
     <div className="indicators">
-      <button className="indicator" onClick={() => navigate({ name: "swarm" })} title={`${live} agent sessions running`}>
-        <StatusDot tone={working > 0 ? "green" : "grey"} pulse={working > 0} />
-        <span className="indicator-label">
-          {working}/{active.length} agents working
+      <button
+        className="indicator"
+        onClick={() => navigate({ name: "agents" })}
+        title={`${live} of ${active.length} agent sessions running · ${working} working`}
+        aria-label={`${live} agents running, ${working} working`}
+      >
+        <StatusDot tone={working > 0 ? "green" : live > 0 ? "blue" : "grey"} pulse={working > 0} />
+        <span>
+          {live} {live === 1 ? "agent" : "agents"}
         </span>
       </button>
-      <button className="indicator" onClick={() => navigate({ name: "connections" })} title="Connections connected / total">
-        <StatusDot tone={failing ? "red" : connections.length > 0 && ok === connections.length ? "green" : "grey"} />
-        <span className="indicator-label">
-          {ok}/{connections.length} connections ok
-        </span>
-      </button>
-      <button className="indicator" onClick={() => navigate({ name: "missions" })} title={mission?.title ?? "No active mission"}>
-        <StatusDot tone={mission ? "accent" : "grey"} />
-        <span className="indicator-label">{mission ? "Mission active" : "No mission"}</span>
+      <button
+        className="indicator"
+        onClick={() => navigate({ name: "mcp" })}
+        title={`${mcpOk} of ${mcp.length} MCP connections connected`}
+        aria-label={`${mcpOk} MCP servers connected`}
+      >
+        <StatusDot tone={mcpFailing ? "red" : mcpOk > 0 ? "green" : "grey"} />
+        <span>{mcpOk} MCP</span>
       </button>
     </div>
+  );
+}
+
+/** "+ New Mission": the structured mission flow of the Missions view. */
+function NewMissionButton() {
+  const readOnly = useReadOnly();
+  return (
+    <button
+      className="btn btn-sm primary topbar-mission"
+      disabled={readOnly}
+      onClick={() => {
+        useUi.getState().setNewMission(true);
+        useStore.getState().navigate({ name: "missions" });
+      }}
+      title={readOnly ? "Compatibility mode: read-only" : "Start a structured mission (or type /mission in the command bar)"}
+    >
+      <Plus size={13} /> <span className="btn-text">New Mission</span>
+    </button>
   );
 }
 
@@ -53,6 +75,7 @@ export function TopBar({ onCloseProject, onFolder }: { onCloseProject: () => voi
       <ProjectBreadcrumb onCloseProject={onCloseProject} onFolder={onFolder} />
       <Indicators />
       <span className="spacer" />
+      <NewMissionButton />
       <SafetyControls />
       <button className="search-btn" onClick={() => setCommandOpen(true)} title="Search and commands (Ctrl+K)">
         <Search size={13} />

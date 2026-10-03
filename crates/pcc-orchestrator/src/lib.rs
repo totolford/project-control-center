@@ -2,6 +2,7 @@
 //!
 //! * `engine`  – sessions, delivery, scheduling, control requests, recovery.
 //! * `work`    – agents, tasks, missions, memory operations.
+//! * `missions` – mission queue, archive, brief for Central, analysis, observed activity.
 //! * `connections` – project connections and their secrets.
 //! * `admin`   – agent-driven connections, approvals, user requests, command journal.
 //! * `autonomy` – decision journal, power, UNLOCKED, emergency stop, improvement loop.
@@ -21,6 +22,7 @@ pub mod engine;
 mod env_tools;
 mod gitops;
 pub mod launch;
+pub mod missions;
 pub mod policy;
 pub mod prompts;
 pub mod providers;

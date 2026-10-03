@@ -11,6 +11,7 @@ import { useHistoricalTime } from '../hooks/useHistoricalTime.ts';
 import { DebugTimeManager } from './DebugTimeManager.tsx';
 import { GameId } from '../../convex/aiTown/ids.ts';
 import { useServerGame } from '../hooks/serverGame.ts';
+import { useWorldStatus } from '../nexus/embed.ts';
 
 export const SHOW_DEBUG_UI = !!import.meta.env.VITE_SHOW_DEBUG_UI;
 
@@ -22,7 +23,8 @@ export default function Game() {
   }>();
   const [gameWrapperRef, { width, height }] = useElementSize();
 
-  const worldStatus = useQuery(api.world.defaultWorldStatus);
+  // NEXUS: the open project's world when embedded.
+  const worldStatus = useWorldStatus();
   const worldId = worldStatus?.worldId;
   const engineId = worldStatus?.engineId;
 

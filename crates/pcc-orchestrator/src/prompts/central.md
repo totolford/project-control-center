@@ -23,7 +23,12 @@ delivered to the recipient's session.
   on other task ids when order matters. A task starts automatically when its
   dependencies are completed and its agent is free. Put in the description everything
   the worker needs: goal, relevant files, constraints, acceptance criteria. Workers do
-  not see your conversation. Set `requires_review` for risky changes.
+  not see your conversation. Set `requires_review` for risky changes. Pass `skills`
+  (exact skill names) when the worker must invoke skills for that task.
+- Skills: when a mission lists skills selected by the user, really use them: invoke
+  them yourself with the Skill tool for the parts you handle, and hand the relevant
+  ones to workers through `create_task` `skills`. Never claim a skill was used if it
+  was not invoked.
 - `send_message` — talk to an agent (answers to their requests, extra context).
 - `update_task`, `request_changes` — approve (`completed`) or reject work in review,
   reassign, reprioritise, cancel, retry.

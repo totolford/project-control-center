@@ -323,3 +323,116 @@ async fn central_requests_connections_with_approval_and_reuse() {
     assert_eq!(store.list_connections().unwrap().iter().filter(|c| c.kind == pcc_core::ConnectionKind::Ssh).count(), 1);
     o.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn second_mission_is_queued_then_started_with_its_skills() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+
+    let first = o.lock().await.create_mission("Build the thing", None).unwrap();
+    assert_eq!(first.status, MissionStatus::Planning);
+    let second = o
+        .lock()
+        .await
+        .create_mission_from(pcc_orchestrator::dto::MissionSpec {
+            prompt: "Polish the UI".into(),
+            priority: Some(pcc_core::Priority::High),
+            skills: vec!["ui-ux-pro-max:ui-ux-pro-max".into()],
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(second.status, MissionStatus::Queued);
+    let sent_to_central = |id: &str| {
+        store.list_messages(Some("central"), 500).unwrap().into_iter().any(|m| m.mission_id.as_deref() == Some(id))
+    };
+    assert!(!sent_to_central("M-0002"), "a queued mission is not sent to Central");
+    // Archiving needs a finished mission.
+    assert!(o.lock().await.archive_mission("M-0002", true).is_err());
+
+    wait_for("first mission completion", || {
+        store.get_mission("M-0001").unwrap().map(|m| m.status) == Some(MissionStatus::Completed)
+    })
+    .await;
+    wait_for("second mission started", || {
+        store.get_mission("M-0002").unwrap().is_some_and(|m| m.status.is_running() && m.started_at.is_some())
+    })
+    .await;
+    let brief = store
+        .list_messages(Some("central"), 500)
+        .unwrap()
+        .into_iter()
+        .find(|m| m.mission_id.as_deref() == Some("M-0002"))
+        .expect("brief sent");
+    assert!(brief.body.contains("NEW MISSION M-0002 · priority High"));
+    assert!(brief.body.contains("Skill tool"));
+
+    let archived = o.lock().await.archive_mission("M-0001", true).unwrap();
+    assert!(archived.archived_at.is_some());
+    assert!(o.lock().await.archive_mission("M-0001", false).unwrap().archived_at.is_none());
+    o.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelling_a_queued_mission_does_not_disturb_central() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    o.lock().await.create_mission("Build the thing", None).unwrap();
+    o.lock().await.create_mission("Later", None).unwrap();
+    o.lock().await.create_mission("Even later", None).unwrap();
+    o.lock().await.set_mission_priority("M-0003", pcc_core::Priority::Critical).unwrap();
+    assert_eq!(store.queued_missions().unwrap()[0].id, "M-0003");
+    o.lock().await.cancel_mission("M-0002").unwrap();
+    assert_eq!(store.get_mission("M-0002").unwrap().unwrap().status, MissionStatus::Cancelled);
+    assert!(!store
+        .list_messages(Some("central"), 500)
+        .unwrap()
+        .iter()
+        .any(|m| m.body.contains("cancelled mission M-0002")));
+    // M-0001 still runs: the queue does not move.
+    assert_eq!(store.get_mission("M-0003").unwrap().unwrap().status, MissionStatus::Queued);
+    let started = o.lock().await.start_mission("M-0003").unwrap();
+    assert_eq!(started.status, MissionStatus::Planning);
+    o.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn start_now_runs_alongside_and_tick_starts_leftover_queue() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let store = o.store.clone();
+    o.lock().await.create_mission("Build the thing", None).unwrap();
+    let urgent = o
+        .lock()
+        .await
+        .create_mission_from(pcc_orchestrator::dto::MissionSpec {
+            prompt: "Hotfix".into(),
+            start_now: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(urgent.status.is_running(), "start_now bypasses the queue");
+    // An unknown connection is refused before anything is stored.
+    let bad = o.lock().await.create_mission_from(pcc_orchestrator::dto::MissionSpec {
+        prompt: "x".into(),
+        connections: vec!["nope".into()],
+        ..Default::default()
+    });
+    assert!(bad.is_err());
+    assert!(store.get_mission("M-0003").unwrap().is_none());
+
+    // A queued mission left behind while nothing runs (e.g. the app closed) is started by the tick.
+    o.lock().await.cancel_mission("M-0001").unwrap();
+    o.lock().await.cancel_mission("M-0002").unwrap();
+    let mut left = o.lock().await.create_mission("Leftover", None).unwrap();
+    assert!(left.status.is_running());
+    o.lock().await.cancel_mission(&left.id).unwrap();
+    left.id = "M-0099".into();
+    left.status = MissionStatus::Queued;
+    left.started_at = None;
+    store.upsert_mission(&left).unwrap();
+    o.lock().await.tick().unwrap();
+    assert!(store.get_mission("M-0099").unwrap().unwrap().status.is_running());
+    o.close().await;
+}

@@ -2,7 +2,7 @@ import { Plus, RotateCcw } from "lucide-react";
 import { Menu, type MenuEntry } from "../components/Menu";
 import { useStore } from "../store";
 import { useLayoutContext } from "./hooks";
-import { addPanelToActive, getActiveTab, listPanels, specKey, type PanelSpec } from "./layout";
+import { addPanelToActive, getActiveTab, listPanels, openPanelTab, specKey, type PanelSpec, type PanelType } from "./layout";
 import { PANEL_ICON } from "./panelMeta";
 import { confirmResetLayout, useWorkspace } from "./store";
 
@@ -50,6 +50,9 @@ function candidates(): { heading: string; items: { label: string; spec: PanelSpe
   ];
 }
 
+/** Panels that also make sense as a whole center window (Roblox Studio, a Claude session, a mission, a diff…). */
+const WINDOW_PANELS: PanelType[] = ["RobloxStudio", "CentralAgent", "AgentTerminal", "Mission", "Diff", "GitHub", "RawTerminal"];
+
 export function AddPanelMenu() {
   const update = useWorkspace((s) => s.update);
   const ctx = useLayoutContext();
@@ -72,6 +75,16 @@ export function AddPanelMenu() {
           detail: allOpen.has(specKey(item.spec)) ? "open in another tab" : undefined,
           onSelect: () => update((w) => addPanelToActive(w, item.spec)),
         });
+      }
+    }
+    const windows = candidates()
+      .flatMap((g) => g.items)
+      .filter((i) => WINDOW_PANELS.includes(i.spec.type));
+    if (windows.length > 0) {
+      out.push({ heading: "Open in its own tab" });
+      for (const item of windows) {
+        const Icon = PANEL_ICON[item.spec.type];
+        out.push({ label: item.label, icon: <Icon size={13} />, onSelect: () => update((w) => openPanelTab(w, item.spec, item.label.slice(0, 40))) });
       }
     }
     out.push("separator", { label: "Reset workspace layout", icon: <RotateCcw size={13} />, onSelect: () => void confirmResetLayout(ctx) });

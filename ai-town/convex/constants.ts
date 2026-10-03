@@ -16,7 +16,8 @@ export const TYPING_TIMEOUT = 15 * 1000;
 export const COLLISION_THRESHOLD = 0.75;
 
 // How many human players can be in a world at once.
-export const MAX_HUMAN_PLAYERS = 8;
+// NEXUS: every real NEXUS agent is a human player, raised from 8.
+export const MAX_HUMAN_PLAYERS = 64;
 
 // Don't talk to anyone for 15s after having a conversation.
 export const CONVERSATION_COOLDOWN = 15000;

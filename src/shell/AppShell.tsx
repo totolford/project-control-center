@@ -1,7 +1,10 @@
 import type { ComponentType } from "react";
 import { useStore, type ViewName } from "../store";
 import { useUi } from "../state/ui";
-import { SwarmWorkspace } from "../workspace/SwarmWorkspace";
+import { useRightContext } from "../state/context";
+import { SwarmTools, SwarmWorkspace } from "../workspace/SwarmWorkspace";
+import { WorkspaceTabs } from "../workspace/WorkspaceTabs";
+import { useCenterSync } from "../workspace/useCenterSync";
 import { useWorkspaceSync } from "../workspace/useWorkspaceSync";
 import { useRedock } from "../workspace/detachWindow";
 import { Missions } from "../views/Missions";
@@ -25,19 +28,21 @@ import { Settings } from "../views/Settings";
 import { GithubView } from "../views/github/GithubView";
 import { MasterControlView } from "../views/master/MasterControlView";
 import { AiWorldView } from "../views/world";
+import { MarketView } from "../views/market/MarketView";
 import { FolderContext } from "../state/opsActions";
 import { NewAgentDialog } from "../views/agent/NewAgentDialog";
 import { AddConnectionDialog } from "../views/connections/AddConnectionDialog";
 import { TopBar } from "./TopBar";
 import { MainNav } from "./MainNav";
 import { EmergencyBanner } from "./SafetyControls";
-import { StatusStrip } from "./StatusStrip";
-import { MissionComposer } from "./MissionComposer";
 import { MessageFlow } from "./MessageFlow";
 import { MessageDetail } from "./MessageDetail";
 import { CommandBar } from "./CommandBar";
 import { CompatBanner } from "./CompatBanner";
 import { UserRequests } from "./UserRequests";
+import { RightPanel } from "./RightPanel";
+import { UniversalBar } from "./UniversalBar";
+import "../styles/shell-03.css";
 
 const VIEWS: Record<Exclude<ViewName, "agent">, ComponentType> = {
   swarm: SwarmWorkspace,
@@ -60,6 +65,7 @@ const VIEWS: Record<Exclude<ViewName, "agent">, ComponentType> = {
   github: GithubView,
   master: MasterControlView,
   world: AiWorldView,
+  market: MarketView,
   settings: Settings,
 };
 
@@ -75,10 +81,16 @@ function DialogHost() {
   return null;
 }
 
-/** Main window once a project is open: top bar, navigation, current view, status strip + composer, overlays. */
+/**
+ * Main window once a project is open: top bar, navigation (left), the center window with its tabs,
+ * the Central agent chat or selected context (right), the universal command bar (bottom), overlays.
+ */
 export function AppShell({ onCloseProject, onFolder }: { onCloseProject: () => void; onFolder: (path: string) => Promise<void> }) {
   const view = useStore((s) => s.view);
+  const rightOpen = useRightContext((s) => s.rightOpen);
+  const rightWidth = useRightContext((s) => s.rightWidth);
   useWorkspaceSync();
+  useCenterSync();
   useRedock();
   let main;
   if (view.name === "agent") main = view.agentId ? <AgentDetail key={view.agentId} agentId={view.agentId} /> : null;
@@ -88,7 +100,7 @@ export function AppShell({ onCloseProject, onFolder }: { onCloseProject: () => v
   }
   return (
     <FolderContext.Provider value={onFolder}>
-      <div className="shell">
+      <div className={`shell${rightOpen ? " has-right" : ""}`} style={{ "--right-w": `${rightOpen ? rightWidth : 0}px` } as React.CSSProperties}>
         <TopBar onCloseProject={onCloseProject} onFolder={onFolder} />
         <div>
           <EmergencyBanner />
@@ -96,11 +108,14 @@ export function AppShell({ onCloseProject, onFolder }: { onCloseProject: () => v
         </div>
         <div className="shell-body">
           <MainNav />
-          <main className={`shell-main${FILL_VIEWS.includes(view.name) ? " is-fill" : ""}`}>{main}</main>
+          <div className="shell-center">
+            <WorkspaceTabs>{view.name === "swarm" && <SwarmTools />}</WorkspaceTabs>
+            <main className={`shell-main${FILL_VIEWS.includes(view.name) ? " is-fill" : ""}`}>{main}</main>
+          </div>
+          <RightPanel />
         </div>
         <div className="shell-bottom">
-          <StatusStrip />
-          <MissionComposer />
+          <UniversalBar />
         </div>
         <MessageFlow />
         <MessageDetail />

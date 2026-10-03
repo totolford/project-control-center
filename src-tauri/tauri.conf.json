@@ -7,7 +7,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:ai-town && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; media-src 'self'; frame-src 'self'; worker-src 'self' blob:"
     }
   },
   "bundle": {
@@ -42,6 +42,16 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../ai-town/convex/": "ai-town/convex/",
+      "../ai-town/data/": "ai-town/data/",
+      "../ai-town/package.json": "ai-town/package.json",
+      "../ai-town/package-lock.json": "ai-town/package-lock.json",
+      "../ai-town/tsconfig.json": "ai-town/tsconfig.json",
+      "../ai-town/nexus-upstream.json": "ai-town/nexus-upstream.json",
+      "../ai-town/LICENSE": "ai-town/LICENSE",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
     "createUpdaterArtifacts": false,
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },

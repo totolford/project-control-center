@@ -48,6 +48,7 @@ export const TASK_STATUS: Record<TaskStatus, { label: string; tone: Tone }> = {
 };
 
 export const MISSION_STATUS: Record<MissionStatus, { label: string; tone: Tone }> = {
+  queued: { label: "Queued", tone: "blue" },
   planning: { label: "Planning", tone: "amber" },
   active: { label: "Active", tone: "green" },
   completed: { label: "Completed", tone: "accent" },
