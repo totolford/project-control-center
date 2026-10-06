@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import logo from "../assets/icon.svg";
-import { FolderOpen, FolderPlus, Info, X } from "lucide-react";
+import { Cpu, FolderOpen, FolderPlus, Info, X } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import { APP_NAME, APP_TAGLINE } from "../lib/brand";
@@ -10,6 +10,7 @@ import type { ProjectSnapshot, RecentProject } from "../lib/types";
 import { useUi } from "../state/ui";
 import { ClaudeStatus, useClaudeInfo } from "../components/ClaudeStatus";
 import { Spinner } from "../components/Common";
+import { useAiSetup } from "./ai/setupStore";
 
 export function Welcome({
   onFolder,
@@ -89,6 +90,9 @@ export function Welcome({
             </span>
           </button>
         </div>
+        <button className="btn btn-sm ghost welcome-ai" onClick={() => useAiSetup.getState().setOpen(true)}>
+          <Cpu size={12} /> AI Setup: local models and engines
+        </button>
 
         <div className="recent">
           <div className="section-label">Recent projects</div>

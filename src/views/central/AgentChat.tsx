@@ -62,6 +62,7 @@ function stepLabel(step: ToolStep, nameOf: NameOf): string {
   if (!d) return step.action;
   if (d.kind === "task") return `Delegating task to ${nameOf(d.to)}: ${d.text}`;
   if (d.kind === "message") return `Message to ${nameOf(d.to)}`;
+  if (d.kind === "decision") return `Delegation decision: ${d.text}`;
   return `Creating agent ${d.text}`;
 }
 
@@ -175,6 +176,11 @@ const ChatRow = memo(function ChatRow({ item, pending, agentName, nameOf }: { it
           <div className="chat-meta">
             From {nameOf(item.from)} · {item.kind} <span className="chat-time">{formatClock(item.ts)}</span>
           </div>
+          {item.routed && (
+            <div className="chat-route" title="Cross-branch message: NEXUS routed it through this agent's position in the hierarchy">
+              Routed for {nameOf(item.routed.for)} · {item.routed.path.map(nameOf).join(" → ")}
+            </div>
+          )}
           {item.subject && <div className="chat-subject">{item.subject}</div>}
           <Collapsible text={item.text} lines={6} />
         </div>
@@ -366,7 +372,18 @@ export function AgentChat({ agentId, placeholder }: { agentId: string; placehold
           <ArrowDown size={12} /> Latest
         </button>
       )}
-      <ChatComposer agentId={agentId} placeholder={placeholder ?? `Message ${name}…`} disabled={disabled} />
+      <ChatComposer
+        agentId={agentId}
+        placeholder={placeholder ?? `Message ${name}…`}
+        disabled={disabled}
+        hint={
+          agent?.pausedAt
+            ? `${name} is paused: your message is kept and delivered when you resume it.`
+            : agent?.status === "sleeping"
+              ? `${name} is sleeping: sending wakes it up (its Claude Code session is resumed).`
+              : undefined
+        }
+      />
     </div>
   );
 }

@@ -19,7 +19,7 @@ use crate::dto::ConnectionInput;
 use crate::engine::{Engine, PendingKind};
 
 /// A change Central asked for that waits for the user's approval.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AdminAction {
     CreateConnection(ConnectionInput),
     Grant { agent: String, connection: String },

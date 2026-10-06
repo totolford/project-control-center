@@ -1,0 +1,72 @@
+/* Recovery: interrupted-mission dialog, crash report notice, MCP supervision cards. */
+
+.rec-cause { margin: 0 0 10px; }
+.rec-mission {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.rec-mission-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.rec-facts { margin: 0; }
+.rec-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.rec-inspect { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 6px; }
+.rec-files { max-height: 140px; overflow: auto; }
+.rec-brief { max-height: 180px; overflow: auto; white-space: pre-wrap; }
+
+.crash-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  padding: 8px 10px;
+}
+.crash-notice.sev-error { border-left-color: var(--red); }
+.crash-notice.sev-info { border-left-color: var(--blue); }
+.crash-notice-head { display: flex; align-items: center; gap: 8px; }
+.crash-notice-title { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.crash-notice-body { margin-top: 4px; }
+.crash-notice-facts { margin: 6px 0 0; }
+.crash-notice-facts ul { margin: 0; }
+
+.sup-hint { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.sup-panel { display: flex; flex-direction: column; gap: 8px; }
+.sup-panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sup-panel-head .btn { margin-left: auto; }
+.sup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; }
+.sup-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--grey);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.sup-card.tone-green { border-left-color: var(--green); }
+.sup-card.tone-amber { border-left-color: var(--amber); }
+.sup-card.tone-red { border-left-color: var(--red); }
+.sup-card-head { display: flex; align-items: center; gap: 8px; }
+.sup-card-name { font-family: var(--mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sup-state { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.sup-meta { color: var(--muted); font-family: var(--mono); }
+.sup-cause { color: var(--red); }
+.sup-sessions { list-style: none; margin: 0; padding: 0; }
+.sup-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.sup-logs { border-top: 1px solid var(--border); padding-top: 4px; }
+.sup-logs pre { max-height: 160px; overflow: auto; }
+
+.orphan-notice { bottom: auto; top: 64px; border-left-color: var(--orange); }
+.orphan-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); }

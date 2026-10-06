@@ -1,14 +1,24 @@
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, CircleAlert, Info, OctagonAlert, TriangleAlert, X } from "lucide-react";
+import { api, errorMessage } from "../lib/api";
 import { formatClock, formatDateTime } from "../lib/format";
+import { MISSION_STATUS } from "../lib/labels";
 import type { Message, PccEvent } from "../lib/types";
-import { useAgents, useMissions, useStore } from "../store";
+import { useAgents, useMissions, useStore, useTimeline } from "../store";
 import { useUi } from "../state/ui";
-import { JsonView, PageHeader } from "../components/Common";
+import { JsonView, Loading, PageHeader } from "../components/Common";
 import { Chip } from "../components/StatusBadge";
 import { ActivityTimeline } from "../components/ActivityTimeline";
-import { ACTIVITY_GROUPS, kindTone, toolOf, type ActivityGroup } from "../lib/activityGroups";
+import { ACTIVITY_GROUPS, groupOf, kindTone, toolOf, type ActivityGroup } from "../lib/activityGroups";
 import { toggleIn } from "../lib/autonomy";
+import { groupByMission, matches, mergeEntries, SEVERITIES, toEntry, type ChainFilter, type JournalEntry, type MissionGroup, type Severity } from "./diagnostics/journal";
+import { callOptional, hasApi } from "./diagnostics/optional";
+
+const SEVERITY_TONE: Record<Severity, "grey" | "amber" | "red"> = { info: "grey", warning: "amber", error: "red", critical: "red" };
+const SEVERITY_ICON = { info: Info, warning: TriangleAlert, error: CircleAlert, critical: OctagonAlert };
+const PAGE = 500;
+/** Rows shown per mission group before "Show earlier". */
+const GROUP_PREVIEW = 60;
 
 export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () => void }) {
   const agents = useAgents();
@@ -17,6 +27,7 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
   const openTask = useStore((s) => s.openTask);
   const openMessage = useUi((s) => s.openMessage);
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
+  const entry = toEntry(event);
   return (
     <aside className="drawer" aria-label="Event detail">
       <div className="drawer-header">
@@ -29,6 +40,20 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
       <div className="drawer-body">
         <p>{event.summary}</p>
         <dl className="kv">
+          <dt>Event</dt>
+          <dd className="mono">{entry.name}</dd>
+          <dt>Severity</dt>
+          <dd>
+            <Chip tone={SEVERITY_TONE[entry.severity]}>{entry.severity}</Chip>
+          </dd>
+          <dt>Source</dt>
+          <dd>{entry.source}</dd>
+          {entry.pid !== null && (
+            <>
+              <dt>Process</dt>
+              <dd className="mono">PID {entry.pid}</dd>
+            </>
+          )}
           <dt>Time</dt>
           <dd>
             {formatDateTime(event.ts)} ({formatClock(event.ts)})
@@ -77,19 +102,191 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
   );
 }
 
+interface Loaded {
+  entries: PccEvent[];
+  hasMore: boolean;
+  /** Where the history comes from: the journal API, or the plain event log on engines without it. */
+  via: "journal" | "events";
+}
+
+async function loadPage(f: ChainFilter, before?: number): Promise<Loaded> {
+  if (hasApi("journal")) {
+    const r = await callOptional<PccEvent[]>("journal", {
+      agent: f.agentId ?? null,
+      mission: f.missionId ?? null,
+      severity: f.severity ?? null,
+      source: f.source ?? null,
+      before: before ?? null,
+      limit: PAGE,
+    });
+    if (r.state === "ok" && Array.isArray(r.value)) return { entries: r.value, hasMore: r.value.length >= PAGE, via: "journal" };
+  }
+  const list = (await api.events({ agentId: f.agentId, missionId: f.missionId, before, limit: PAGE })) ?? [];
+  return { entries: list, hasMore: list.length >= PAGE, via: "events" };
+}
+
+function ChainRow({ e, agentName, selected, onSelect }: { e: JournalEntry; agentName: string | null; selected: boolean; onSelect: (e: JournalEntry) => void }) {
+  const Icon = SEVERITY_ICON[e.severity];
+  return (
+    <li className={`chain-row sev-${e.severity}${selected ? " selected" : ""}`}>
+      <button className="chain-btn" onClick={() => onSelect(e)} aria-label={`${e.severity} ${e.name}: ${e.summary}`}>
+        <span className="chain-node" aria-hidden="true">
+          <Icon size={11} />
+        </span>
+        <span className="chain-time mono muted" title={formatDateTime(e.ts)}>
+          {formatClock(e.ts)}
+        </span>
+        <span className="chain-name mono ellipsis" title={e.name}>
+          {e.name}
+        </span>
+        <span className="chain-agent ellipsis">{agentName ?? ""}</span>
+        <span className="chain-summary ellipsis" title={e.summary}>
+          {e.summary}
+        </span>
+        <span className="chain-meta mono muted">
+          {e.pid !== null ? `PID ${e.pid} · ` : ""}
+          {e.source}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function GroupCard({
+  group,
+  agentName,
+  selectedId,
+  onSelect,
+}: {
+  group: MissionGroup;
+  agentName: (id: string) => string;
+  selectedId: number | undefined;
+  onSelect: (e: JournalEntry) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const [all, setAll] = useState(false);
+  const status = group.mission ? MISSION_STATUS[group.mission.status] : null;
+  const rows = all ? group.entries : group.entries.slice(-GROUP_PREVIEW);
+  return (
+    <section className="chain-group" aria-label={group.title}>
+      <header className="chain-head">
+        <button className="chain-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          <span className="chain-title ellipsis">{group.title}</span>
+        </button>
+        {status && <Chip tone={status.tone}>{status.label}</Chip>}
+        <span className="muted small mono">
+          {formatClock(group.first)} → {formatClock(group.last)}
+        </span>
+        <span className="spacer" />
+        {(["critical", "error", "warning"] as Severity[]).map((s) =>
+          group.counts[s] > 0 ? (
+            <Chip key={s} tone={SEVERITY_TONE[s]}>
+              {group.counts[s]} {s}
+            </Chip>
+          ) : null,
+        )}
+        <span className="muted small">{group.entries.length} events</span>
+      </header>
+      {open && (
+        <>
+          {!all && group.entries.length > GROUP_PREVIEW && (
+            <button className="link-btn small chain-more" onClick={() => setAll(true)}>
+              Show {group.entries.length - GROUP_PREVIEW} earlier events
+            </button>
+          )}
+          <ol className="chain">
+            {rows.map((e) => (
+              <ChainRow key={e.id} e={e} agentName={e.agentId ? agentName(e.agentId) : null} selected={selectedId === e.id} onSelect={onSelect} />
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Spec §47: the readable chain of real events (journal), grouped by mission, with filters. */
 export function Activity() {
   const agents = useAgents();
   const missions = useMissions();
+  const timeline = useTimeline();
+  const [mode, setMode] = useState<"chain" | "timeline">("chain");
   const [agentId, setAgentId] = useState("");
   const [missionId, setMissionId] = useState("");
+  const [severity, setSeverity] = useState<Severity | "">("");
+  const [source, setSource] = useState("");
+  const [text, setText] = useState("");
   const [kind, setKind] = useState("");
   const [kinds, setKinds] = useState<string[]>([]);
   const [groups, setGroups] = useState<ActivityGroup[]>([]);
   const [selected, setSelected] = useState<PccEvent | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const serverFilter = useMemo<ChainFilter>(
+    () => ({ agentId: agentId || undefined, missionId: missionId || undefined, severity: severity || undefined, source: source || undefined }),
+    [agentId, missionId, severity, source],
+  );
+
+  useEffect(() => {
+    if (mode !== "chain") return;
+    let alive = true;
+    setLoaded(null);
+    setError(null);
+    loadPage(serverFilter)
+      .then((l) => alive && setLoaded(l))
+      .catch((e) => alive && setError(errorMessage(e)));
+    return () => {
+      alive = false;
+    };
+  }, [serverFilter, mode]);
+
+  const loadMore = useCallback(async () => {
+    if (!loaded || loadingMore || loaded.entries.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const oldest = loaded.entries.reduce((m, e) => Math.min(m, e.id), Number.MAX_SAFE_INTEGER);
+      const more = await loadPage(serverFilter, oldest);
+      setLoaded((cur) => (cur ? { ...more, entries: [...cur.entries, ...more.entries] } : more));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loaded, loadingMore, serverFilter]);
+
+  const names = useMemo(() => new Map(agents.map((a) => [a.id, a.name])), [agents]);
+  const agentName = useCallback((id: string) => names.get(id) ?? id, [names]);
+  const entries = useMemo(() => {
+    if (!loaded) return [];
+    const newest = loaded.entries.reduce((m, e) => Math.max(m, e.id), 0);
+    const filter: ChainFilter = { ...serverFilter, text: text.trim() || undefined };
+    return mergeEntries(
+      timeline.filter((e) => e.id > newest),
+      loaded.entries,
+    ).filter((e) => matches(e, filter, agentName) && (groups.length === 0 || groups.includes(groupOf(e.kind))));
+  }, [loaded, timeline, serverFilter, text, groups, agentName]);
+  const sources = useMemo(() => [...new Set(["engine", "ui", ...(loaded?.entries ?? []).map((e) => toEntry(e).source)])].sort(), [loaded]);
+  const chain = useMemo(() => groupByMission(entries, missions), [entries, missions]);
 
   return (
     <div className="page page-fill">
-      <PageHeader title="Activity" subtitle="Timeline of everything that happened in this project." />
+      <PageHeader
+        title="Activity"
+        subtitle="The chain of real events in this project: who did what, in which mission and process, and what the engine recovered."
+        actions={
+          <div className="seg-btns" role="group" aria-label="Display">
+            <button className={`btn btn-sm${mode === "chain" ? " primary" : ""}`} aria-pressed={mode === "chain"} onClick={() => setMode("chain")}>
+              By mission
+            </button>
+            <button className={`btn btn-sm${mode === "timeline" ? " primary" : ""}`} aria-pressed={mode === "timeline"} onClick={() => setMode("timeline")}>
+              Timeline
+            </button>
+          </div>
+        }
+      />
       <div className="filters">
         <select value={agentId} onChange={(e) => setAgentId(e.target.value)} aria-label="Filter by agent">
           <option value="">All agents</option>
@@ -107,14 +304,36 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Filter by kind">
-          <option value="">All kinds</option>
-          {kinds.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
+        {mode === "chain" ? (
+          <>
+            <select value={severity} onChange={(e) => setSeverity(e.target.value as Severity | "")} aria-label="Minimum severity">
+              <option value="">All severities</option>
+              {SEVERITIES.slice(1).map((s) => (
+                <option key={s} value={s}>
+                  {s} and above
+                </option>
+              ))}
+            </select>
+            <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Filter by source">
+              <option value="">All sources</option>
+              {sources.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <input className="filter-search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search events, agents, PIDs…" aria-label="Search events" />
+          </>
+        ) : (
+          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Filter by kind">
+            <option value="">All kinds</option>
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <div className="chips-row activity-groups" role="group" aria-label="Event groups">
         {ACTIVITY_GROUPS.map((g) => {
@@ -133,12 +352,37 @@ export function Activity() {
       </div>
       <div className="split">
         <div className="split-main">
-          <ActivityTimeline
-            filter={{ agentId: agentId || undefined, missionId: missionId || undefined, kind: kind || undefined, groups }}
-            selectedId={selected?.id}
-            onSelect={setSelected}
-            onKinds={setKinds}
-          />
+          {mode === "timeline" ? (
+            <ActivityTimeline
+              filter={{ agentId: agentId || undefined, missionId: missionId || undefined, kind: kind || undefined, groups }}
+              selectedId={selected?.id}
+              onSelect={setSelected}
+              onKinds={setKinds}
+            />
+          ) : error ? (
+            <div className="pad">
+              <Chip tone="red">Unavailable</Chip> <span className="muted">The event journal could not be read: {error}</span>
+            </div>
+          ) : !loaded ? (
+            <Loading />
+          ) : (
+            <div className="chain-scroll">
+              {chain.length === 0 && <div className="muted pad">No event matches these filters.</div>}
+              {chain.map((g) => (
+                <GroupCard key={g.missionId ?? "none"} group={g} agentName={agentName} selectedId={selected?.id} onSelect={setSelected} />
+              ))}
+              <div className="muted small pad center">
+                {loaded.hasMore ? (
+                  <button className="link-btn small" onClick={() => void loadMore()} disabled={loadingMore}>
+                    {loadingMore ? "Loading…" : "Load older events"}
+                  </button>
+                ) : (
+                  "Beginning of the journal"
+                )}
+                {loaded.via === "events" && <div>This engine has no journal API: severity, source and PID are derived from the event kind.</div>}
+              </div>
+            </div>
+          )}
         </div>
         {selected && <EventDetail event={selected} onClose={() => setSelected(null)} />}
       </div>

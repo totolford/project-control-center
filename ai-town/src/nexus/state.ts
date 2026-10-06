@@ -25,15 +25,22 @@ export type VisualState =
   | 'waiting'
   | 'error'
   | 'review'
-  | 'finished';
+  | 'finished'
+  | 'sleeping'
+  | 'paused';
 
 /**
  * The bridge (crates/pcc-world/src/aitown/bridge.rs `label_for`) already
  * turned what NEXUS observed into status + label + emoji; this only picks the
  * animation. It never adds activity the agent row does not report.
  */
-export function visualState(a: Pick<NexusAgentRow, 'status' | 'emoji' | 'statusLabel'>): VisualState {
+export function visualState(
+  a: Pick<NexusAgentRow, 'status' | 'emoji' | 'statusLabel'> & { paused?: boolean },
+): VisualState {
+  if (a.paused && a.status !== 'working' && a.status !== 'retired') return 'paused';
   switch (a.status) {
+    case 'sleeping':
+      return 'sleeping';
     case 'awaiting_permission':
       return 'waiting';
     case 'crashed':
@@ -65,7 +72,62 @@ export const STATE_COLOR: Record<VisualState, number> = {
   error: 0xff4d4d,
   review: 0xc084fc,
   finished: 0x4ade80,
+  sleeping: 0x6c7fb8,
+  paused: 0xf59e0b,
 };
+
+/** Gold pips drawn on the name plate: Central 3, lieutenants 2, specialists none. */
+export function rankPips(rank: string | undefined): number {
+  if (rank === 'commander') return 3;
+  if (rank === 'lieutenant') return 2;
+  return 0;
+}
+
+export function rankLabel(a: Pick<NexusAgentRow, 'isCentral'> & { rank?: string }): string {
+  if (a.isCentral || a.rank === 'commander') return 'Commander';
+  return a.rank === 'lieutenant' ? 'Lieutenant' : 'Specialist';
+}
+
+/**
+ * Thin line from an agent to its supervisor (vector in world px, relative to
+ * the agent). Links to Central are only drawn when one end is selected, so
+ * the map is not covered with lines; lieutenant links are always visible.
+ */
+export function parentLink(
+  agent: Pick<NexusAgentRow, 'nexusId'> & { parentId?: string },
+  at: { x: number; y: number },
+  positions: Map<string, { x: number; y: number }>,
+  byId: Map<string, Pick<NexusAgentRow, 'isCentral'> & { rank?: string }>,
+  selectedId: string | null,
+): { dx: number; dy: number; strong: boolean } | null {
+  const pid = agent.parentId;
+  if (!pid) return null;
+  const parent = byId.get(pid);
+  const p = positions.get(pid);
+  if (!parent || !p) return null;
+  const strong = selectedId === agent.nexusId || selectedId === pid;
+  if (parent.isCentral && !strong) return null;
+  const dx = p.x - at.x;
+  const dy = p.y - at.y;
+  if (Math.hypot(dx, dy) < 8) return null;
+  return { dx, dy, strong };
+}
+
+/** Supervisor and direct reports of an agent, from the rows the bridge sent. */
+export function family(
+  agent: Pick<NexusAgentRow, 'nexusId' | 'isCentral'> & { parentId?: string },
+  agents: (Pick<NexusAgentRow, 'nexusId' | 'name' | 'isCentral' | 'status'> & { parentId?: string; rank?: string })[],
+): { parent: { nexusId: string; name: string } | null; children: { nexusId: string; name: string; rank: string }[] } {
+  const parent = agent.isCentral ? undefined : agents.find((a) => a.nexusId === agent.parentId);
+  const children = agents
+    .filter((a) => a.status !== 'retired' && !a.isCentral && a.nexusId !== agent.nexusId)
+    .filter((a) => {
+      const pid = a.parentId ?? agents.find((c) => c.isCentral)?.nexusId;
+      return pid === agent.nexusId;
+    })
+    .map((a) => ({ nexusId: a.nexusId, name: a.name, rank: a.rank ?? 'specialist' }));
+  return { parent: parent ? { nexusId: parent.nexusId, name: parent.name } : null, children };
+}
 
 export function hexColor(n: number) {
   return `#${n.toString(16).padStart(6, '0')}`;

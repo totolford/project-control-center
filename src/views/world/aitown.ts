@@ -24,6 +24,13 @@ const ACTIONS: AgentAction[] = [
   "changeSkills",
   "changeMcp",
   "changeConnections",
+  "resume",
+  "restart",
+  "promote",
+  "demote",
+  "viewMemory",
+  "viewTasks",
+  "viewTools",
 ];
 const CAMERA_MODES: CameraMode[] = ["free", "follow", "cinematic", "overview"];
 const ZONE_IDS = NEXUS_ZONES.map((z) => z.id) as string[];

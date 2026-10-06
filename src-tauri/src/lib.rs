@@ -1,11 +1,16 @@
 //! Project Control Center desktop application.
 
+mod ai_commands;
 mod aitown_commands;
 mod commands;
 mod control_commands;
+mod health_commands;
+mod hierarchy_commands;
 mod market_commands;
 mod mission_commands;
 mod ops_commands;
+mod permission_commands;
+mod recovery_commands;
 mod state;
 mod world_commands;
 
@@ -53,12 +58,42 @@ pub fn run() {
                 app.manage(guard);
             }
             tracing::info!("{} {} starting", APP_NAME, app.package_info().version);
+            app.manage(health_commands::HealthMonitor::new(&data_dir));
+            recovery_commands::init(&data_dir);
             let state = AppState::new(data_dir, log_dir);
             AppState::apply_app_settings(&state.load_app_settings());
             app.manage(state);
+            health_commands::spawn_watchdog(app.handle().clone());
+            ai_commands::spawn_monitor(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ai_commands::ai_settings,
+            ai_commands::ai_save_settings,
+            ai_commands::ai_setup_state,
+            ai_commands::ai_complete_setup,
+            ai_commands::ai_hardware,
+            ai_commands::ai_recommend,
+            ai_commands::ai_overview,
+            ai_commands::ai_runtime_command,
+            ai_commands::ai_runtime_winget,
+            ai_commands::ai_runtime_latest,
+            ai_commands::ai_runtime_start,
+            ai_commands::ai_runtime_stop,
+            ai_commands::ai_runtime_restart,
+            ai_commands::ai_models,
+            ai_commands::ai_pull_model,
+            ai_commands::ai_cancel_pull,
+            ai_commands::ai_delete_model,
+            ai_commands::ai_load_model,
+            ai_commands::ai_benchmark,
+            ai_commands::ai_validate,
+            ai_commands::ai_route_preview,
+            ai_commands::ai_routing_journal,
+            ai_commands::ai_fallback,
+            ai_commands::ai_town_local_status,
+            ai_commands::ai_town_add_townspeople,
+            ai_commands::ai_town_remove_townspeople,
             market_commands::market_index,
             market_commands::market_refresh,
             market_commands::market_search_github,
@@ -91,6 +126,12 @@ pub fn run() {
             commands::update_agent,
             commands::start_agent,
             commands::stop_agent,
+            hierarchy_commands::promote_agent,
+            hierarchy_commands::demote_agent,
+            hierarchy_commands::pause_agent,
+            hierarchy_commands::resume_agent,
+            hierarchy_commands::sleep_agent,
+            hierarchy_commands::delegation_decisions,
             commands::restart_agent,
             commands::interrupt_agent,
             commands::retire_agent,
@@ -105,7 +146,11 @@ pub fn run() {
             commands::retry_task,
             commands::list_messages,
             commands::list_events,
-            commands::resolve_permission,
+            permission_commands::resolve_permission,
+            permission_commands::permission_status,
+            permission_commands::permission_history,
+            permission_commands::rerequest_permission,
+            permission_commands::journal,
             commands::memory_files,
             commands::save_memory,
             commands::consolidate_memory,
@@ -214,16 +259,46 @@ pub fn run() {
             mission_commands::set_mission_priority,
             mission_commands::archive_mission,
             mission_commands::mission_activity,
+            health_commands::renderer_heartbeat,
+            health_commands::core_status,
+            health_commands::renderer_reload,
+            health_commands::record_renderer_incident,
+            health_commands::renderer_incidents,
+            health_commands::watchdog_status,
+            health_commands::diagnostics_resources,
+            recovery_commands::process_tree,
+            recovery_commands::recovery_state,
+            recovery_commands::crash_reports,
+            recovery_commands::acknowledge_crash_report,
+            recovery_commands::resume_interrupted_mission,
+            recovery_commands::abandon_interrupted_mission,
+            recovery_commands::mission_checkpoints,
+            recovery_commands::mission_checkpoint,
+            recovery_commands::mcp_supervision,
+            recovery_commands::restart_mcp,
+            recovery_commands::refresh_mcp_status,
+            recovery_commands::scan_orphans,
+            recovery_commands::cleanup_orphan,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the application");
 
     app.run(|handle, event| {
+        // The renderer watchdog is replacing the main window: not an exit.
+        if let RunEvent::ExitRequested { code: None, api, .. } = &event {
+            let health = handle.state::<health_commands::HealthMonitor>();
+            if health.recreating.load(std::sync::atomic::Ordering::SeqCst) {
+                api.prevent_exit();
+                return;
+            }
+        }
         if let RunEvent::Exit = event {
             // Stop every agent session and mark them for recovery on next start.
             let state = handle.state::<AppState>();
             state.pty.kill_all();
+            pcc_ai::manager().stop_all();
             tauri::async_runtime::block_on(state.close_project());
+            recovery_commands::clean_exit();
             tracing::info!("{APP_NAME} exited");
         }
     });

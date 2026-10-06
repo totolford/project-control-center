@@ -29,7 +29,7 @@ import { useWorldStatus } from './embed';
 import { NexusPixi, Positions, makeDecorator } from './NexusLayer';
 import { ProfileCard } from './ProfileCard';
 import { CameraMode, FromNexus, ToNexus, listenToNexus, postToNexus } from './protocol';
-import { resolveCharacter, useNexusWorld } from './state';
+import { family, resolveCharacter, useNexusWorld } from './state';
 import './nexus.css';
 
 type Camera = { mode: CameraMode; nexusId?: string };
@@ -261,6 +261,8 @@ export default function NexusGame() {
           agent={agent}
           look={resolveCharacter(agent.character, world.state?.skins)}
           following={camera.mode === 'follow' && camera.nexusId === agent.nexusId}
+          family={family(agent, world.state?.agents ?? [])}
+          onSelect={(id) => select(id)}
           onClose={() => select(null)}
           send={(msg) => {
             if (msg.type === 'action' && msg.action === 'follow') {

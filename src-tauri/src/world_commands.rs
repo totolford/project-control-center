@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
+use pcc_ai::router::TaskKind;
 use pcc_core::{AgentKind, Error, Event, EventKind, TaskStatus};
 use pcc_orchestrator::Orchestrator;
 use pcc_store::TaskFilter;
@@ -160,7 +161,7 @@ fn absorb_messages(orch: &Orchestrator, w: &mut World, since: &mut String) {
 
 /// Simulation with `llmConversations`: occasionally let two characters in the
 /// same room talk (one real Claude call each, capped per hour).
-fn maybe_converse(world: &SharedWorld, w: &World, busy: &Arc<std::sync::atomic::AtomicBool>) {
+fn maybe_converse(orch: &Orchestrator, world: &SharedWorld, w: &World, busy: &Arc<std::sync::atomic::AtomicBool>) {
     use std::sync::atomic::Ordering;
     if w.mode != WorldMode::Simulation || !w.settings.llm_conversations || busy.load(Ordering::SeqCst) {
         return;
@@ -179,7 +180,8 @@ fn maybe_converse(world: &SharedWorld, w: &World, busy: &Arc<std::sync::atomic::
     let Some((a, b)) = pair else { return };
     let find = |id: &str| w.characters.iter().find(|c| c.id == id).cloned();
     let (Some(ca), Some(cb)) = (find(&a), find(&b)) else { return };
-    let Some(claude) = pcc_claude::find_claude() else { return };
+    let ai = orch.store.settings().ai;
+    let journal = routing_journal(orch);
     let room = ca.room.clone().and_then(|r| w.room(&r).map(|r| r.name.clone())).unwrap_or_default();
     let desc = format!("{} — {}", w.settings.environment, w.description);
     let model = w.settings.conversation_model.clone();
@@ -187,8 +189,11 @@ fn maybe_converse(world: &SharedWorld, w: &World, busy: &Arc<std::sync::atomic::
     let (world, busy) = (world.clone(), busy.clone());
     tokio::spawn(async move {
         let (c1, c2, r2) = (ca.clone(), cb.clone(), room.clone());
-        let lines =
-            tokio::task::spawn_blocking(move || characters::converse(&claude, &model, &desc, &c1, &c2, &r2)).await;
+        let lines = tokio::task::spawn_blocking(move || {
+            let (llm, _) = characters::world_llm(&ai, TaskKind::NpcDialogue, &model, Some(&journal))?;
+            characters::converse(&llm, &desc, &c1, &c2, &r2)
+        })
+        .await;
         if let Ok(Ok(lines)) = lines {
             if let Some(w) = world.lock().await.as_mut() {
                 w.conversations.push(Conversation {
@@ -223,7 +228,7 @@ pub fn spawn_runner(app: AppHandle, orch: Orchestrator, world: SharedWorld) -> J
                         if w.mode != WorldMode::Simulation {
                             absorb_messages(&orch, w, &mut messages_since);
                         }
-                        maybe_converse(&world, w, &busy);
+                        maybe_converse(&orch, &world, w, &busy);
                         emit_frame(&app, w, &mut cursor);
                         since_save += 1;
                         if since_save >= 40 && !orch.store.read_only() {
@@ -482,16 +487,29 @@ pub async fn world_characters_from_agents(state: State<'_, AppState>) -> CmdResu
     Ok(characters::from_agents(&seeds(&orch)))
 }
 
-/// Characters invented by Claude from a description (one real model call).
+/// Characters invented from a description (one real model call, Claude or
+/// local as the ModelRouter decides).
 #[tauri::command]
 pub async fn world_generate_characters(
+    state: State<'_, AppState>,
     description: String,
     count: usize,
     model: Option<String>,
 ) -> CmdResult<Vec<Character>> {
-    let claude = pcc_claude::find_claude().ok_or_else(|| Error::Process("Claude Code was not detected".into()))?;
+    let orch = state.orch().await.ok();
+    let ai = orch.as_ref().map(|o| o.store.settings().ai).unwrap_or_default();
+    let journal = orch.as_ref().map(routing_journal);
     let model = model.unwrap_or_else(|| "haiku".into());
-    blocking(move || characters::generate(&claude, &model, &description, count.clamp(1, 12))).await?
+    blocking(move || {
+        let (llm, _) = characters::world_llm(&ai, TaskKind::Simulation, &model, journal.as_ref())?;
+        characters::generate(&llm, &description, count.clamp(1, 12))
+    })
+    .await?
+}
+
+/// Journal of ModelRouter decisions of the project (shared with agent sessions).
+fn routing_journal(orch: &Orchestrator) -> pcc_ai::router::Journal {
+    pcc_ai::router::Journal::new(orch.store.layout().logs_dir().join("ai-routing.jsonl"))
 }
 
 /// One simulated conversation between two characters (one real model call).
@@ -514,9 +532,14 @@ pub async fn world_converse(state: State<'_, AppState>, a: String, b: String) ->
             w.settings.conversation_model.clone(),
         )
     };
-    let claude = pcc_claude::find_claude().ok_or_else(|| Error::Process("Claude Code was not detected".into()))?;
     let (c1, c2, r2) = (ca.clone(), cb.clone(), room.clone());
-    let lines = blocking(move || characters::converse(&claude, &model, &world_desc, &c1, &c2, &r2)).await??;
+    let ai = orch.store.settings().ai;
+    let journal = routing_journal(&orch);
+    let lines = blocking(move || {
+        let (llm, _) = characters::world_llm(&ai, TaskKind::NpcDialogue, &model, Some(&journal))?;
+        characters::converse(&llm, &world_desc, &c1, &c2, &r2)
+    })
+    .await??;
     let conv = Conversation {
         id: format!("conv-{}", chrono::Utc::now().timestamp_millis()),
         participants: vec![ca.id.clone(), cb.id.clone()],

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use pcc_core::{
-    Access, Agent, Capability, Connection, ConnectionKind, MissionView, PermissionRequest, PermissionSet, Priority,
-    ProjectInfo, ProjectSettings, Task, TaskStatus,
+    Access, Agent, Capability, Connection, ConnectionKind, MissionView, PermissionSet, Priority, ProjectInfo,
+    ProjectSettings, Task, TaskStatus,
 };
 use pcc_git::{BranchDiff, Commit, RepoStatus, Snapshot};
 
@@ -20,10 +20,16 @@ pub struct RecoveryAgent {
     pub task_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryInfo {
     pub agents: Vec<RecoveryAgent>,
+    /// Missions that were running when NEXUS stopped (Resume / Inspect / Abandon).
+    #[serde(default)]
+    pub missions: Vec<crate::recovery::InterruptedMission>,
+    /// How the previous NEXUS run ended.
+    #[serde(default)]
+    pub previous_run: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,7 +41,8 @@ pub struct ProjectSnapshot {
     pub tasks: Vec<Task>,
     pub missions: Vec<MissionView>,
     pub connections: Vec<Connection>,
-    pub pending_permissions: Vec<PermissionRequest>,
+    /// Open permission requests (pending or recovered), oldest first.
+    pub pending_permissions: Vec<pcc_core::PermissionRecord>,
     pub repo: Option<RepoStatus>,
     pub recovery: Option<RecoveryInfo>,
     /// Emergency stop active: new work and autonomy are blocked.
@@ -64,6 +71,10 @@ pub struct AgentSpec {
     /// `auto` (worktree when available), `shared` or `worktree`.
     pub isolation: Option<String>,
     pub model: Option<String>,
+    /// Supervising agent; defaults to the creator (Central for the user).
+    pub parent: Option<String>,
+    /// `lieutenant` or `specialist` (default).
+    pub rank: Option<pcc_core::AgentRank>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -108,6 +119,9 @@ pub struct MissionSpec {
     pub analysis: Option<pcc_core::MissionAnalysis>,
     /// Send it to Central even if another mission is running (otherwise it is queued).
     pub start_now: bool,
+    /// Client-generated key: a repeated call with the same key returns the
+    /// mission created by the first one instead of creating another.
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

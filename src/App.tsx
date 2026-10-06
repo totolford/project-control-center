@@ -9,11 +9,18 @@ import { useBackendSync } from "./state/backendSync";
 import { Toasts } from "./components/Toasts";
 import { PermissionModal } from "./components/PermissionModal";
 import { RecoveryDialog } from "./components/RecoveryDialog";
+import { CrashReportNotice } from "./components/CrashReportNotice";
+import { OrphanNotice } from "./components/OrphanNotice";
 import { MigrationDialog } from "./components/MigrationDialog";
 import { useUi } from "./state/ui";
 import { AppShell } from "./shell/AppShell";
 import { Welcome } from "./views/Welcome";
+import { AiSetupGate } from "./views/ai/SetupWizard";
 import { Setup, type FolderInspection } from "./views/Setup";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { restoreUiCheckpoint, useRendererHealth } from "./shell/health/health";
+import { SafeRecoveryOverlay, SafeRecoveryPanel } from "./shell/health/SafeRecoveryOverlay";
+import { Loading } from "./components/Common";
 
 function useWindowTitle() {
   const name = useStore((s) => s.project?.info.name);
@@ -22,12 +29,60 @@ function useWindowTitle() {
   }, [name]);
 }
 
+/**
+ * After an interface reload (watchdog, Safe Recovery, "Reload interface") the engine still has the
+ * project open: take it back from the snapshot and restore the UI checkpoint. On a fresh start the
+ * backend has no project and this resolves at once.
+ */
+function useResync(): boolean {
+  const [pending, setPending] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const done = () => alive && setPending(false);
+    const timer = window.setTimeout(done, 4000);
+    api
+      .snapshot()
+      .then((snap) => {
+        if (!alive || !snap || useStore.getState().project) return;
+        useStore.getState().loadSnapshot(snap);
+        restoreUiCheckpoint();
+      })
+      .catch(() => undefined)
+      .finally(done);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return pending;
+}
+
+/** Whole-window crash: the engine is untouched; show what still runs and reload the interface. */
+function RootCrash({ error }: { error: Error }) {
+  return (
+    <div className="sro-backdrop">
+      <SafeRecoveryPanel overlay={{ reason: `The interface crashed: ${error.message}`, auto: true, forced: true }} />
+    </div>
+  );
+}
+
 export function App() {
+  useRendererHealth();
+  return (
+    <ErrorBoundary label="Interface" fallback={(error) => <RootCrash error={error} />}>
+      <AppContent />
+      <SafeRecoveryOverlay />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const hasProject = useStore((s) => s.project !== null);
   const loadSnapshot = useStore((s) => s.loadSnapshot);
   const [setup, setSetup] = useState<FolderInspection | null>(null);
   useBackendSync();
   useWindowTitle();
+  const resyncing = useResync();
 
   const openFolder = async (path: string) => {
     useUi.getState().setWelcomeNotice(null);
@@ -52,7 +107,8 @@ export function App() {
   };
 
   let content;
-  if (setup)
+  if (resyncing && !hasProject) content = <Loading text="Connecting to the engine…" />;
+  else if (setup)
     content = (
       <Setup
         inspection={setup}
@@ -72,6 +128,9 @@ export function App() {
       {hasProject && !setup && <MigrationDialog />}
       {hasProject && !setup && <RecoveryDialog />}
       {hasProject && !setup && <PermissionModal />}
+      {!setup && <CrashReportNotice />}
+      {hasProject && !setup && <OrphanNotice />}
+      {!setup && <AiSetupGate />}
       <Toasts />
     </>
   );

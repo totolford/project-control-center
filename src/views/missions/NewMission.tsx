@@ -3,10 +3,11 @@
 // Availability is checked by NEXUS against what is really installed; the
 // selection is stored on the mission and handed to Central.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import { api, errorMessage } from "../../lib/api";
 import { formatCost } from "../../lib/format";
+import { newIdempotencyKey } from "../../lib/idempotency";
 import { readPref, writePref } from "../../lib/prefs";
 import { attempt } from "../../lib/toast";
 import type { Mission, MissionAnalysis, MissionClaudeContext, MissionRequirement, Priority } from "../../lib/types";
@@ -154,6 +155,8 @@ export function NewMission({ initialText, onClose, onCreated }: { initialText: s
   const [conns, setConns] = useState<string[]>([]);
   const [startNow, setStartNow] = useState(false);
   const [busy, setBusy] = useState(false);
+  // One key per form: a repeated submit (double click, retried call) returns the same mission.
+  const submitKey = useRef(newIdempotencyKey());
 
   useEffect(() => setObjective(initialText), [initialText]);
 
@@ -219,6 +222,7 @@ export function NewMission({ initialText, onClose, onCreated }: { initialText: s
           connections: conns,
           analysis,
           startNow: running && startNow,
+          idempotencyKey: submitKey.current,
         }),
       running && !startNow ? "Mission queued" : "Mission sent to Central",
     );

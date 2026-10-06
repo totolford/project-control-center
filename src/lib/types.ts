@@ -48,6 +48,14 @@ export interface ProjectSettings {
   autoRecover: boolean;
   /** NEXUS MASTER CONTROL (Central only). */
   masterControl: MasterControl;
+  /** Deepest level of the agent pyramid below Central (1 = flat, 1..5). */
+  maxHierarchyDepth: number;
+  /** Idle minutes before an agent's session is stopped (sleeping); 0 = never. */
+  sleepAfterMinutes: number;
+  /** Minutes a permission request waits for the user before it expires (the agent receives a refusal); 0 = never. */
+  permissionTimeoutMinutes: number;
+  /** AI engines (Claude, local runtime, hybrid); missing on projects from before 0.4. */
+  ai?: import("./aiTypes").AiEngineSettings;
 }
 
 export type AgentKind = "central" | "worker";
@@ -60,7 +68,9 @@ export type AgentStatus =
   | "stopped"
   | "crashed"
   | "disconnected"
-  | "retired";
+  | "retired"
+  /** Idle beyond the sleep delay: session stopped, resumed on the next message or task. */
+  | "sleeping";
 export type Isolation = "shared" | "worktree";
 
 export interface Agent {
@@ -87,6 +97,34 @@ export interface Agent {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** Supervising agent (null only for Central). */
+  parentAgent: string | null;
+  rank: AgentRank;
+  /** Paused by the user: nothing is delivered until resumed. */
+  pausedAt: string | null;
+}
+
+/** Position in the delegation pyramid (Central is the commander). */
+export type AgentRank = "commander" | "lieutenant" | "specialist";
+
+/** One sub-agent an agent planned before delegating. */
+export interface PlannedChild {
+  name: string;
+  role: string;
+  rank: AgentRank | null;
+  reason: string;
+}
+
+/** "Do I need sub-agents, and which?" recorded before creating agents. */
+export interface DelegationRecord {
+  id: number;
+  ts: string;
+  agentId: string;
+  taskId: string | null;
+  missionId: string | null;
+  needsSubAgents: boolean;
+  reason: string;
+  children: PlannedChild[];
 }
 
 export type TaskStatus =
@@ -199,6 +237,73 @@ export interface PermissionRequest {
   createdAt: string;
 }
 
+export type PermissionStatus =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "expired"
+  | "cancelled"
+  | "consumed"
+  | "lost"
+  | "recovered";
+export type PermissionKind = "tool" | "merge" | "admin";
+
+/** A permission request and everything that happened to it (persisted; never just disappears). */
+export interface PermissionRecord extends PermissionRequest {
+  status: PermissionStatus;
+  kind: PermissionKind;
+  updatedAt: string;
+  expiresAt: string | null;
+  missionId: string | null;
+  taskId: string | null;
+  /** Path, host, command, URL or MCP server the action touches. */
+  resource: string | null;
+  /** destructive | outside_workspace | capability | approval */
+  risk: string;
+  requestedBy: string;
+  /** PID of the agent's Claude Code process when it asked. */
+  processId: number | null;
+  sessionEpoch: number;
+  sessionRow: number;
+  requestId: string | null;
+  toolUseId: string | null;
+  decision: PermissionDecision | null;
+  decidedAt: string | null;
+  /** user | timeout | emergency | system */
+  decidedBy: string | null;
+  /** Why the request reached its current state. */
+  resolution: string | null;
+  recoveries: number;
+}
+
+/** Answer to `resolvePermission`: acting twice, too late or on an unknown id is not an error. */
+export interface PermissionOutcome {
+  id: string;
+  /** The decision was taken into account now. */
+  applied: boolean;
+  /** null: the id is unknown in this project. */
+  status: PermissionStatus | null;
+  message: string;
+  record: PermissionRecord | null;
+}
+
+/** Real state of a permission request and of the agent behind it. */
+export interface PermissionStatusReport {
+  id: string;
+  found: boolean;
+  record: PermissionRecord | null;
+  explanation: string;
+  agentName: string | null;
+  agentStatus: AgentStatus | null;
+  sessionAlive: boolean;
+  processId: number | null;
+  sameSession: boolean;
+  /** true/false from the command journal; null when unknown. */
+  executed: boolean | null;
+  executionDetail: string | null;
+  canRerequest: boolean;
+}
+
 export type ConnectionKind =
   | "local"
   | "git"
@@ -309,13 +414,21 @@ export type EventKind =
   | "SkillChanged"
   | "UserRequested"
   | "UserRequestResolved"
+  | "DelegationDecision"
+  | "MessageRouted"
+  | "HierarchyChanged"
+  | "AgentDormancy"
+  | "AgentRestarted"
+  | "PermissionUpdated"
+  | "RuntimeChanged"
+  | "SystemNotice"
   | "Error";
 
 /**
  * Real-time event. `payload` holds the affected entity for:
  * Agent* -> Agent, Task* -> Task, Mission* -> Mission (with counters),
  * AgentMessage -> Message, PermissionRequested -> PermissionRequest,
- * PermissionResolved -> { id: string, decision: PermissionDecision },
+ * PermissionResolved / PermissionUpdated -> PermissionRecord,
  * ConnectionChanged -> Connection | { id: string, deleted: true },
  * MemoryUpdated -> { key: string }, ProjectChanged -> { settings?: ProjectSettings }.
  */
@@ -328,6 +441,33 @@ export interface PccEvent {
   missionId: string | null;
   summary: string;
   payload: any;
+  /** Dotted journal name (`agent.started`, `permission.expired`...). */
+  name?: string;
+  /** A `Severity` (kept as a string: older or foreign rows may carry other values). */
+  severity?: string;
+  /** Emitter: engine, ui, runtime, mcp... */
+  source?: string;
+  /** PID of the process concerned, when known. */
+  pid?: number | null;
+}
+
+export type Severity = "info" | "warning" | "error" | "critical";
+
+/** Filters of `api.journal` (every field optional). */
+export interface JournalFilter {
+  since?: string | null;
+  until?: string | null;
+  agent?: string | null;
+  mission?: string | null;
+  /** Minimum severity. */
+  severity?: Severity | null;
+  source?: string | null;
+  /** Dotted name or prefix (`permission.`). */
+  name?: string | null;
+  /** Paging: events with id < before. */
+  before?: number | null;
+  /** Default 200, at most 2000. */
+  limit?: number | null;
 }
 
 export type LogKind =
@@ -448,6 +588,10 @@ export interface RecentProject {
 /** Sessions that were running when the app last closed. */
 export interface RecoveryInfo {
   agents: { agentId: string; name: string; claudeSessionId: string | null; taskId: string | null }[];
+  /** Missions that were running when NEXUS stopped (absent on older backends). */
+  missions?: InterruptedMission[];
+  /** How the previous NEXUS run ended. */
+  previousRun?: string | null;
 }
 
 /** Everything the main window needs after opening a project. */
@@ -458,7 +602,8 @@ export interface ProjectSnapshot {
   tasks: Task[];
   missions: Mission[];
   connections: Connection[];
-  pendingPermissions: PermissionRequest[];
+  /** Open permission requests (pending or recovered), oldest first. */
+  pendingPermissions: PermissionRecord[];
   repo: RepoStatus | null;
   recovery: RecoveryInfo | null;
   /** Emergency stop active: new work and autonomy are blocked until released. */
@@ -483,6 +628,10 @@ export interface AgentSpec {
   connections?: string[];
   isolation?: "auto" | Isolation;
   model?: string | null;
+  /** Supervising agent (default: Central). Must be a lieutenant (or Central). */
+  parent?: string | null;
+  /** Default "specialist". */
+  rank?: AgentRank | null;
 }
 
 export interface AgentPatch {
@@ -578,6 +727,8 @@ export interface AgentProfile {
   env: Record<string, string>;
   /** How the agent's character looks in the AI World (missing on old projects). */
   appearance?: AgentAppearance;
+  /** Engine override (null/missing = the project default for the agent's kind). */
+  engine?: import("./aiTypes").EngineProvider | null;
 }
 
 /** "Customize Character". A skin is a whole AI Town spritesheet. */
@@ -1219,7 +1370,14 @@ export type AiTownToNexus =
         | "changeModel"
         | "changeSkills"
         | "changeMcp"
-        | "changeConnections";
+        | "changeConnections"
+        | "resume"
+        | "restart"
+        | "promote"
+        | "demote"
+        | "viewMemory"
+        | "viewTasks"
+        | "viewTools";
     }
   /** The camera mode changed inside the world (e.g. a drag ends Follow). */
   | { source: "ai-town"; type: "camera"; mode: "free" | "follow" | "cinematic" | "overview"; nexusId?: string };
@@ -1278,6 +1436,8 @@ export interface MissionSpec {
   analysis?: MissionAnalysis | null;
   /** Send to Central even if another mission is running (otherwise queued). */
   startNow?: boolean;
+  /** Client-generated key: a repeated submit returns the mission the first one created. */
+  idempotencyKey?: string | null;
 }
 
 /** What the UI knows about Claude Code, passed to the analysis (null = unknown). */
@@ -1508,4 +1668,314 @@ export interface SkillRecommendation {
   skillId?: string | null;
   /** Market entry id (details / install). */
   marketId?: string | null;
+}
+
+// ---------------------------------------------------------------- renderer health (0.4, src-tauri/src/health_commands.rs)
+
+/** Sent with every heartbeat by the renderer health monitor. */
+export interface RendererReport {
+  status: "ok" | "degraded" | "recovering";
+  visible: boolean;
+  renderErrors: number;
+  windowErrors: number;
+  rejections: number;
+  stalls: number;
+  longestStallMs: number;
+  invokeCalls: number;
+  invokeErrors: number;
+  heartbeatFailures: number;
+  aiWorldErrors: number;
+  jsHeapUsed: number | null;
+  jsHeapLimit: number | null;
+  lastError: string | null;
+  view: string | null;
+}
+
+/** What keeps running in the Control Center regardless of the interface. */
+export interface CoreStatus {
+  projectOpen: boolean;
+  projectName: string | null;
+  runningAgents: number;
+  workingAgents: number;
+  activeMission: string | null;
+  activeMissions: number;
+  mcpConnected: number;
+  mcpTotal: number;
+  /** null: AI Town runtime never used, or busy starting/stopping. */
+  aiTownRunning: boolean | null;
+  terminals: number;
+}
+
+export interface RendererIncident {
+  id: string;
+  ts: string;
+  /** frozen | degraded | manual | viewCrash */
+  kind: string;
+  /** reload | recreate | none */
+  action: string;
+  reason: string;
+  /** pending | recovered | failed | recorded */
+  outcome: string;
+  recoveredAt: string | null;
+  downtimeMs: number | null;
+  report: RendererReport | null;
+  preserved: CoreStatus | null;
+}
+
+export interface HeartbeatAck {
+  watchdog: boolean;
+  recovered: RendererIncident | null;
+}
+
+export interface WatchdogStatus {
+  enabled: boolean;
+  uptimeSecs: number;
+  heartbeats: number;
+  lastBeatMsAgo: number | null;
+  attempts: number;
+  recoveries: number;
+  lastReport: RendererReport | null;
+  pending: RendererIncident | null;
+}
+
+export interface GpuInfo {
+  name: string;
+  utilizationPct: number | null;
+  vramUsedMb: number | null;
+  vramTotalMb: number | null;
+}
+
+export interface ProcInfo {
+  pid: number;
+  parent: number | null;
+  name: string;
+  memoryBytes: number;
+  cpuPct: number;
+  depth: number;
+}
+
+export interface Resources {
+  cpuPct: number;
+  cpuCores: number;
+  memoryTotalBytes: number;
+  memoryUsedBytes: number;
+  /** NEXUS and every process it started, depth-first. */
+  processes: ProcInfo[];
+  gpus: GpuInfo[];
+  gpuUnavailable: string | null;
+}
+
+// ---------------------------------------------------------------- recovery (src-tauri/src/recovery_commands.rs)
+
+export interface LastAction {
+  agentId: string;
+  tool: string;
+  /** "Reading Workspace.X.Script", "Running npm test"… */
+  description: string;
+  at: string;
+}
+
+export interface CheckpointSummary {
+  seq: number;
+  name: string;
+  at: string;
+  reason: string;
+  status: string;
+  currentStep: string;
+  files: number;
+}
+
+export interface RecoveryAgentState {
+  agentId: string;
+  name: string;
+  status: string;
+  currentTask: string | null;
+  currentAction: string | null;
+  claudeSessionId: string | null;
+  workdir: string | null;
+  lastAction: LastAction | null;
+}
+
+export interface RecoveryTaskState {
+  id: string;
+  title: string;
+  status: string;
+  agent: string | null;
+  dependencies: string[];
+  progress: number | null;
+}
+
+/** A mission that was running when NEXUS stopped (Resume / Inspect / Abandon). */
+export interface InterruptedMission {
+  missionId: string;
+  title: string;
+  status: string;
+  interruptedDuring: string;
+  lastAction: LastAction | null;
+  filesSinceCheckpoint: string[];
+  filesNote: string;
+  lastCheckpoint: CheckpointSummary | null;
+  tasksInProgress: RecoveryTaskState[];
+  agents: RecoveryAgentState[];
+  previousRun: string;
+  /** What Central is told when the mission resumes. */
+  brief: string;
+}
+
+export type PreviousRun =
+  | { kind: "unknown" }
+  | { kind: "clean"; at: string }
+  | { kind: "unexpected"; pid: number; startedAt: string }
+  | { kind: "still_running"; pid: number };
+
+export type ProcessKind = "claude_session" | "ai_town" | "ai_town_backend" | "mcp_server" | "local_ai" | "ssh" | "pty" | "other";
+
+export interface ProcessNode {
+  id: string;
+  label: string;
+  kind: string;
+  pid: number | null;
+  /** starting | running | busy | idle | unresponsive | recovering | exited | crashed (OS children: running) */
+  status: string;
+  detail: string | null;
+  heartbeatAt: string | null;
+  lastEvent: string | null;
+  agentId: string | null;
+  missionId: string | null;
+  restartCount: number;
+  /** "registry" (NEXUS registered it) or "os" (found under one in the OS process table). */
+  source: string;
+  children: ProcessNode[];
+}
+
+export interface Orphan {
+  pid: number;
+  kind: ProcessKind;
+  label: string;
+  reason: string;
+  agentId: string | null;
+  missionId: string | null;
+  command: string | null;
+  osStartMs: number | null;
+  key: string | null;
+}
+
+export interface WatchStatus {
+  agentId: string;
+  pid: number;
+  verdict: "idle" | "busy" | "waiting_for_user" | "long_tool_call" | "stalled" | "dead" | null;
+  reason: string | null;
+  sinceOutputSecs: number;
+  inflightTool: string | null;
+  softRecoverySent: boolean;
+  lastAction: LastAction | null;
+  checkedAt: string | null;
+  automaticRestarts: number;
+}
+
+export interface ProjectRecoveryState {
+  previousRun: PreviousRun;
+  previousRunText: string;
+  interruptedMissions: InterruptedMission[];
+  orphans: Orphan[];
+  orphansScannedAt: string | null;
+  watch: WatchStatus[];
+  crashed: { agentId: string; exitCode: number | null; busy: boolean; sinceSecs: number; restartCapped: boolean; reportId: string | null }[];
+  lastTick: string | null;
+  unacknowledgedReports: number;
+}
+
+export interface RecoveryState {
+  appPreviousRun: PreviousRun;
+  appPreviousRunText: string;
+  /** null without an open project. */
+  project: ProjectRecoveryState | null;
+}
+
+export interface CrashReport {
+  id: string;
+  at: string;
+  title: string;
+  /** nexus | claude-session | mcp | ai-town | local-ai | orphans | interface */
+  component: string;
+  severity: "info" | "warning" | "error";
+  whatHappened: string;
+  possibleCause: string;
+  preserved: string[];
+  restarted: string[];
+  lost: string[];
+  details: string[];
+  agentId: string | null;
+  missionId: string | null;
+  project: string | null;
+  acknowledged: boolean;
+  /** project | app | interface */
+  source: string;
+}
+
+export interface Checkpoint {
+  seq: number;
+  name: string;
+  at: string;
+  reason: string;
+  mission: Record<string, unknown>;
+}
+
+export interface RestartRecord {
+  at: string;
+  reason: string;
+  outcome: string;
+}
+
+/** One MCP server in one agent's Claude Code session (Claude Code's mcp_status). */
+export interface McpHealth {
+  agentId: string;
+  server: string;
+  /** Claude Code's words: connected, failed, pending, needs-auth, disabled… ("session ended" from NEXUS). */
+  status: string;
+  transport: string | null;
+  tools: number | null;
+  toolNames: string[];
+  serverVersion: string | null;
+  error: string | null;
+  cause: string | null;
+  lastResponseAt: string | null;
+  lastCheckedAt: string;
+  sessionPid: number | null;
+  restarts: RestartRecord[];
+  reconnecting: boolean;
+}
+
+/** Latest NEXUS probe of a project connection. */
+export interface McpProbeRecord {
+  connectionId: string;
+  name: string;
+  at: string;
+  ok: boolean;
+  transport: string;
+  serverName: string | null;
+  serverVersion: string | null;
+  tools: number | null;
+  resources: number | null;
+  prompts: number | null;
+  latencyMs: number | null;
+  error: string | null;
+  stderrTail: string[];
+  probes: number;
+}
+
+export interface McpSupervision {
+  sessions: McpHealth[];
+  probes: McpProbeRecord[];
+  sessionPids: [string, number][];
+  sessionChildren: { agentId: string; pid: number; parentPid: number; name: string }[];
+}
+
+export interface OrphanCleanup {
+  orphan: Orphan;
+  steps: { step: string; outcome: string }[];
+  terminated: boolean;
+  alreadyGone: boolean;
+  modifiedFiles: string[];
+  sessionId: string | null;
 }

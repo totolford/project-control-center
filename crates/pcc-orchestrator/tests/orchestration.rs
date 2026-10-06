@@ -18,10 +18,13 @@ fn fake_claude() -> PathBuf {
     p
 }
 
+/// Generous timeout: the fast path takes ~1 s, but the first run after a
+/// rebuild can be slow on Windows (antivirus scan of the new fake_claude.exe,
+/// parallel tests spawning processes and git worktrees).
 async fn wait_for<F: FnMut() -> bool>(what: &str, mut f: F) {
     let start = Instant::now();
     while !f() {
-        if start.elapsed() > Duration::from_secs(30) {
+        if start.elapsed() > Duration::from_secs(120) {
             panic!("timed out waiting for {what}");
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -114,7 +117,7 @@ async fn destructive_command_waits_for_user_and_stop_is_real() {
     let mut perm_id = None;
     let start = Instant::now();
     while perm_id.is_none() {
-        assert!(start.elapsed() < Duration::from_secs(30), "no permission request");
+        assert!(start.elapsed() < Duration::from_secs(120), "no permission request");
         let snap = o.lock().await.snapshot().unwrap();
         perm_id = snap.pending_permissions.first().map(|p| {
             assert_eq!(p.agent_id, "ops");
@@ -279,7 +282,7 @@ async fn central_requests_connections_with_approval_and_reuse() {
     let mut perm = None;
     let start = Instant::now();
     while perm.is_none() {
-        assert!(start.elapsed() < Duration::from_secs(30), "no approval request");
+        assert!(start.elapsed() < Duration::from_secs(120), "no approval request");
         perm = o
             .lock()
             .await

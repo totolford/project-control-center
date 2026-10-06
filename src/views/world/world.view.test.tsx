@@ -150,7 +150,12 @@ describe("AiWorldView: integrated AI Town", () => {
     await post({ source: "ai-town", type: "action", nexusId: "w1", action: "stop" });
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("stop_agent", { id: "w1" });
     await post({ source: "ai-town", type: "action", nexusId: "w1", action: "pause" });
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith("interrupt_agent", { id: "w1" });
+    // Pause is the real hierarchy pause (nothing delivered until resumed), not a bare interrupt.
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("pause_agent", { id: "w1" });
+    await post({ source: "ai-town", type: "action", nexusId: "w1", action: "resume" });
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("resume_agent", { id: "w1" });
+    await post({ source: "ai-town", type: "action", nexusId: "w1", action: "promote" });
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("promote_agent", { id: "w1" });
     await post({ source: "ai-town", type: "action", nexusId: "w1", action: "customize" });
     expect(screen.getByText("Customize Character — Builder")).toBeTruthy();
     await post({ source: "ai-town", type: "openBuilding", zone: "skill_shop" });

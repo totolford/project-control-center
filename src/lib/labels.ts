@@ -21,6 +21,7 @@ export const AGENT_STATUS: Record<AgentStatus, { label: string; tone: Tone; puls
   crashed: { label: "Crashed", tone: "red" },
   disconnected: { label: "Disconnected", tone: "orange" },
   retired: { label: "Retired", tone: "dim" },
+  sleeping: { label: "Sleeping", tone: "dim" },
 };
 
 export const TASK_STATUSES: TaskStatus[] = [

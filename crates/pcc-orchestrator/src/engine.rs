@@ -18,7 +18,7 @@ use pcc_claude::session::describe_tool_use;
 use pcc_claude::{SessionHandle, SessionOutput};
 use pcc_core::{
     ids, Agent, AgentKind, AgentStatus, Error, Event, EventBus, EventKind, Isolation, LogKind, Message, MessageKind,
-    PermissionDecision, PermissionRequest, Result, TaskStatus, CENTRAL_ID, SYSTEM_ID, USER_ID,
+    PermissionRequest, Result, TaskStatus, CENTRAL_ID, SYSTEM_ID, USER_ID,
 };
 use pcc_git::Repo;
 use pcc_store::{ProjectStore, TaskFilter};
@@ -48,12 +48,14 @@ pub(crate) struct Live {
     pub got_init: bool,
     /// Cost of the agent's previous sessions.
     pub base_cost: f64,
+    /// Runs on a local model: Claude Code's cost figures are not real spending.
+    pub local_engine: bool,
     pub tool_names: HashMap<String, String>,
     pub stderr_tail: Vec<String>,
 }
 
 pub(crate) enum PendingKind {
-    Tool { request_id: String, input: Value, epoch: u64 },
+    Tool { request_id: String, input: Value, epoch: u64, tool_use_id: Option<String> },
     Merge { agent: String },
     Admin(Box<crate::admin::AdminAction>),
 }
@@ -62,11 +64,6 @@ pub(crate) enum PendingKind {
 /// connection test answering a deferred tool call).
 pub type Job = Box<dyn FnOnce(&mut Engine) -> Result<()> + Send>;
 
-pub(crate) struct PendingPermission {
-    pub request: PermissionRequest,
-    pub kind: PendingKind,
-}
-
 pub struct Engine {
     pub(crate) store: Arc<ProjectStore>,
     pub(crate) bus: EventBus,
@@ -74,7 +71,8 @@ pub struct Engine {
     pub(crate) claude: Option<PathBuf>,
     pub(crate) project_types: Vec<String>,
     pub(crate) sessions: HashMap<String, Live>,
-    pub(crate) permissions: BTreeMap<String, PendingPermission>,
+    /// Open permission requests (records persisted in the store).
+    pub(crate) permissions: crate::permission_manager::PermissionManager,
     out_tx: mpsc::UnboundedSender<(Tag, SessionOutput)>,
     next_epoch: u64,
     pub(crate) nudges: HashMap<String, u8>,
@@ -92,6 +90,10 @@ pub struct Engine {
     pub(crate) jobs_tx: mpsc::UnboundedSender<Job>,
     jobs_rx: Option<mpsc::UnboundedReceiver<Job>>,
     pub(crate) compatibility: Option<pcc_store::compat::CompatibilityReport>,
+    /// Agent pyramid runtime state (sleeping sessions, pending rank restarts).
+    pub(crate) hier: crate::hierarchy::Runtime,
+    /// Process registry, watchdog state, checkpoints and crash reports.
+    pub(crate) rec: crate::recovery::RecoveryRuntime,
 }
 
 impl Engine {
@@ -103,6 +105,7 @@ impl Engine {
         out_tx: mpsc::UnboundedSender<(Tag, SessionOutput)>,
     ) -> Result<Engine> {
         let repo = Repo::discover(store.root());
+        let rec = crate::recovery::RecoveryRuntime::open(&store, claude.as_deref());
         let (jobs_tx, jobs_rx) = mpsc::unbounded_channel();
         let mut e = Engine {
             store,
@@ -111,7 +114,7 @@ impl Engine {
             claude,
             project_types,
             sessions: HashMap::new(),
-            permissions: BTreeMap::new(),
+            permissions: Default::default(),
             out_tx,
             next_epoch: 1,
             nudges: HashMap::new(),
@@ -124,6 +127,8 @@ impl Engine {
             jobs_tx,
             jobs_rx: Some(jobs_rx),
             compatibility: None,
+            hier: Default::default(),
+            rec,
         };
         e.compatibility = pcc_store::compat::analyze(e.store.root()).ok();
         if e.store.read_only() {
@@ -134,6 +139,9 @@ impl Engine {
         e.emergency = e.store.meta_get("emergency_stop")?.is_some_and(|v| !v.is_empty());
         e.ensure_central()?;
         e.detect_recovery()?;
+        e.detect_interrupted_missions()?;
+        e.announce_open();
+        e.reconcile_permissions()?;
         Ok(e)
     }
 
@@ -157,10 +165,15 @@ impl Engine {
     }
 
     pub(crate) fn emit_mission(&self, kind: EventKind, id: &str, summary: impl Into<String>) {
+        self.emit_mission_named(kind, "", id, summary)
+    }
+
+    /// Same as `emit_mission` with an explicit journal name (`mission.started`...).
+    pub(crate) fn emit_mission_named(&self, kind: EventKind, name: &str, id: &str, summary: impl Into<String>) {
         match self.store.list_missions() {
             Ok(list) => {
                 if let Some(m) = list.into_iter().find(|m| m.mission.id == id) {
-                    self.emit(Event::new(kind, summary, json!(m)).mission(Some(id.to_string())));
+                    self.emit(Event::new(kind, summary, json!(m)).mission(Some(id.to_string())).named(name));
                 }
             }
             Err(e) => tracing::error!("cannot load missions: {e}"),
@@ -212,7 +225,7 @@ impl Engine {
             tasks: self.store.list_tasks(&TaskFilter::default())?,
             missions: self.store.list_missions()?,
             connections: self.store.list_connections()?,
-            pending_permissions: self.permissions.values().map(|p| p.request.clone()).collect(),
+            pending_permissions: self.permissions.records(),
             repo: self.repo.as_ref().map(Repo::status),
             recovery: self.recovery.clone(),
             emergency: self.emergency,
@@ -257,6 +270,9 @@ impl Engine {
             created_by: SYSTEM_ID.into(),
             created_at: now.clone(),
             updated_at: now,
+            parent_agent: None,
+            rank: pcc_core::AgentRank::Commander,
+            paused_at: None,
         };
         self.store.upsert_agent(&a)?;
         self.emit_agent(EventKind::AgentCreated, &a, "Central agent created");
@@ -284,19 +300,17 @@ impl Engine {
                 });
             }
         }
-        self.recovery = (!list.is_empty()).then_some(RecoveryInfo { agents: list });
+        self.recovery = (!list.is_empty()).then_some(RecoveryInfo { agents: list, ..Default::default() });
         Ok(())
     }
 
     pub fn recover(&mut self) -> Result<()> {
         let Some(info) = self.recovery.take() else { return Ok(()) };
         self.autopilot = true;
+        let mut restarted = Vec::new();
         for ra in info.agents {
-            let note = match &ra.task_id {
-                Some(t) => format!("The control center was restarted. Continue your work on {t} where you left off, then report with complete_task / block_task / fail_task."),
-                None if ra.agent_id == CENTRAL_ID => "The control center was restarted. Review the current state with list_tasks and list_agents and continue coordinating.".into(),
-                None => "The control center was restarted. Continue where you left off.".into(),
-            };
+            // Precise brief: interrupted step, last action, files written since the checkpoint.
+            let note = self.resume_note(&ra);
             if let Err(e) = self.start_agent(&ra.agent_id, true) {
                 self.set_status(&ra.agent_id, AgentStatus::Crashed)?;
                 self.emit(
@@ -310,7 +324,9 @@ impl Engine {
                 continue;
             }
             self.post_message(SYSTEM_ID, &ra.agent_id, MessageKind::System, &note, ra.task_id.clone(), None)?;
+            restarted.push(ra.name.clone());
         }
+        self.rec_after_recover(&restarted);
         self.schedule()
     }
 
@@ -354,6 +370,7 @@ impl Engine {
                 }
             }
         }
+        self.rec_clean_exit();
     }
 
     // ------------------------------------------------------------ sessions
@@ -401,14 +418,23 @@ impl Engine {
     pub(crate) fn wake(&mut self, id: &str) -> Result<()> {
         let a = self.store.agent(id)?;
         if self.sessions.contains_key(id)
+            || a.paused_at.is_some()
             || !matches!(
                 a.status,
-                AgentStatus::Offline | AgentStatus::Stopped | AgentStatus::Crashed | AgentStatus::Waiting
+                AgentStatus::Offline
+                    | AgentStatus::Stopped
+                    | AgentStatus::Crashed
+                    | AgentStatus::Waiting
+                    | AgentStatus::Sleeping
             )
         {
             return Ok(());
         }
-        self.start_agent(id, a.claude_session_id.is_some())
+        self.start_agent(id, a.claude_session_id.is_some())?;
+        if a.status == AgentStatus::Sleeping {
+            self.note_wake(&a);
+        }
+        Ok(())
     }
 
     fn live_workers(&self) -> usize {
@@ -437,6 +463,7 @@ impl Engine {
         let handle = pcc_claude::spawn(&prepared.spec, (id.to_string(), epoch), self.out_tx.clone())?;
         let row = self.store.start_session(id, Some(&prepared.claude_session_id), Some(handle.pid))?;
         let base_cost = agent.total_cost_usd;
+        self.note_session_model(id, prepared.local_model.clone());
         self.sessions.insert(
             id.to_string(),
             Live {
@@ -450,6 +477,7 @@ impl Engine {
                 resumed: prepared.spec.resume.is_some(),
                 got_init: false,
                 base_cost,
+                local_engine: prepared.local_model.is_some(),
                 tool_names: HashMap::new(),
                 stderr_tail: Vec::new(),
             },
@@ -459,6 +487,7 @@ impl Engine {
         agent.current_action = None;
         self.store.upsert_agent(&agent)?;
         let pid = self.sessions[id].handle.pid;
+        self.rec_session_started(id, epoch, pid, prepared.spec.resume.is_some());
         self.log(
             id,
             row,
@@ -470,10 +499,14 @@ impl Engine {
                 agent.workdir
             ),
         );
-        for n in notes {
-            self.log(id, row, LogKind::System, &n);
+        for n in notes.iter().chain(&prepared.notes) {
+            self.log(id, row, LogKind::System, n);
         }
-        self.emit_agent(EventKind::AgentStarted, &agent, format!("{} session started", agent.name));
+        self.emit(
+            Event::new(EventKind::AgentStarted, format!("{} session started", agent.name), json!(agent))
+                .agent(id)
+                .with_pid(Some(pid)),
+        );
         Ok(())
     }
 
@@ -536,7 +569,8 @@ impl Engine {
     /// session if it is idle, starting the session when allowed.
     pub(crate) fn pump(&mut self, id: &str) -> Result<()> {
         let agent = self.store.agent(id)?;
-        if agent.status == AgentStatus::Retired {
+        // Paused agents receive nothing until the user resumes them.
+        if agent.status == AgentStatus::Retired || agent.paused_at.is_some() {
             return Ok(());
         }
         let messages = self.store.undelivered_for(id)?;
@@ -559,7 +593,7 @@ impl Engine {
             None => {
                 if !self.autopilot
                     || self.emergency
-                    || !matches!(agent.status, AgentStatus::Offline | AgentStatus::Waiting)
+                    || !matches!(agent.status, AgentStatus::Offline | AgentStatus::Waiting | AgentStatus::Sleeping)
                 {
                     return Ok(());
                 }
@@ -569,7 +603,9 @@ impl Engine {
                     self.reclaim_idle_worker()?;
                     return Ok(());
                 }
-                let resume = agent.claude_session_id.is_some() && agent.kind == AgentKind::Central;
+                // Sleeping agents continue their own session.
+                let resume = agent.claude_session_id.is_some()
+                    && (agent.kind == AgentKind::Central || agent.status == AgentStatus::Sleeping);
                 if let Err(e) = self.start_agent(id, resume) {
                     self.emit(
                         Event::new(
@@ -581,6 +617,9 @@ impl Engine {
                     );
                     self.set_status(id, AgentStatus::Crashed)?;
                     return Ok(());
+                }
+                if agent.status == AgentStatus::Sleeping {
+                    self.note_wake(&agent);
                 }
             }
         }
@@ -746,6 +785,7 @@ impl Engine {
             return Ok(());
         }
         let row = live.session_row;
+        self.rec_observe(&agent, epoch, &out);
         match out {
             SessionOutput::Message { msg, raw } => {
                 if let Err(e) = self.store.append_raw(&agent, row, &raw) {
@@ -851,6 +891,9 @@ impl Engine {
                 }
             }
             Inbound::Result { subtype, is_error, text, total_cost_usd, num_turns, duration_ms } => {
+                // A local model costs nothing; Claude Code's estimate would be fiction.
+                let total_cost_usd =
+                    total_cost_usd.filter(|_| !self.sessions.get(agent).is_some_and(|l| l.local_engine));
                 if let Some(cost) = total_cost_usd {
                     let base = self.sessions.get(agent).map(|l| l.base_cost).unwrap_or(0.0);
                     let mut a = self.store.agent(agent)?;
@@ -873,7 +916,7 @@ impl Engine {
                 if let Some(l) = self.sessions.get_mut(agent) {
                     l.busy = false;
                 }
-                let waiting_perm = self.permissions.values().any(|p| p.request.agent_id == agent);
+                let waiting_perm = self.permissions.any_for(agent);
                 self.set_status(
                     agent,
                     if waiting_perm { AgentStatus::AwaitingPermission } else { AgentStatus::Waiting },
@@ -881,7 +924,11 @@ impl Engine {
                 self.on_turn_end(agent)?;
             }
             Inbound::ControlRequest { request_id, request } => self.handle_control(agent, request_id, request)?,
-            Inbound::ControlResponse { success, error, .. } => {
+            Inbound::ControlResponse { request_id, success, error, response } => {
+                // Requests the watchdog / MCP supervision sent on their own.
+                if self.rec_control_response(agent, &request_id, success, error.as_deref(), &response) {
+                    return Ok(());
+                }
                 if !success {
                     self.log(
                         agent,
@@ -898,8 +945,13 @@ impl Engine {
 
     /// A worker ended its turn: make sure its task is not silently abandoned.
     fn on_turn_end(&mut self, agent: &str) -> Result<()> {
+        self.hierarchy_turn_end(agent)?;
         let a = self.store.agent(agent)?;
-        if a.kind == AgentKind::Worker && self.store.undelivered_for(agent)?.is_empty() {
+        // A supervisor waiting for its sub-agents' results is not idle on its task.
+        if a.kind == AgentKind::Worker
+            && self.store.undelivered_for(agent)?.is_empty()
+            && !self.has_open_delegations(agent)?
+        {
             let open = self.store.list_tasks(&TaskFilter {
                 agent: Some(agent.into()),
                 status: Some(TaskStatus::InProgress),
@@ -929,26 +981,19 @@ impl Engine {
     fn on_exit(&mut self, agent: &str, code: Option<i32>) -> Result<()> {
         let Some(live) = self.sessions.remove(agent) else { return Ok(()) };
         // Pending permission prompts of this session can no longer be answered.
-        let stale: Vec<String> = self
-            .permissions
-            .iter()
-            .filter(|(_, p)| p.request.agent_id == agent && matches!(p.kind, PendingKind::Tool { .. }))
-            .map(|(k, _)| k.clone())
-            .collect();
-        for id in stale {
-            self.permissions.remove(&id);
-            self.emit(
-                Event::new(
-                    EventKind::PermissionResolved,
-                    "Permission request dropped (session ended)",
-                    json!({"id": id, "decision": "reject"}),
-                )
-                .agent(agent),
-            );
-        }
+        let why = if live.stopping {
+            "the agent's session was stopped before an answer was given".to_string()
+        } else {
+            format!(
+                "the agent's session ended unexpectedly (exit code {})",
+                code.map(|c| c.to_string()).unwrap_or("-".into())
+            )
+        };
+        self.lose_session_permissions(agent, &why);
         let intentional = live.stopping;
         let state = if intentional { "stopped" } else { "crashed" };
         self.store.end_session(live.session_row, state, code)?;
+        self.rec_session_ended(agent, code, intentional, live.busy, &live.stderr_tail);
         let detail =
             if live.stderr_tail.is_empty() { String::new() } else { format!("\n{}", live.stderr_tail.join("\n")) };
         self.log(
@@ -978,17 +1023,35 @@ impl Engine {
         }
         if live.restart_after_exit {
             self.start_agent(agent, true)?;
+            let pid = self.sessions.get(agent).map(|l| l.handle.pid);
+            let a = self.store.agent(agent)?;
+            self.emit(
+                Event::new(EventKind::AgentRestarted, format!("{} session restarted", a.name), json!(a))
+                    .agent(agent)
+                    .with_pid(pid),
+            );
             return self.redispatch_current(agent);
         }
         if live.reclaimed {
             self.set_status(agent, AgentStatus::Offline)?;
             return self.schedule();
         }
+        if intentional && self.finish_sleep(agent)? {
+            return Ok(());
+        }
         let a = self.set_status(agent, if intentional { AgentStatus::Stopped } else { AgentStatus::Crashed })?;
         if intentional {
-            self.emit_agent(EventKind::AgentStopped, &a, format!("{} stopped", a.name));
+            self.emit(
+                Event::new(EventKind::AgentStopped, format!("{} stopped", a.name), json!(a))
+                    .agent(agent)
+                    .with_pid(Some(live.handle.pid)),
+            );
         } else {
-            self.emit_agent(EventKind::AgentCrashed, &a, format!("{} crashed (exit code {:?})", a.name, code));
+            self.emit(
+                Event::new(EventKind::AgentCrashed, format!("{} crashed (exit code {:?})", a.name, code), json!(a))
+                    .agent(agent)
+                    .with_pid(Some(live.handle.pid)),
+            );
             if a.kind == AgentKind::Worker {
                 self.notify_central(
                     &format!(
@@ -1007,7 +1070,11 @@ impl Engine {
     }
 
     /// After a restart, tell the agent to continue its in-progress task.
-    fn redispatch_current(&mut self, agent: &str) -> Result<()> {
+    pub(crate) fn redispatch_current(&mut self, agent: &str) -> Result<()> {
+        // A watchdog restart carries a precise brief.
+        if let Some(brief) = self.rec.briefs.remove(agent) {
+            return self.send_turn(agent, &brief);
+        }
         let a = self.store.agent(agent)?;
         if let Some(tid) = a.current_task.clone() {
             let t = self.store.task(&tid)?;
@@ -1119,7 +1186,7 @@ impl Engine {
                             rule_key: class.rule_key.clone(),
                             created_at: pcc_core::now(),
                         };
-                        self.ask_user(req, PendingKind::Tool { request_id, input, epoch })?;
+                        self.ask_user(req, PendingKind::Tool { request_id, input, epoch, tool_use_id })?;
                     }
                 }
             }
@@ -1142,7 +1209,7 @@ impl Engine {
 
     /// Allowed shell commands that use SSH are made non-interactive (and get
     /// the connection's key) so an agent never hangs on a password prompt.
-    fn harden_input(&self, agent: &str, tool: &str, input: &Value) -> Value {
+    pub(crate) fn harden_input(&self, agent: &str, tool: &str, input: &Value) -> Value {
         if !matches!(tool, "Bash" | "PowerShell") {
             return input.clone();
         }
@@ -1169,106 +1236,6 @@ impl Engine {
             }
             None => input.clone(),
         }
-    }
-
-    pub(crate) fn ask_user(&mut self, req: PermissionRequest, kind: PendingKind) -> Result<()> {
-        let agent = req.agent_id.clone();
-        self.emit(
-            Event::new(
-                EventKind::PermissionRequested,
-                format!("{} wants: {}", agent, first_line(&req.summary, 120)),
-                json!(req),
-            )
-            .agent(&agent),
-        );
-        self.permissions.insert(req.id.clone(), PendingPermission { request: req, kind });
-        if self.sessions.get(&agent).is_some_and(|l| l.busy) {
-            self.set_status(&agent, AgentStatus::AwaitingPermission)?;
-        }
-        Ok(())
-    }
-
-    pub fn resolve_permission(&mut self, id: &str, decision: PermissionDecision) -> Result<()> {
-        let p = self.permissions.remove(id).ok_or_else(|| Error::not_found(format!("permission request {id}")))?;
-        let agent = p.request.agent_id.clone();
-        let allow = decision != PermissionDecision::Reject;
-        self.store
-            .insert_decision(pcc_core::DecisionRecord {
-                id: 0,
-                ts: pcc_core::now(),
-                agent_id: agent.clone(),
-                tool_name: p.request.tool_name.clone(),
-                capability: Some(p.request.capability.clone()).filter(|c| !c.is_empty()),
-                summary: p.request.summary.clone(),
-                decision: if allow { "user_allowed" } else { "user_rejected" }.into(),
-                actor: "user".into(),
-                reason: Some(format!("{decision:?}")),
-            })
-            .map(|_| ())
-            .unwrap_or_else(|e| tracing::error!("cannot journal decision: {e}"));
-        if decision == PermissionDecision::AllowAlways {
-            self.store.add_permission_rule(&agent, &p.request.rule_key)?;
-        }
-        self.emit(
-            Event::new(
-                EventKind::PermissionResolved,
-                format!("{:?}: {}", decision, first_line(&p.request.summary, 100)),
-                json!({"id": id, "decision": decision}),
-            )
-            .agent(&agent),
-        );
-        match p.kind {
-            PendingKind::Tool { request_id, input, epoch } => {
-                if self.sessions.get(&agent).is_some_and(|l| l.epoch == epoch) {
-                    let line = if allow {
-                        protocol::permission_allow(
-                            &request_id,
-                            &self.harden_input(&agent, &p.request.tool_name, &input),
-                        )
-                    } else {
-                        protocol::permission_deny(&request_id, "The user rejected this action. Do not retry it; continue without it or report the blocker.")
-                    };
-                    self.write(&agent, line)?;
-                    let still_waiting = self.permissions.values().any(|q| q.request.agent_id == agent);
-                    let busy = self.sessions.get(&agent).is_some_and(|l| l.busy);
-                    if !still_waiting {
-                        self.set_status(&agent, if busy { AgentStatus::Working } else { AgentStatus::Waiting })?;
-                    }
-                }
-            }
-            PendingKind::Admin(action) => {
-                let note = if allow {
-                    match self.apply_admin(*action) {
-                        Ok(n) => format!("The user approved: {n}"),
-                        Err(e) => format!("The approved change failed: {e}"),
-                    }
-                } else {
-                    format!("The user rejected: {}", p.request.summary)
-                };
-                self.post_message(SYSTEM_ID, &agent, MessageKind::System, &note, None, None)?;
-            }
-            PendingKind::Merge { agent: worker } => {
-                let text = if allow {
-                    match self.merge_agent_branch(&worker) {
-                        Ok(o) if o.merged => format!(
-                            "The user approved the merge: {} (commit {}).",
-                            o.message,
-                            o.commit.unwrap_or_default()
-                        ),
-                        Ok(o) => format!(
-                            "Merge of {worker} not performed: {}. Conflicting files: {}",
-                            o.message,
-                            o.conflicts.join(", ")
-                        ),
-                        Err(e) => format!("Merge of {worker} failed: {e}"),
-                    }
-                } else {
-                    format!("The user rejected merging {worker}'s branch.")
-                };
-                self.notify_central(&text, None, None)?;
-            }
-        }
-        Ok(())
     }
 }
 

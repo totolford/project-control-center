@@ -1,0 +1,442 @@
+/* ------------------------------------------------------------------ 0.4 renderer health, Safe Recovery, Diagnostics, Activity chain */
+
+/* ---- inline recovery card (error boundaries) */
+.crash-card {
+  margin: 18px auto;
+  max-width: 560px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-left: 3px solid var(--amber);
+  border-radius: 8px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.crash-card.compact {
+  margin: 10px;
+  padding: 10px 12px;
+}
+.crash-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--amber);
+}
+.crash-head strong {
+  color: var(--text);
+}
+.crash-text {
+  margin: 0;
+  color: var(--muted);
+}
+.crash-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.crash-details pre {
+  margin: 6px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  font: 11px/1.4 var(--mono);
+  white-space: pre-wrap;
+  color: var(--red);
+}
+.crash-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- Safe Recovery Overlay */
+.sro-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 9, 12, 0.86);
+  backdrop-filter: blur(3px);
+}
+.sro-card {
+  width: min(520px, 100%);
+  padding: 22px 24px 20px;
+  border: 1px solid var(--border-strong);
+  border-top: 2px solid var(--green);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sro-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+.sro-card h2 {
+  font-size: 17px;
+}
+.sro-lead {
+  margin: 0;
+  color: var(--text);
+}
+.sro-reason {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.sro-preserved {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--panel-2);
+}
+.sro-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+.sro-row dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.sro-row dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.sro-unknown {
+  margin: 0;
+  color: var(--amber);
+}
+.sro-status {
+  min-height: 18px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sro-actions {
+  display: flex;
+  gap: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sro-backdrop {
+    backdrop-filter: none;
+  }
+}
+
+/* ---- top bar */
+.health-indicator.level-amber {
+  color: var(--amber);
+}
+.health-indicator.level-red {
+  color: var(--red);
+}
+.central-indicator .mono {
+  font-size: 11px;
+}
+
+/* ---- Diagnostics */
+.diag-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.diag-tile {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  min-width: 0;
+}
+.diag-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.diag-tile-head .dot {
+  margin-left: auto;
+}
+.diag-tile-value {
+  font-size: 17px;
+  font-weight: 600;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.diag-kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  margin: 0;
+  min-width: 0;
+}
+.diag-kv-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  padding: 2px 0;
+}
+.diag-kv-row dt {
+  color: var(--muted);
+}
+.diag-kv-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.diag-signal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.diag-unavailable {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.diag-note {
+  margin-bottom: 6px;
+}
+.diag-tree-wrap {
+  max-height: 320px;
+  overflow: auto;
+}
+.diag-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+.diag-event {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.diag-event:last-child {
+  border-bottom: none;
+}
+.diag-report {
+  align-items: start;
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+.diag-report-body summary {
+  cursor: pointer;
+}
+.diag-report-body p {
+  margin: 4px 0 0;
+}
+
+/* ---- dense tree */
+.dtree,
+.dtree-group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dtree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  border-radius: 4px;
+}
+.dtree-row:hover {
+  background: var(--hover);
+}
+.dtree-toggle {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 2px;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.dtree-toggle:focus-visible {
+  outline: 1px solid var(--accent);
+}
+.dtree-leaf {
+  width: 16px;
+  flex-shrink: 0;
+}
+.dtree-label {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.dtree-status {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.dtree-detail {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 11px;
+  max-width: 55%;
+  padding-right: 4px;
+}
+.dtree-empty {
+  padding: 4px 0;
+}
+
+/* ---- Activity chain */
+.seg-btns {
+  display: inline-flex;
+  gap: 4px;
+}
+.filter-search {
+  min-width: 220px;
+}
+.chain-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chain-group {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.chain-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+  border-radius: 8px 8px 0 0;
+}
+.chain-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  min-width: 0;
+}
+.chain-title {
+  max-width: 420px;
+}
+.chain-more {
+  margin: 6px 12px 0;
+}
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px 8px 8px;
+}
+.chain-row {
+  position: relative;
+}
+/* the connector line of the chain */
+.chain-row::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+.chain-row:first-child::before {
+  top: 50%;
+}
+.chain-row:last-child::before {
+  bottom: 50%;
+}
+.chain-btn {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px 62px minmax(120px, 210px) minmax(70px, 120px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px 3px 2px;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.chain-btn:hover,
+.chain-row.selected .chain-btn {
+  background: var(--hover);
+}
+.chain-btn:focus-visible {
+  outline: 1px solid var(--accent);
+}
+.chain-node {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  z-index: 1;
+}
+.sev-warning .chain-node {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 55%, var(--border));
+}
+.sev-error .chain-node,
+.sev-critical .chain-node {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 55%, var(--border));
+}
+.sev-critical .chain-summary {
+  color: var(--red);
+}
+.chain-name {
+  font-size: 11px;
+  color: var(--accent);
+}
+.chain-agent {
+  color: var(--muted);
+}
+.chain-meta {
+  font-size: 10.5px;
+}

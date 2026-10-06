@@ -8,7 +8,7 @@ import type {
   Message,
   Mission,
   PccEvent,
-  PermissionRequest,
+  PermissionRecord,
   ProjectSettings,
   ProjectSnapshot,
   Task,
@@ -39,6 +39,8 @@ export type ViewName =
   | "master"
   | "world"
   | "market"
+  | "diagnostics"
+  | "ai"
   | "settings";
 
 export interface View {
@@ -120,7 +122,7 @@ const NO_AGENTS: Agent[] = [];
 const NO_TASKS: Task[] = [];
 const NO_MISSIONS: Mission[] = [];
 const NO_CONNECTIONS: Connection[] = [];
-const NO_PERMISSIONS: PermissionRequest[] = [];
+const NO_PERMISSIONS: PermissionRecord[] = [];
 const NO_EVENTS: PccEvent[] = [];
 const NO_MESSAGES: Message[] = [];
 const NO_REQUESTS: UserRequest[] = [];

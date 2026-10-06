@@ -7,12 +7,17 @@
 //! * `admin`   – agent-driven connections, approvals, user requests, command journal.
 //! * `autonomy` – decision journal, power, UNLOCKED, emergency stop, improvement loop.
 //! * `gitops`  – agent branches, merges, snapshots.
+//! * `hierarchy` – agent pyramid: delegation, routing, promotion, dormancy.
 //! * `tools`   – the in-process MCP server agents use to act.
+//! * `permission_manager` – persistent permission requests and their lifecycle.
+//! * `journal` – journal entries about the Control Center itself.
 //! * `policy`  – tool-call permission decisions.
 //! * `launch`  – Claude Code launch specification per agent.
 //! * `prompts` – system prompts and session input formatting.
 //! * `providers` – agent runtimes (Claude Code adapter, detected others).
 //! * `dto`     – shapes shared with the UI.
+//! * `recovery` – process registry, mission checkpoints, interrupted missions, crash reports.
+//! * `watchdog` – periodic health checks, soft recovery, automatic restarts, MCP supervision.
 
 mod admin;
 mod autonomy;
@@ -21,12 +26,18 @@ pub mod dto;
 pub mod engine;
 mod env_tools;
 mod gitops;
+pub mod hierarchy;
+mod idempotency;
+mod journal;
 pub mod launch;
 pub mod missions;
+pub mod permission_manager;
 pub mod policy;
 pub mod prompts;
 pub mod providers;
+pub mod recovery;
 pub mod tools;
+pub mod watchdog;
 mod work;
 
 use std::path::PathBuf;
@@ -48,6 +59,7 @@ pub struct Orchestrator {
     pump: Arc<tokio::task::JoinHandle<()>>,
     ticker: Arc<tokio::task::JoinHandle<()>>,
     jobs: Arc<tokio::task::JoinHandle<()>>,
+    watchdog: Arc<tokio::task::JoinHandle<()>>,
 }
 
 impl Orchestrator {
@@ -95,12 +107,44 @@ impl Orchestrator {
             loop {
                 interval.tick().await;
                 let mut guard = e.lock().await;
+                if let Err(err) = guard.expire_permissions() {
+                    tracing::error!("permission expiry failed: {err}");
+                }
+                if let Err(err) = guard.hierarchy_tick() {
+                    tracing::warn!("idle sessions not put to sleep: {err}");
+                }
                 if let Err(err) = guard.tick() {
                     guard.emit(pcc_core::Event::new(
                         pcc_core::EventKind::Error,
                         format!("Improvement cycle skipped: {err}"),
                         serde_json::Value::Null,
                     ));
+                }
+            }
+        });
+        // Watchdog: health checks, automatic recovery, periodic checkpoints.
+        let e = engine.clone();
+        let watchdog = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(crate::watchdog::TICK);
+            interval.tick().await;
+            let mut scanned = false;
+            loop {
+                interval.tick().await;
+                if !scanned {
+                    // Processes left by a previous run (slow: off the engine lock).
+                    scanned = true;
+                    let input = e.lock().await.orphan_scan_input();
+                    if let Some(input) = input {
+                        let found =
+                            tokio::task::spawn_blocking(move || crate::recovery::scan_orphans(&input, true)).await;
+                        if let Ok(found) = found {
+                            e.lock().await.set_orphans(found);
+                        }
+                    }
+                }
+                let mut guard = e.lock().await;
+                if let Err(err) = guard.watchdog_tick(std::time::Instant::now()) {
+                    tracing::warn!("watchdog pass failed: {err}");
                 }
             }
         });
@@ -111,6 +155,7 @@ impl Orchestrator {
             pump: Arc::new(pump),
             ticker: Arc::new(ticker),
             jobs: Arc::new(job_runner),
+            watchdog: Arc::new(watchdog),
         })
     }
 
@@ -124,5 +169,6 @@ impl Orchestrator {
         self.pump.abort();
         self.ticker.abort();
         self.jobs.abort();
+        self.watchdog.abort();
     }
 }

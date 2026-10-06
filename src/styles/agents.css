@@ -217,3 +217,169 @@ span.cap-cell {
 .activity-groups {
   margin-top: -6px;
 }
+
+/* ------------------------------------------------------------------ agent pyramid */
+.hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hier-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 12px;
+}
+.hier-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.hier-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.hier-tree,
+.hier-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hier-children {
+  margin: 4px 0 0 9px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+.hier-children > li {
+  position: relative;
+}
+.hier-children > li::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 16px;
+  width: 11px;
+  border-top: 1px solid var(--border);
+}
+.hier-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.hier-row.rank-commander {
+  border-left-color: var(--accent);
+}
+.hier-row.rank-lieutenant {
+  border-left-color: var(--amber);
+}
+.hier-row.is-sleeping {
+  opacity: 0.72;
+}
+.hier-row.is-paused {
+  background: color-mix(in srgb, var(--amber) 6%, var(--panel));
+}
+.hier-ident,
+.hier-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.hier-rank {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rank-lieutenant .hier-rank {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+}
+.rank-commander .hier-rank {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.hier-task {
+  color: var(--text);
+  max-width: 260px;
+}
+.hier-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+.hier-journal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+.hier-decisions,
+.hier-routes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+.hier-decisions > li {
+  padding: 5px 8px;
+  border-left: 2px solid var(--blue);
+  background: var(--bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.hier-decisions > li.is-solo {
+  border-left-color: var(--border-strong);
+}
+.hier-planned {
+  margin-top: 3px;
+  padding-left: 14px;
+  list-style: disc;
+}
+.hier-moving {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hier-moving li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-route {
+  margin: 2px 0 4px;
+  color: var(--amber);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+@media (max-width: 900px) {
+  .hier-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hier-state {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

@@ -27,6 +27,8 @@ pcc-connections.workspace = true
 pcc-orchestrator.workspace = true
 pcc-pty.workspace = true
 pcc-world.workspace = true
+pcc-recovery.workspace = true
+pcc-ai.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
@@ -40,3 +42,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-single-instance = "2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-appender = "0.2"
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -21,7 +21,7 @@ export interface ToolStep {
   /** Called by a sub-agent of the session. */
   nested: boolean;
   /** NEXUS coordination calls that hand work to another agent. */
-  delegation?: { kind: "task" | "message" | "create_agent"; to: string; text: string };
+  delegation?: { kind: "task" | "message" | "create_agent" | "decision"; to: string; text: string };
   result?: { ok: boolean; text: string };
 }
 
@@ -41,7 +41,17 @@ export type ChatItem =
   | { type: "session"; key: string; sessionId: number }
   | { type: "user"; key: string; ts: string; text: string }
   /** A message delivered to the session from another agent or from NEXUS (notifications). */
-  | { type: "incoming"; key: string; ts: string; from: string; kind: string; subject: string | null; text: string }
+  | {
+      type: "incoming";
+      key: string;
+      ts: string;
+      from: string;
+      kind: string;
+      subject: string | null;
+      text: string;
+      /** NEXUS routed this message through the agent (cross-branch, §16): it should relay it to `for`. */
+      routed?: { from: string; for: string; path: string[] };
+    }
   | { type: "task"; key: string; ts: string; taskId: string; title: string; text: string }
   /** Any other input written to the session (instructions, nudges). */
   | { type: "prompt"; key: string; ts: string; text: string }
@@ -107,7 +117,15 @@ export function classifyTool(text: string): Omit<ToolStep, "id" | "ts" | "result
       return { ...base, category: "nexus", detail: f("body"), delegation: { kind: "message", to: f("to") || "central", text: f("body") } };
     }
     if (tool === "create_agent") {
-      return { ...base, category: "nexus", detail: f("role"), delegation: { kind: "create_agent", to: f("id") || f("name"), text: f("name") } };
+      const rank = f("rank") === "lieutenant" ? " (lieutenant)" : "";
+      return { ...base, category: "nexus", detail: f("role"), delegation: { kind: "create_agent", to: f("id") || f("name"), text: `${f("name")}${rank}` } };
+    }
+    if (tool === "record_delegation_decision") {
+      const input = call.input ?? {};
+      const needs = input.needs_sub_agents === true || /"needs_sub_agents"\s*:\s*true/.test(raw);
+      const n = Array.isArray(input.children) ? input.children.length : (raw.match(/"name"\s*:/g) ?? []).length;
+      const text = needs ? `delegate to ${n} sub-agent${n === 1 ? "" : "s"}` : "work without sub-agents";
+      return { ...base, category: "nexus", detail: f("reason"), delegation: { kind: "decision", to: "", text } };
     }
     return { ...base, category: "nexus", detail: tool };
   }
@@ -159,12 +177,19 @@ export function parseInput(entry: LogEntry): ChatItem[] {
       }
       const text = body.join("\n").trim();
       if (message[2] === "user") return { type: "user", key, ts: entry.ts, text };
-      return { type: "incoming", key, ts: entry.ts, from: message[2], kind: message[3].trim(), subject, text };
+      const routed = parseRouted(text);
+      return { type: "incoming", key, ts: entry.ts, from: message[2], kind: message[3].trim(), subject, text, ...(routed ? { routed } : {}) };
     }
     const task = head.match(/^\[TASK (\S+)\](?: \(resumed\))? (.*)$/);
     if (task) return { type: "task", key, ts: entry.ts, taskId: task[1], title: task[2], text: rest.join("\n").trim() };
     return { type: "prompt", key, ts: entry.ts, text: part.trim() };
   });
+}
+
+/** `[ROUTED by NEXUS · from <a> · for <b> · path a → p → b]` (crates/pcc-orchestrator/src/hierarchy.rs). */
+export function parseRouted(text: string): { from: string; for: string; path: string[] } | null {
+  const m = text.match(/^\[ROUTED by NEXUS · from (\S+) · for (\S+) · path ([^\]]+)\]/);
+  return m ? { from: m[1], for: m[2], path: m[3].split("→").map((x) => x.trim()) } : null;
 }
 
 /** Groups an id-sorted transcript into chat items. */

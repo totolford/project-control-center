@@ -72,10 +72,13 @@ describe("AppShell", () => {
       "master",
       "world",
       "settings",
+      "diagnostics",
       "swarm",
     ];
     for (const name of views) {
       await act(async () => useStore.getState().navigate({ name }));
+      // Error boundaries contain view crashes: a crashed view shows a recovery card instead of failing.
+      expect(screen.queryByText(/ view crashed$/), `${name} view crashed`).toBeNull();
     }
     await act(async () => useStore.getState().openAgent("w1"));
     // The Terminal window tab of the center plus the Terminal tab of the agent view.

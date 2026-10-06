@@ -3,6 +3,7 @@ import { playerInputs } from './player';
 import { conversationInputs } from './conversation';
 import { agentInputs } from './agentInputs';
 import { nexusInputs } from './nexusInputs';
+import { nexusTownInputs } from './nexusTownInputs';
 
 // It's easy to hit circular dependencies with these imports,
 // so assert at module scope so we hit errors when analyzing.
@@ -17,6 +18,8 @@ export const inputs = {
   ...agentInputs,
   // NEXUS: inputs driving the characters of real NEXUS agents.
   ...nexusInputs,
+  // NEXUS: LLM townspeople driven by the local AI runtime.
+  ...nexusTownInputs,
 };
 export type Inputs = typeof inputs;
 export type InputNames = keyof Inputs;

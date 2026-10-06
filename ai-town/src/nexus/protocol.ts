@@ -14,7 +14,14 @@ export type AgentAction =
   | 'changeModel'
   | 'changeSkills'
   | 'changeMcp'
-  | 'changeConnections';
+  | 'changeConnections'
+  | 'resume'
+  | 'restart'
+  | 'promote'
+  | 'demote'
+  | 'viewMemory'
+  | 'viewTasks'
+  | 'viewTools';
 
 export type ToNexus =
   | { type: 'ready' }

@@ -7,6 +7,12 @@
 //! * notification mentioning the second task completed -> completes the mission.
 //! * "CONNECT PI" / "CONNECT AGAIN" -> environment tools (connection, capabilities).
 //! * "DANGER"       -> asks permission for `rm -rf build` and reports the decision.
+//! * Hierarchy: "PLAN HIERARCHY" (Central creates lieutenant `lua-lead` and its task);
+//!   a lieutenant (detected from its system prompt) delegates "[TASK …] Analyse Lua" to
+//!   specialist `lua-files` and completes with a synthesis once its result arrives;
+//!   "TRY CREATE" / "CREATE DEEP" try to create agents; "ROUTE TO <id>" sends a message.
+//! * Recovery: "HANG" starts a long Bash call that never returns (a turn stuck in a
+//!   tool); "SILENT" goes quiet mid-turn without any tool running.
 
 use std::collections::VecDeque;
 use std::io::{self, BufRead, Write};
@@ -83,6 +89,13 @@ fn main() {
     let stdin: &'static io::Stdin = Box::leak(Box::new(io::stdin()));
     let mut io = Io { lines: stdin.lock().lines(), queued: VecDeque::new(), next: 0, session };
     let mut initialised = false;
+    let prompt = args
+        .windows(2)
+        .find(|w| w[0] == "--append-system-prompt-file")
+        .and_then(|w| std::fs::read_to_string(&w[1]).ok())
+        .unwrap_or_default();
+    let lieutenant = prompt.contains("You are a **lieutenant**");
+    let mut own_task = String::new();
 
     while let Some(msg) = io.read() {
         match msg["type"].as_str() {
@@ -99,8 +112,56 @@ fn main() {
                     io.out(json!({"type": "system", "subtype": "init", "session_id": io.session, "model": "fake", "tools": vec!["Read"; n]}));
                 }
                 let text = msg["message"]["content"].as_str().unwrap_or("").to_string();
-                if text.contains("NEW MISSION") {
-                    io.tool("create_agent", json!({"name": "Builder", "role": "Builds things", "isolation": "shared"}));
+                if text.contains("HANG") {
+                    io.out(json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "toolu_hang", "name": "Bash",
+                        "input": {"command": "npm run build", "description": "Long build"}}]}, "parent_tool_use_id": null}));
+                    std::thread::sleep(std::time::Duration::from_secs(600));
+                } else if text.contains("SILENT") {
+                    io.say("thinking");
+                    std::thread::sleep(std::time::Duration::from_secs(600));
+                } else if text.contains("PLAN HIERARCHY") {
+                    let d = io.tool("record_delegation_decision", json!({"needs_sub_agents": true, "reason": "Lua is a separate domain",
+                        "children": [{"name": "Lua Lead", "role": "Lua domain lead", "rank": "lieutenant", "reason": "many files"}]}));
+                    io.say(&format!("decision: {d}"));
+                    let r = io.tool("create_agent", json!({"name": "Lua Lead", "id": "lua-lead", "role": "Lua domain lead", "rank": "lieutenant", "isolation": "shared"}));
+                    io.say(&format!("created: {r}"));
+                    io.tool(
+                        "create_task",
+                        json!({"title": "Analyse Lua", "description": "Analyse the Lua code", "agent": "lua-lead"}),
+                    );
+                } else if lieutenant && text.contains("[TASK ") && text.contains("Analyse Lua") {
+                    own_task = text.split("[TASK ").nth(1).and_then(|r| r.split(']').next()).unwrap_or("").to_string();
+                    io.tool(
+                        "record_delegation_decision",
+                        json!({"needs_sub_agents": true, "reason": "files can be analysed by a specialist",
+                        "children": [{"name": "Lua Files", "role": "Lua file analyst"}]}),
+                    );
+                    let r = io.tool("create_agent", json!({"name": "Lua Files", "id": "lua-files", "role": "Lua file analyst", "isolation": "shared"}));
+                    io.say(&format!("sub-agent: {r}"));
+                    let t = io.tool(
+                        "create_task",
+                        json!({"title": "Scan files", "description": "Scan", "agent": "lua-files"}),
+                    );
+                    io.say(&format!("delegated: {t}"));
+                } else if lieutenant && text.contains("completed by lua-files") && !own_task.is_empty() {
+                    let r = io.tool("complete_task", json!({"task_id": own_task, "summary": "Lua Agent: 120 files analysed, 3 problems found, 2 fixed, 1 needs validation"}));
+                    io.say(&format!("synthesis sent: {r}"));
+                } else if text.contains("TRY CREATE") {
+                    let r = io.tool("create_agent", json!({"name": "Helper", "role": "helps"}));
+                    io.say(&format!("create attempt: {r}"));
+                } else if text.contains("CREATE DEEP") {
+                    io.tool("record_delegation_decision", json!({"needs_sub_agents": true, "reason": "deep"}));
+                    let r = io.tool(
+                        "create_agent",
+                        json!({"name": "Deep Lead", "role": "deeper", "rank": "lieutenant", "isolation": "shared"}),
+                    );
+                    io.say(&format!("deep attempt: {r}"));
+                } else if let Some(to) = text.split("ROUTE TO ").nth(1).and_then(|r| r.split_whitespace().next()) {
+                    let r =
+                        io.tool("send_message", json!({"to": to, "body": "Need the API contract", "kind": "request"}));
+                    io.say(&format!("routed: {r}"));
+                } else if text.contains("NEW MISSION") {
+                    io.tool("create_agent", json!({"name": "Builder", "role": "Builds things", "isolation": "shared", "decision_reason": "one builder"}));
                     let first = io
                         .tool("create_task", json!({"title": "Build it", "description": "Build", "agent": "builder"}));
                     let id = first.split_whitespace().next().unwrap_or("").to_string();

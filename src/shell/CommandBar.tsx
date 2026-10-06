@@ -14,6 +14,7 @@ import {
   PanelRight,
   PanelRightOpen,
   Plus,
+  MonitorUp,
   RefreshCw,
   RotateCcw,
   ScrollText,
@@ -31,6 +32,7 @@ import { useUi } from "../state/ui";
 import { useStore } from "../store";
 import { useClaude } from "../state/claude";
 import { ALL_NAV_ITEMS } from "./navItems";
+import { useHealth } from "./health/health";
 import { focusCommandBar } from "./UniversalBar";
 import { availableProviderId, useLayoutContext, useProviders } from "../workspace/hooks";
 import { confirmResetLayout } from "../workspace/store";
@@ -94,6 +96,13 @@ function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
     { id: "cmd:improve", label: "Run an improvement cycle now", group: "Command", icon: FlaskConical, run: () => void run(() => api.startImprovementCycle(), "Improvement cycle started") },
     { id: "cmd:claude-refresh", label: "Refresh Claude Code environment", group: "Command", icon: RefreshCw, run: () => void useClaude.getState().load(true) },
     { id: "cmd:rail", label: "Toggle CONTROL rail", group: "Command", icon: PanelRightOpen, run: () => ui.toggleRail() },
+    {
+      id: "cmd:reload-ui",
+      label: "Reload interface (agents and missions keep running)",
+      group: "Command",
+      icon: MonitorUp,
+      run: () => useHealth.getState().openOverlay({ reason: "Reload requested from the command palette", auto: false, forced: true, immediate: true }),
+    },
     { id: "cmd:reset", label: "Reset workspace layout", group: "Command", icon: RotateCcw, run: () => void confirmResetLayout(ctx) },
     ...ALL_NAV_ITEMS.map((item) => ({ id: `view:${item.name}`, label: `Go to ${item.label}`, group: "View", icon: item.icon, run: () => s.navigate({ name: item.name }) })),
     ...p.agents.map((a) => ({ id: `agent:${a.id}`, label: `${a.name} — ${a.role}`, group: "Agent", icon: Bot, run: () => s.openAgent(a.id) })),

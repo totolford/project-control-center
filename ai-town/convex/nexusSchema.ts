@@ -25,6 +25,11 @@ export const nexusAgentFields = {
   /** NEXUS: "#rrggbb" tint and short badge from "Customize Character". */
   tint: v.optional(v.string()),
   badge: v.optional(v.string()),
+  /** NEXUS 0.4 hierarchy: commander | lieutenant | specialist, supervising agent, runtime. */
+  rank: v.optional(v.string()),
+  parentId: v.optional(v.string()),
+  provider: v.optional(v.string()),
+  paused: v.optional(v.boolean()),
 };
 
 export const nexusTables = {

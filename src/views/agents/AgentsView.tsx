@@ -13,6 +13,7 @@ import { AgentPermissions } from "../agent/AgentPermissions";
 import { AgentProfileEditor } from "./AgentProfileEditor";
 import { AgentIdentity } from "./AgentIdentity";
 import { Topology } from "./Topology";
+import { HierarchyView } from "./HierarchyView";
 
 type TabKey = "profile" | "permissions" | "identity";
 
@@ -55,7 +56,7 @@ export function AgentsView() {
   useProviders();
   const [picked, setPicked] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("profile");
-  const [view, setView] = useState<"profiles" | "relations">("profiles");
+  const [view, setView] = useState<"profiles" | "hierarchy" | "relations">("profiles");
   const agent = agents.find((a) => a.id === picked) ?? agents.find((a) => a.kind === "central") ?? agents[0];
   const provider = availableProviderId();
 
@@ -69,6 +70,7 @@ export function AgentsView() {
             <Tabs
               tabs={[
                 { key: "profiles", label: "Profiles" },
+                { key: "hierarchy", label: "Hierarchy" },
                 { key: "relations", label: "Relations" },
               ]}
               active={view}
@@ -80,7 +82,9 @@ export function AgentsView() {
           </>
         }
       />
-      {view === "relations" ? (
+      {view === "hierarchy" ? (
+        <HierarchyView />
+      ) : view === "relations" ? (
         <Topology />
       ) : !agent ? (
         <EmptyState title="No agent yet" />

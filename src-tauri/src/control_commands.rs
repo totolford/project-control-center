@@ -150,8 +150,20 @@ pub async fn claude_mcp_add(
     }
     let args = vec!["mcp".into(), "add-json".into(), name.clone(), config.to_string(), "-s".into(), scope.clone()];
     let run = cli_help::run(&claude()?, &workdir(&state).await, args, Duration::from_secs(60)).await?;
-    emit(&state, EventKind::McpChanged, format!("MCP {name} added to Claude Code ({scope})"), json!({"name": name}))
+    let (run, repeat) = crate::permission_commands::settle_repeat(
+        run,
+        &["already exists"],
+        &format!("MCP {name} is already configured ({scope}); its configuration was left unchanged."),
+    );
+    if !repeat && run.exit_code == Some(0) {
+        emit(
+            &state,
+            EventKind::McpChanged,
+            format!("MCP {name} added to Claude Code ({scope})"),
+            json!({"name": name, "action": "added"}),
+        )
         .await;
+    }
     Ok(run)
 }
 
@@ -159,11 +171,19 @@ pub async fn claude_mcp_add(
 pub async fn claude_mcp_remove(state: State<'_, AppState>, name: String, scope: String) -> CmdResult<CliRun> {
     let args = vec!["mcp".into(), "remove".into(), name.clone(), "-s".into(), scope.clone()];
     let run = cli_help::run(&claude()?, &workdir(&state).await, args, Duration::from_secs(60)).await?;
+    let (run, repeat) = crate::permission_commands::settle_repeat(
+        run,
+        &["no mcp server found", "not found"],
+        &format!("MCP {name} is already removed ({scope})."),
+    );
+    if repeat || run.exit_code != Some(0) {
+        return Ok(run);
+    }
     emit(
         &state,
         EventKind::McpChanged,
         format!("MCP {name} removed from Claude Code ({scope})"),
-        json!({"name": name}),
+        json!({"name": name, "action": "removed"}),
     )
     .await;
     Ok(run)
@@ -179,7 +199,7 @@ pub async fn claude_mcp_set_enabled(state: State<'_, AppState>, name: String, en
         &state,
         EventKind::McpChanged,
         format!("MCP {name} {}", if enabled { "enabled" } else { "disabled" }),
-        json!({"name": name, "enabled": enabled}),
+        json!({"name": name, "enabled": enabled, "action": if enabled { "enabled" } else { "disabled" }}),
     )
     .await;
     Ok(())
@@ -231,7 +251,34 @@ pub async fn probe_connection(state: State<'_, AppState>, id: String) -> CmdResu
     } else {
         mcp::Target::Stdio { program: &cfg.command, args: &cfg.args, env: &env, cwd: &root }
     };
-    mcp::probe(target, Duration::from_secs(25)).await.map_err(Error::Process)
+    let started = std::time::Instant::now();
+    let result = mcp::probe(target, Duration::from_secs(25)).await;
+    // Kept for the MCP supervision panel (last NEXUS probe of each connection).
+    let mut record = pcc_orchestrator::recovery::ProbeRecord {
+        connection_id: c.id.clone(),
+        name: c.name.clone(),
+        at: pcc_core::now(),
+        ok: result.is_ok(),
+        transport: if cfg.is_remote() { "http".into() } else { "stdio".into() },
+        ..Default::default()
+    };
+    match &result {
+        Ok(p) => {
+            record.server_name = p.server_name.clone();
+            record.server_version = p.server_version.clone();
+            record.tools = Some(p.tools.len());
+            record.resources = p.resources.as_ref().map(Vec::len);
+            record.prompts = p.prompts.as_ref().map(Vec::len);
+            record.latency_ms = Some(p.latency_ms);
+            record.stderr_tail = p.stderr_tail.clone();
+        }
+        Err(e) => {
+            record.error = Some(e.clone());
+            record.latency_ms = Some(started.elapsed().as_millis() as u64);
+        }
+    }
+    orch.lock().await.record_probe(record);
+    result.map_err(Error::Process)
 }
 
 /// Copies a Claude Code MCP server into NEXUS. Env / header values move to
@@ -538,9 +585,19 @@ pub async fn pty_spawn(app: AppHandle, state: State<'_, AppState>, request: Term
             rows: request.rows,
         },
         move |e: PtyEvent| {
+            if let PtyEvent::Exit { id, code } = &e {
+                // Ended on its own or closed: the registry keeps it for history.
+                pcc_recovery::app().ended(&format!("pty:{id}"), false, code.map(|c| c as i32), None);
+            }
             let _ = app2.emit(PTY_CHANNEL, e);
         },
     )?;
+    pcc_recovery::app().register(
+        &format!("pty:{}", info.id),
+        pcc_recovery::Registration::new(pcc_recovery::ProcessKind::Pty, info.title.clone())
+            .pid(info.pid)
+            .command(info.program.clone()),
+    );
     emit(&state, EventKind::ToolUsed, format!("Raw Terminal opened: {}", info.title), json!({"terminal": info.id}))
         .await;
     Ok(info)

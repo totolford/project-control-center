@@ -108,6 +108,11 @@ fn isolation_line(agent: &Agent) -> String {
     }
 }
 
+fn hierarchy_section(ctx: &PromptContext<'_>) -> String {
+    let agents = ctx.store.list_agents().unwrap_or_default();
+    crate::hierarchy::prompt_section(&agents, ctx.agent, ctx.store.settings().max_hierarchy_depth)
+}
+
 pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     let info = ctx.store.info();
     let a = ctx.agent;
@@ -133,6 +138,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
                         },
                     ),
                     ("isolation_line", isolation.into()),
+                    ("hierarchy_section", hierarchy_section(ctx)),
                     ("connections_section", connections_section(ctx)),
                     (
                         "memory_section",
@@ -157,6 +163,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
                 ("project_name", info.name.clone()),
                 ("workdir", a.workdir.clone()),
                 ("isolation_line", isolation_line(a)),
+                ("hierarchy_section", hierarchy_section(ctx)),
                 ("connections_section", connections_section(ctx)),
                 ("memory_section", memory_section(ctx, &["project", "conventions", "architecture", "discoveries"])),
             ],

@@ -97,6 +97,15 @@ export function Settings() {
           <Field label="Max budget per session (USD)" hint="Empty = no limit.">
             <input type="number" min={0} step={0.5} value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="no limit" />
           </Field>
+          <Field label="Permission timeout (minutes)" hint="Unanswered requests expire and the agent receives a refusal. 0 = never.">
+            <input
+              type="number"
+              min={0}
+              max={1440}
+              value={draft.permissionTimeoutMinutes ?? 30}
+              onChange={(e) => set("permissionTimeoutMinutes", Math.min(1440, Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+            />
+          </Field>
         </div>
         <label className="checkbox">
           <input type="checkbox" checked={draft.useWorktrees} onChange={(e) => set("useWorktrees", e.target.checked)} />

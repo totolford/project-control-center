@@ -32,7 +32,7 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> 
 }
 
 /// The runtime, created on first use (needs the resource directory).
-async fn runtime_of(app: &AppHandle, state: &AppState) -> SharedRuntime {
+pub(crate) async fn runtime_of(app: &AppHandle, state: &AppState) -> SharedRuntime {
     let shared = state.ai_town.clone();
     let mut guard = shared.lock().await;
     if guard.is_none() {
@@ -44,7 +44,7 @@ async fn runtime_of(app: &AppHandle, state: &AppState) -> SharedRuntime {
 }
 
 /// Runs `f` on the runtime in a blocking thread (npm / convex are slow).
-async fn with_runtime<T: Send + 'static>(
+pub(crate) async fn with_runtime<T: Send + 'static>(
     shared: SharedRuntime,
     f: impl FnOnce(&mut AiTownRuntime) -> T + Send + 'static,
 ) -> CmdResult<T> {
@@ -353,7 +353,7 @@ fn collect_facts(orch: &Orchestrator, last_kind: &HashMap<String, LogKind>, skil
     let connections = store.list_connections().unwrap_or_default();
     let active_mission =
         missions.iter().rev().find(|m| m.mission.status == MissionStatus::Active).map(|m| m.mission.title.clone());
-    agents
+    let mut facts: Vec<AgentFacts> = agents
         .into_iter()
         .map(|a| {
             let task = a.current_task.as_ref().and_then(|id| tasks.iter().find(|t| &t.id == id)).or_else(|| {
@@ -401,10 +401,25 @@ fn collect_facts(orch: &Orchestrator, last_kind: &HashMap<String, LogKind>, skil
                 model: a.model.clone(),
                 current_action: a.current_action.clone(),
                 role: a.role.clone(),
+                rank: pcc_orchestrator::hierarchy::rank_label(a.rank).into(),
+                parent_id: a.parent_agent.clone(),
+                provider: a.provider.clone(),
+                paused: a.paused_at.is_some(),
+                parent_zone: None,
                 id: a.id,
             }
         })
-        .collect()
+        .collect();
+    // Idle specialists gather near their lieutenant's building.
+    let lieutenant_zones: HashMap<String, String> = facts
+        .iter()
+        .filter(|f| f.rank == "lieutenant")
+        .map(|f| (f.id.clone(), bridge::home_zone(f).to_string()))
+        .collect();
+    for f in &mut facts {
+        f.parent_zone = f.parent_id.as_ref().and_then(|p| lieutenant_zones.get(p).cloned());
+    }
+    facts
 }
 
 #[cfg(test)]

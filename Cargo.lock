@@ -2726,8 +2726,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pcc-ai"
+version = "0.4.0"
+dependencies = [
+ "pcc-claude",
+ "pcc-core",
+ "pcc-recovery",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "ureq",
+]
+
+[[package]]
 name = "pcc-claude"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pcc-core",
  "serde",
@@ -2742,7 +2758,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-connections"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "keyring",
  "pcc-claude",
@@ -2759,7 +2775,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "regex",
@@ -2771,7 +2787,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-git"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pcc-core",
  "serde",
@@ -2782,13 +2798,15 @@ dependencies = [
 
 [[package]]
 name = "pcc-orchestrator"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
+ "pcc-ai",
  "pcc-claude",
  "pcc-connections",
  "pcc-core",
  "pcc-git",
+ "pcc-recovery",
  "pcc-store",
  "serde",
  "serde_json",
@@ -2800,7 +2818,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-pty"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "parking_lot",
  "pcc-claude",
@@ -2812,8 +2830,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pcc-recovery"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "pcc-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "uuid",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "pcc-store"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "parking_lot",
@@ -2828,10 +2860,12 @@ dependencies = [
 
 [[package]]
 name = "pcc-world"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "pcc-ai",
  "pcc-claude",
  "pcc-core",
+ "pcc-recovery",
  "serde",
  "serde_json",
  "tempfile",
@@ -3096,19 +3130,22 @@ dependencies = [
 
 [[package]]
 name = "project-control-center"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
+ "pcc-ai",
  "pcc-claude",
  "pcc-connections",
  "pcc-core",
  "pcc-git",
  "pcc-orchestrator",
  "pcc-pty",
+ "pcc-recovery",
  "pcc-store",
  "pcc-world",
  "serde",
  "serde_json",
+ "sysinfo",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -3116,6 +3153,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-appender",

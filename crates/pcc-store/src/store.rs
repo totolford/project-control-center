@@ -53,6 +53,8 @@ pub struct EventFilter {
     /// Return events with `id < before`.
     pub before: Option<i64>,
     pub limit: Option<u32>,
+    /// Only events of this kind.
+    pub kind: Option<EventKind>,
 }
 
 impl ProjectStore {
@@ -154,8 +156,13 @@ impl ProjectStore {
         self.read_only
     }
 
+    /// The database connection, for the store's other modules.
+    pub(crate) fn db(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        self.conn.lock()
+    }
+
     /// Refuses writes in compatibility (read-only) mode.
-    fn writable(&self) -> Result<()> {
+    pub(crate) fn writable(&self) -> Result<()> {
         if self.read_only {
             Err(Error::Denied("compatibility mode: this project needs a newer NEXUS, it is opened read-only".into()))
         } else {
@@ -261,7 +268,11 @@ impl ProjectStore {
     }
 
     pub fn get_agent(&self, id: &str) -> Result<Option<Agent>> {
-        self.get_doc("agents", id)
+        let mut a: Option<Agent> = self.get_doc("agents", id)?;
+        if let Some(a) = a.as_mut() {
+            a.normalize_hierarchy();
+        }
+        Ok(a)
     }
 
     pub fn agent(&self, id: &str) -> Result<Agent> {
@@ -270,6 +281,7 @@ impl ProjectStore {
 
     pub fn list_agents(&self) -> Result<Vec<Agent>> {
         let mut v: Vec<Agent> = self.list_docs("SELECT data FROM agents", &[])?;
+        v.iter_mut().for_each(Agent::normalize_hierarchy);
         // Central first, then creation order.
         v.sort_by(|a, b| {
             (a.kind != pcc_core::AgentKind::Central, &a.created_at)
@@ -693,12 +705,14 @@ impl ProjectStore {
     /// Persists the event (if it belongs on the timeline) and sets its id.
     pub fn insert_event(&self, e: &mut Event) -> Result<()> {
         self.writable()?;
+        e.ensure_name();
         if !e.kind.is_persistent() {
             return Ok(());
         }
         let c = self.conn.lock();
         c.execute(
-            "INSERT INTO events(ts, kind, agent_id, task_id, mission_id, summary, payload) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO events(ts, kind, agent_id, task_id, mission_id, summary, payload, name, severity, source, pid)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 e.ts,
                 serde_json::to_string(&e.kind)?.trim_matches('"'),
@@ -706,7 +720,11 @@ impl ProjectStore {
                 e.task_id,
                 e.mission_id,
                 e.summary,
-                serde_json::to_string(&e.payload)?
+                serde_json::to_string(&e.payload)?,
+                e.name,
+                e.severity.as_str(),
+                e.source,
+                e.pid
             ],
         )
         .map_err(storage)?;
@@ -720,40 +738,26 @@ impl ProjectStore {
         let c = self.conn.lock();
         let mut stmt = c
             .prepare(
-                "SELECT id, ts, kind, agent_id, task_id, mission_id, summary, payload FROM events
+                "SELECT id, ts, kind, agent_id, task_id, mission_id, summary, payload, name, severity, source, pid FROM events
                  WHERE (?1 IS NULL OR agent_id = ?1) AND (?2 IS NULL OR mission_id = ?2)
                    AND (?3 IS NULL OR task_id = ?3) AND (?4 IS NULL OR id < ?4)
+                   AND (?6 IS NULL OR kind = ?6)
                  ORDER BY id DESC LIMIT ?5",
             )
             .map_err(storage)?;
+        let kind = match f.kind {
+            Some(k) => Some(serde_json::to_string(&k)?.trim_matches('"').to_string()),
+            None => None,
+        };
         let rows = stmt
-            .query_map(params![f.agent_id, f.mission_id, f.task_id, f.before, limit], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, Option<String>>(3)?,
-                    r.get::<_, Option<String>>(4)?,
-                    r.get::<_, Option<String>>(5)?,
-                    r.get::<_, String>(6)?,
-                    r.get::<_, String>(7)?,
-                ))
-            })
+            .query_map(
+                params![f.agent_id, f.mission_id, f.task_id, f.before, limit, kind],
+                crate::journal::row_to_event,
+            )
             .map_err(storage)?;
         let mut out = Vec::new();
         for row in rows {
-            let (id, ts, kind, agent_id, task_id, mission_id, summary, payload) = row.map_err(storage)?;
-            let kind: EventKind = serde_json::from_str(&format!("\"{kind}\""))?;
-            out.push(Event {
-                id,
-                ts,
-                kind,
-                agent_id,
-                task_id,
-                mission_id,
-                summary,
-                payload: serde_json::from_str(&payload)?,
-            });
+            out.push(row.map_err(storage)??);
         }
         Ok(out)
     }
@@ -1260,6 +1264,10 @@ mod tests {
         let ev = s.list_events(&EventFilter::default()).unwrap();
         assert_eq!(ev.len(), 1);
         assert_eq!(ev[0].kind, EventKind::TaskCreated);
+        let mut d = Event::new(EventKind::DelegationDecision, "decided", serde_json::json!({}));
+        s.insert_event(&mut d).unwrap();
+        let only = s.list_events(&EventFilter { kind: Some(EventKind::DelegationDecision), ..Default::default() });
+        assert_eq!(only.unwrap().iter().map(|e| e.id).collect::<Vec<_>>(), [d.id]);
 
         s.add_permission_rule("frontend", "Bash:npm test").unwrap();
         assert!(s.has_permission_rule("frontend", "Bash:npm test").unwrap());
@@ -1362,11 +1370,19 @@ mod tests {
             created_by: "user".into(),
             created_at: pcc_core::now(),
             updated_at: pcc_core::now(),
+            parent_agent: None,
+            rank: Default::default(),
+            paused_at: None,
         };
         s.upsert_agent(&mk("alpha", AgentKind::Worker)).unwrap();
         s.upsert_agent(&mk("central", AgentKind::Central)).unwrap();
         let ids: Vec<_> = s.list_agents().unwrap().into_iter().map(|a| a.id).collect();
         assert_eq!(ids, ["central", "alpha"]);
+        // Agents written without hierarchy fields read as Central's specialists.
+        let alpha = s.agent("alpha").unwrap();
+        assert_eq!(alpha.parent_agent.as_deref(), Some("central"));
+        assert_eq!(alpha.rank, pcc_core::AgentRank::Specialist);
+        assert_eq!(s.agent("central").unwrap().rank, pcc_core::AgentRank::Commander);
         assert!(tmp.path().join(".agent-project/agents/alpha/memory.md").is_file());
         assert!(tmp.path().join(".agent-project/agents/alpha/state.json").is_file());
     }

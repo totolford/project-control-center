@@ -32,6 +32,7 @@ const NEEDS_CONNECTION: PanelType[] = ["Connection"];
 
 /** Every main view a window tab may show (a Record so a new ViewName must be listed here). */
 const VIEW_NAMES: Record<ViewName, true> = {
+  ai: true,
   swarm: true,
   missions: true,
   agents: true,
@@ -54,6 +55,7 @@ const VIEW_NAMES: Record<ViewName, true> = {
   master: true,
   world: true,
   market: true,
+  diagnostics: true,
   settings: true,
 };
 

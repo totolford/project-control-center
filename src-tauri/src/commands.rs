@@ -10,7 +10,7 @@ use tauri_plugin_opener::OpenerExt;
 use pcc_connections::{environment, github, kinds};
 use pcc_core::{
     Agent, ClaudeInfo, Connection, EnvironmentReport, Error, Event, EventBus, EventKind, LogEntry, Message, Mission,
-    PermissionDecision, ProjectSettings, SessionRecord, Task, USER_ID,
+    ProjectSettings, SessionRecord, Task, USER_ID,
 };
 use pcc_git::{MergeOutcome, Repo, RepoStatus, Snapshot};
 use pcc_orchestrator::dto::{
@@ -299,7 +299,8 @@ pub async fn retry_task(state: State<'_, AppState>, id: String) -> CmdResult<Tas
     state.orch().await?.lock().await.retry_task(&id)
 }
 
-// ---------------------------------------------------------------- messages / events / permissions
+// ---------------------------------------------------------------- messages / events
+// (permissions and the journal: `permission_commands.rs`)
 
 #[tauri::command]
 pub async fn list_messages(
@@ -313,11 +314,6 @@ pub async fn list_messages(
 #[tauri::command]
 pub async fn list_events(state: State<'_, AppState>, filter: EventFilter) -> CmdResult<Vec<Event>> {
     state.orch().await?.store.list_events(&filter)
-}
-
-#[tauri::command]
-pub async fn resolve_permission(state: State<'_, AppState>, id: String, decision: PermissionDecision) -> CmdResult<()> {
-    state.orch().await?.lock().await.resolve_permission(&id, decision)
 }
 
 // ---------------------------------------------------------------- memory

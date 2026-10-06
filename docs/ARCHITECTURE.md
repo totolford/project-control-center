@@ -153,6 +153,45 @@ previous app instance. Their agents become `disconnected` and the UI offers to
 or **discard** (tasks in progress are parked in `waiting`). A resume that fails
 before initialising falls back to a fresh session.
 
+0.4 (`crates/pcc-recovery`, `pcc-orchestrator/src/{recovery,watchdog}.rs`,
+`src-tauri/src/recovery_commands.rs`):
+
+- **Process registry.** Claude Code sessions (per project), AI Town `convex dev`
+  and its local backend, terminals and local AI runtimes (application-wide,
+  `pcc_recovery::app()`) are registered with PID, OS start time (to detect PID
+  reuse), heartbeat, last event, state, mission/agent and restart history, and
+  persisted to `.agent-project/runtime/processes.json` and
+  `<data_dir>/runtime/processes.json`. An `instance.json` marker tells a clean
+  exit from a crash, kill or reboot.
+- **Watchdog** (every 15 s): diagnose → soft recovery (`interrupt`) → graceful
+  restart with `--resume` and a precise brief. A session running a tool (a long
+  Bash, a build, an MCP call), waiting for a permission or using CPU is never
+  treated as stuck. Crashed sessions that were doing something are restarted with
+  exponential backoff, at most 3 times in 30 min; then the user decides. The pure
+  decisions are in `pcc_recovery::watchdog`.
+- **Mission checkpoints.** `.agent-project/missions/<id>/mission.json` and
+  `checkpoints/checkpoint-NNN.json` + `current.json` on task transitions, before
+  and after merges, when a mission is sent/closed/resumed and every 5 minutes
+  while running (only when something changed). Each records tasks, agents, their
+  last tool call and the fingerprint of every uncommitted file.
+- **Interrupted missions.** After a restart, missions still planning/active are
+  offered with Resume / Inspect / Abandon and precise facts: the step in progress,
+  the last tool call (from the transcript), the files written since the last
+  checkpoint. Central receives the same brief on resume.
+- **MCP supervision.** Claude Code owns the MCP processes of its sessions:
+  NEXUS asks each session for `mcp_status` every minute, reconnects failed
+  servers with `mcp_reconnect` (same backoff and cap) and tells the agent when a
+  server is back. NEXUS's own probes (`probe_connection`) are kept per
+  connection; a probe stops the whole server process tree when it ends.
+- **Crash reports** (`runtime/crash-reports/*.json`): what happened, possible
+  cause, component, what was preserved, restarted and lost. Shown once, then
+  listed on the Diagnostics page with the interface incidents.
+- **Orphans.** About 15 s after opening, processes of the previous run that are
+  still alive (same PID *and* start time) and Claude Code processes of the project
+  without a NEXUS parent are listed. Cleanup happens only on request and follows
+  the rule: state check, recorded reason, saved context, modified-files check,
+  soft stop, then termination.
+
 ## Memory and context
 
 Raw history (transcripts, messages, events) lives in SQLite and is never replayed

@@ -68,6 +68,15 @@ pub struct ProjectSettings {
     /// NEXUS MASTER CONTROL: Central may use every enabled connection and
     /// manage connections, MCP and grants without asking, within the scopes.
     pub master_control: MasterControl,
+    /// Deepest level of the agent pyramid below Central (1 = flat, 1..=5).
+    pub max_hierarchy_depth: u32,
+    /// Idle minutes before an agent's session is stopped (sleeping); 0 = never.
+    pub sleep_after_minutes: u32,
+    /// Minutes a permission request waits for the user before it expires
+    /// (the agent then receives a refusal); 0 = never.
+    pub permission_timeout_minutes: u32,
+    /// AI engines: Claude, local runtime or hybrid, for Central, workers and NEXUS's own AI work.
+    pub ai: crate::ai::AiEngineSettings,
     /// Settings written by other NEXUS versions, preserved on rewrite.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
@@ -180,6 +189,10 @@ impl Default for ProjectSettings {
             default_skills_enabled: true,
             auto_recover: false,
             master_control: MasterControl::default(),
+            max_hierarchy_depth: 3,
+            sleep_after_minutes: 20,
+            permission_timeout_minutes: 30,
+            ai: crate::ai::AiEngineSettings::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -221,6 +234,9 @@ pub enum AgentStatus {
     Disconnected,
     /// Retired by Central; kept for history.
     Retired,
+    /// Idle beyond the project's sleep delay: the session process was stopped
+    /// to free resources and is resumed (`--resume`) on the next message or task.
+    Sleeping,
 }
 
 impl AgentStatus {
@@ -239,6 +255,19 @@ pub enum Isolation {
     Shared,
     /// Works in its own git worktree on branch `agent/<id>`.
     Worktree,
+}
+
+/// Position of an agent in the delegation pyramid.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentRank {
+    /// The Central agent, root of the hierarchy.
+    Commander,
+    /// May create specialists under itself and supervise them.
+    Lieutenant,
+    /// Does the work; cannot create agents.
+    #[default]
+    Specialist,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -273,6 +302,37 @@ pub struct Agent {
     pub created_by: String,
     pub created_at: String,
     pub updated_at: String,
+    // Fields below were added in 0.4; older agents read with their defaults
+    // and are normalized by `normalize_hierarchy`.
+    /// Supervising agent (`None` only for Central).
+    #[serde(default)]
+    pub parent_agent: Option<String>,
+    #[serde(default)]
+    pub rank: AgentRank,
+    /// Paused by the user: nothing is delivered until resumed.
+    #[serde(default)]
+    pub paused_at: Option<String>,
+}
+
+impl Agent {
+    /// Defaults for agents written before the hierarchy existed: Central is the
+    /// commander without parent, workers without parent report to Central.
+    pub fn normalize_hierarchy(&mut self) {
+        match self.kind {
+            AgentKind::Central => {
+                self.rank = AgentRank::Commander;
+                self.parent_agent = None;
+            }
+            AgentKind::Worker => {
+                if self.rank == AgentRank::Commander {
+                    self.rank = AgentRank::Specialist;
+                }
+                if self.parent_agent.as_deref().is_none_or(|p| p.is_empty() || p == self.id) {
+                    self.parent_agent = Some(CENTRAL_ID.to_string());
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -286,6 +346,8 @@ pub struct AgentProfile {
     pub env: BTreeMap<String, String>,
     /// How the agent's character looks in the AI World.
     pub appearance: AgentAppearance,
+    /// Engine override for this agent (`None` = project default for its kind).
+    pub engine: Option<crate::ai::EngineProvider>,
 }
 
 /// Character customization ("Customize Character"). The sprite is a whole
@@ -308,7 +370,13 @@ pub struct AgentAppearance {
 
 impl Default for AgentProfile {
     fn default() -> Self {
-        Self { effort: None, skills_enabled: true, env: BTreeMap::new(), appearance: AgentAppearance::default() }
+        Self {
+            effort: None,
+            skills_enabled: true,
+            env: BTreeMap::new(),
+            appearance: AgentAppearance::default(),
+            engine: None,
+        }
     }
 }
 
@@ -762,4 +830,26 @@ pub struct ClaudeInfo {
     pub auth_method: Option<String>,
     pub subscription: Option<String>,
     pub error: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agents_from_0_3_get_hierarchy_defaults() {
+        let old = r#"{"id":"builder","name":"Builder","kind":"worker","role":"r","instructions":"","status":"offline",
+            "model":null,"permissions":{},"connections":[],"isolation":"shared","workdir":".","branch":null,
+            "currentTask":null,"currentAction":null,"progress":null,"claudeSessionId":null,"totalCostUsd":0,
+            "createdBy":"central","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}"#;
+        let mut a: Agent = serde_json::from_str(old).unwrap();
+        assert_eq!((a.parent_agent.as_deref(), a.rank, a.paused_at.as_deref()), (None, AgentRank::Specialist, None));
+        a.normalize_hierarchy();
+        assert_eq!(a.parent_agent.as_deref(), Some(CENTRAL_ID));
+        let json = serde_json::to_value(&a).unwrap();
+        assert_eq!(json["parentAgent"], "central");
+        assert_eq!(json["rank"], "specialist");
+        let s: ProjectSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!((s.max_hierarchy_depth, s.sleep_after_minutes), (3, 20));
+    }
 }

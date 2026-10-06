@@ -238,6 +238,9 @@ mod tests {
             created_by: "central".into(),
             created_at: String::new(),
             updated_at: String::new(),
+            parent_agent: None,
+            rank: Default::default(),
+            paused_at: None,
         }
     }
 

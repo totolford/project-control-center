@@ -118,7 +118,7 @@ impl Engine {
         self.stop_all()?;
         let pending: Vec<String> = self.permissions.keys().cloned().collect();
         for id in pending {
-            let _ = self.resolve_permission(&id, pcc_core::PermissionDecision::Reject);
+            let _ = self.resolve_permission_by(&id, pcc_core::PermissionDecision::Reject, "emergency");
         }
         self.emit(Event::new(
             EventKind::EmergencyStop,
@@ -200,7 +200,7 @@ impl Engine {
         self.emit(Event::new(
             EventKind::McpChanged,
             format!("Reconnect {server} requested in {} session(s)", reached.len()),
-            json!({"server": server, "agents": reached}),
+            json!({"server": server, "agents": reached, "action": "restarted"}),
         ));
         Ok(reached)
     }

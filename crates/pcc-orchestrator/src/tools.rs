@@ -7,13 +7,14 @@ use std::collections::BTreeMap;
 use serde_json::{json, Value};
 
 use pcc_core::{
-    Access, AgentKind, Capability, Error, MessageKind, MissionStatus, Priority, Result, TaskResult, TaskStatus,
-    CENTRAL_ID,
+    Access, Agent, AgentKind, AgentRank, Capability, Error, MessageKind, MissionStatus, Priority, Result, TaskResult,
+    TaskStatus,
 };
 use pcc_store::TaskFilter;
 
 use crate::dto::{AgentSpec, TaskPatch, TaskSpec};
 use crate::engine::Engine;
+use crate::hierarchy::Tree;
 use crate::work::access_str;
 
 const MEMORY_FILES: &str = "project, architecture, decisions, conventions, discoveries, or agent:<id>";
@@ -41,10 +42,14 @@ fn central_tools() -> Vec<Value> {
                 "isolation": {"type": "string", "enum": ["auto", "shared", "worktree"], "description": "auto = own git worktree when available"},
                 "permissions": {"type": "object", "description": format!("Optional overrides, capability -> deny|ask|allow. Capabilities: {}. Capped by the project's limits.", caps.join(", ")), "additionalProperties": {"type": "string", "enum": ["deny", "ask", "allow"]}},
                 "connections": {"type": "array", "items": {"type": "string"}, "description": "Project connection ids to grant (see project_status)."},
-                "model": {"type": "string", "description": "Optional model alias (e.g. sonnet, opus, haiku)."}
+                "model": {"type": "string", "description": "Optional model alias (e.g. sonnet, opus, haiku)."},
+                "rank": {"type": "string", "enum": ["specialist", "lieutenant"], "description": "specialist (default) does the work; lieutenant may create and supervise specialists for a whole domain."},
+                "parent": {"type": "string", "description": "Supervisor of the new agent: central (default) or one of your lieutenants."},
+                "decision_reason": {"type": "string", "description": "Why a sub-agent is needed, when you did not call record_delegation_decision first."}
             }),
             &["name", "role"],
         ),
+        decision_tool(),
         tool("retire_agent", "Stop and retire a worker that is no longer needed (it keeps its history).", json!({"id": {"type": "string"}, "reason": {"type": "string"}}), &["id"]),
         tool(
             "create_task",
@@ -102,12 +107,80 @@ fn central_tools() -> Vec<Value> {
     ]
 }
 
+/// Structured "do I need sub-agents?" decision, required before creating agents.
+fn decision_tool() -> Value {
+    tool(
+        "record_delegation_decision",
+        "Record, before creating sub-agents, whether you need them and which. Only delegate when it really helps (independent domains, parallel work); for small requests do it yourself or use one agent. The decision is shown to the user.",
+        json!({
+            "needs_sub_agents": {"type": "boolean"},
+            "reason": {"type": "string", "description": "Why (not): scope, independence, parallelism"},
+            "children": {"type": "array", "description": "Sub-agents you plan to create", "items": {"type": "object", "properties": {
+                "name": {"type": "string"}, "role": {"type": "string"},
+                "rank": {"type": "string", "enum": ["specialist", "lieutenant"]}, "reason": {"type": "string"}}}}
+        }),
+        &["needs_sub_agents", "reason"],
+    )
+}
+
+/// Agent-management tools of a lieutenant, scoped to its own subtree.
+fn lieutenant_tools() -> Vec<Value> {
+    vec![
+        decision_tool(),
+        tool(
+            "create_agent",
+            "Create a sub-agent under you (a real Claude Code session started when it gets work). Record your delegation decision first.",
+            json!({
+                "name": {"type": "string"},
+                "id": {"type": "string", "description": "Optional slug (lowercase, digits, dashes)."},
+                "role": {"type": "string"},
+                "instructions": {"type": "string", "description": "Scope, files it owns, conventions, how to test."},
+                "isolation": {"type": "string", "enum": ["auto", "shared", "worktree"]},
+                "model": {"type": "string"},
+                "rank": {"type": "string", "enum": ["specialist", "lieutenant"], "description": "specialist (default); lieutenant only for a large sub-domain, within the depth limit."},
+                "decision_reason": {"type": "string", "description": "Why it is needed, when you did not call record_delegation_decision first."}
+            }),
+            &["name", "role"],
+        ),
+        tool("list_agents", "Your sub-agents (whole subtree) with role, rank, status and current task.", json!({}), &[]),
+        tool(
+            "create_task",
+            "Create a task for one of your sub-agents. It starts when its dependencies are completed and the agent is free; its result comes back to you.",
+            json!({
+                "title": {"type": "string"},
+                "description": {"type": "string", "description": "Everything the sub-agent needs: goal, files, constraints, acceptance criteria."},
+                "agent": {"type": "string", "description": "Sub-agent id"},
+                "dependencies": {"type": "array", "items": {"type": "string"}},
+                "priority": {"type": "string", "enum": ["low", "normal", "high", "critical"]},
+                "requires_review": {"type": "boolean"},
+                "skills": {"type": "array", "items": {"type": "string"}}
+            }),
+            &["title", "description", "agent"],
+        ),
+        tool(
+            "update_task",
+            "Approve (status completed), cancel, reassign or reprioritise a task of your subtree.",
+            json!({
+                "id": {"type": "string"},
+                "status": {"type": "string", "enum": ["pending", "queued", "completed", "cancelled", "failed"]},
+                "agent": {"type": "string"},
+                "priority": {"type": "string", "enum": ["low", "normal", "high", "critical"]},
+                "description": {"type": "string"}
+            }),
+            &["id"],
+        ),
+        tool("request_changes", "Send a task of your subtree back with feedback.", json!({"task_id": {"type": "string"}, "feedback": {"type": "string"}}), &["task_id", "feedback"]),
+        tool("list_tasks", "Tasks of your subtree (their status and result summaries).", json!({"agent": {"type": "string"}, "status": {"type": "string"}}), &[]),
+        tool("retire_agent", "Retire one of your sub-agents that is no longer needed.", json!({"id": {"type": "string"}, "reason": {"type": "string"}}), &["id"]),
+    ]
+}
+
 fn worker_tools() -> Vec<Value> {
     vec![
         tool(
             "send_message",
-            "Send a message to the Central agent (it routes requests to other agents).",
-            json!({"to": {"type": "string", "description": "Defaults to central"}, "body": {"type": "string"}, "kind": {"type": "string", "enum": ["request", "response", "info"]}, "task_id": {"type": "string"}}),
+            "Send a message to your parent, or to one of your sub-agents. Other agents are reached through your parent: NEXUS routes the message there.",
+            json!({"to": {"type": "string", "description": "Agent id; defaults to your parent"}, "body": {"type": "string"}, "kind": {"type": "string", "enum": ["request", "response", "info"]}, "task_id": {"type": "string"}}),
             &["body"],
         ),
         tool(
@@ -185,7 +258,9 @@ impl Reply {
 pub fn handle_rpc(engine: &mut Engine, agent: &str, request_id: &str, msg: &Value) -> Reply {
     let id = msg.get("id").cloned();
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
-    let is_central = engine.store.get_agent(agent).ok().flatten().is_some_and(|a| a.kind == AgentKind::Central);
+    let me = engine.store.get_agent(agent).ok().flatten();
+    let is_central = me.as_ref().is_some_and(|a| a.kind == AgentKind::Central);
+    let is_lieutenant = !is_central && me.as_ref().is_some_and(|a| a.rank == AgentRank::Lieutenant);
     let result = match method {
         "initialize" => Ok(json!({
             "protocolVersion": msg.pointer("/params/protocolVersion").cloned().unwrap_or(json!("2025-06-18")),
@@ -195,6 +270,10 @@ pub fn handle_rpc(engine: &mut Engine, agent: &str, request_id: &str, msg: &Valu
         "tools/list" => Ok(json!({"tools": if is_central {
             let mut t = central_tools();
             t.extend(crate::env_tools::definitions());
+            t
+        } else if is_lieutenant {
+            let mut t = worker_tools();
+            t.extend(lieutenant_tools());
             t
         } else {
             worker_tools()
@@ -210,6 +289,8 @@ pub fn handle_rpc(engine: &mut Engine, agent: &str, request_id: &str, msg: &Valu
             }
             let out = if is_central {
                 call_central(engine, agent, name, &args)
+            } else if is_lieutenant {
+                call_lieutenant(engine, agent, name, &args).unwrap_or_else(|| call_worker(engine, agent, name, &args))
             } else {
                 call_worker(engine, agent, name, &args)
             };
@@ -259,110 +340,25 @@ fn call_central(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<St
                 .list_agents()?
                 .into_iter()
                 .map(|a| {
-                    let perms: BTreeMap<&str, &str> = Capability::ALL.iter().map(|c| (c.as_str(), access_str(a.permissions.get(*c)))).filter(|(_, v)| *v != access_str(Access::Deny)).collect();
-                    json!({"id": a.id, "name": a.name, "kind": a.kind, "role": a.role, "status": a.status, "currentTask": a.current_task,
-                           "isolation": a.isolation, "branch": a.branch, "connections": a.connections, "permissions": perms})
+                    let perms: BTreeMap<&str, &str> = Capability::ALL
+                        .iter()
+                        .map(|c| (c.as_str(), access_str(a.permissions.get(*c))))
+                        .filter(|(_, v)| *v != access_str(Access::Deny))
+                        .collect();
+                    agent_row(&a, perms)
                 })
                 .collect();
             Ok(serde_json::to_string_pretty(&rows)?)
         }
-        "create_agent" => {
-            let permissions = match args.get("permissions").and_then(Value::as_object) {
-                Some(obj) => {
-                    let mut m = BTreeMap::new();
-                    for (k, v) in obj {
-                        let cap: Capability = serde_json::from_value(json!(k))
-                            .map_err(|_| Error::invalid(format!("unknown capability `{k}`")))?;
-                        let acc: Access = serde_json::from_value(v.clone())
-                            .map_err(|_| Error::invalid(format!("invalid access for `{k}`")))?;
-                        m.insert(cap, acc);
-                    }
-                    Some(m)
-                }
-                None => None,
-            };
-            let a = e.create_agent(
-                AgentSpec {
-                    id: s(args, "id").map(str::to_string),
-                    provider: None,
-                    name: req(args, "name")?.to_string(),
-                    role: req(args, "role")?.to_string(),
-                    instructions: s(args, "instructions").map(str::to_string),
-                    permissions,
-                    connections: args.get("connections").map(|_| strings(args, "connections")),
-                    isolation: s(args, "isolation").map(str::to_string),
-                    model: s(args, "model").map(str::to_string),
-                },
-                me,
-            )?;
-            Ok(format!(
-                "Agent `{}` created ({}, isolation {:?}{}). It starts when it receives a task or message.",
-                a.id,
-                a.role,
-                a.isolation,
-                a.branch.map(|b| format!(", branch {b}")).unwrap_or_default()
-            ))
-        }
+        "create_agent" => create_agent(e, me, args),
+        "record_delegation_decision" => record_decision(e, me, args),
         "retire_agent" => {
             let id = req(args, "id")?;
             e.retire_agent(id, s(args, "reason"))?;
             Ok(format!("{id} retired."))
         }
-        "create_task" => {
-            let priority = s(args, "priority")
-                .map(|p| Priority::parse(p).ok_or_else(|| Error::invalid(format!("invalid priority `{p}`"))))
-                .transpose()?;
-            let t = e.create_task(
-                TaskSpec {
-                    title: req(args, "title")?.into(),
-                    description: s(args, "description").map(str::to_string),
-                    agent: Some(req(args, "agent")?.into()),
-                    dependencies: Some(strings(args, "dependencies")),
-                    priority,
-                    requires_review: args.get("requires_review").and_then(Value::as_bool),
-                    mission_id: s(args, "mission_id").map(str::to_string),
-                    skills: Some(strings(args, "skills")),
-                },
-                me,
-            )?;
-            // Skills are all-or-nothing per session: say so when the worker cannot use them.
-            let agent = t.agent.clone().unwrap_or_default();
-            let skills_note = match e.store.get_agent(&agent)? {
-                Some(a) if !t.skills.is_empty() && !a.profile.skills_enabled => format!(
-                    " Warning: {agent} runs with skills disabled, it cannot invoke {}; enable skills on the agent or pick another one.",
-                    t.skills.join(", ")
-                ),
-                _ => String::new(),
-            };
-            Ok(format!(
-                "{} created for {} (status {}{}).{skills_note}",
-                t.id,
-                agent,
-                t.status.as_str(),
-                t.mission_id.map(|m| format!(", mission {m}")).unwrap_or_default()
-            ))
-        }
-        "update_task" => {
-            let id = req(args, "id")?;
-            let status = s(args, "status")
-                .map(|x| TaskStatus::parse(x).ok_or_else(|| Error::invalid(format!("invalid status `{x}`"))))
-                .transpose()?;
-            let priority = s(args, "priority")
-                .map(|p| Priority::parse(p).ok_or_else(|| Error::invalid(format!("invalid priority `{p}`"))))
-                .transpose()?;
-            let t = e.update_task(
-                id,
-                TaskPatch {
-                    status,
-                    priority,
-                    agent: s(args, "agent").map(|a| Some(a.to_string())),
-                    description: s(args, "description").map(str::to_string),
-                    ..Default::default()
-                },
-                me,
-            )?;
-            Ok(format!("{} is now {} (agent {}).", t.id, t.status.as_str(), t.agent.unwrap_or("-".into())))
-        }
+        "create_task" => create_task(e, me, args),
+        "update_task" => update_task(e, me, args),
         "request_changes" => {
             let t = e.request_changes(req(args, "task_id")?, req(args, "feedback")?)?;
             Ok(format!(
@@ -374,18 +370,7 @@ fn call_central(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<St
         }
         "list_tasks" => list_tasks(e, args),
         "get_task" => Ok(serde_json::to_string_pretty(&e.store.task(req(args, "id")?)?)?),
-        "send_message" => {
-            let to = req(args, "to")?;
-            let m = e.post_message(
-                me,
-                to,
-                kind_of(args),
-                req(args, "body")?,
-                s(args, "task_id").map(str::to_string),
-                None,
-            )?;
-            Ok(format!("Message {} queued for {to}; it is delivered to its session as soon as it is idle.", m.id))
-        }
+        "send_message" => send_message(e, me, args),
         "read_memory" => read_memory(e, args),
         "write_memory" => {
             let file = req(args, "file")?;
@@ -424,21 +409,11 @@ fn call_central(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<St
 
 fn call_worker(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<String> {
     match name {
-        "send_message" => {
-            let to = s(args, "to").unwrap_or(CENTRAL_ID);
-            if to != CENTRAL_ID && !e.store.settings().allow_direct_worker_messages {
-                return Err(Error::Denied("workers message Central only; Central forwards to other agents".into()));
-            }
-            let m = e.post_message(
-                me,
-                to,
-                kind_of(args),
-                req(args, "body")?,
-                s(args, "task_id").map(str::to_string),
-                None,
-            )?;
-            Ok(format!("Message {} sent to {to}.", m.id))
-        }
+        "send_message" => send_message(e, me, args),
+        "create_agent" | "record_delegation_decision" => Err(Error::Denied(
+            "specialists cannot create agents. Do the work yourself, or ask your parent (send_message) for more help."
+                .into(),
+        )),
         "report_progress" => {
             let pct = args.get("percent").and_then(Value::as_u64).unwrap_or(0).min(100) as u8;
             e.report_progress(me, req(args, "task_id")?, pct, s(args, "action").map(str::to_string))?;
@@ -457,7 +432,7 @@ fn call_worker(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<Str
                 },
             )?;
             Ok(format!(
-                "{} recorded as {}{}. Central has been notified. End your turn unless you have other work.",
+                "{} recorded as {}{}. Your supervisor has been notified. End your turn unless you have other work.",
                 t.id,
                 t.status.as_str(),
                 t.result.and_then(|r| r.commit).map(|c| format!(", committed as {c}")).unwrap_or_default()
@@ -465,11 +440,11 @@ fn call_worker(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<Str
         }
         "block_task" => {
             let t = e.block_task(me, req(args, "task_id")?, req(args, "reason")?)?;
-            Ok(format!("{} is blocked; Central has been notified. End your turn: you will receive a message when it is resolved.", t.id))
+            Ok(format!("{} is blocked; Your supervisor has been notified. End your turn: you will receive a message when it is resolved.", t.id))
         }
         "fail_task" => {
             let t = e.fail_task(me, req(args, "task_id")?, req(args, "reason")?)?;
-            Ok(format!("{} marked as failed; Central has been notified.", t.id))
+            Ok(format!("{} marked as failed; Your supervisor has been notified.", t.id))
         }
         "get_task" => Ok(serde_json::to_string_pretty(&e.store.task(req(args, "id")?)?)?),
         "read_memory" => read_memory(e, args),
@@ -482,6 +457,251 @@ fn call_worker(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<Str
         }
         other => Err(Error::invalid(format!("unknown tool `{other}`"))),
     }
+}
+
+/// Agent-management tools of a lieutenant; `None` for tools it shares with specialists.
+fn call_lieutenant(e: &mut Engine, me: &str, name: &str, args: &Value) -> Option<Result<String>> {
+    Some(match name {
+        "record_delegation_decision" => record_decision(e, me, args),
+        "create_agent" => create_agent(e, me, args),
+        "list_agents" => (|| {
+            let agents = e.store.list_agents()?;
+            let tree = Tree::new(&agents);
+            let rows: Vec<Value> = tree.descendants(me).into_iter().map(|a| agent_row(a, BTreeMap::new())).collect();
+            if rows.is_empty() {
+                return Ok("You have no sub-agents yet.".to_string());
+            }
+            Ok(serde_json::to_string_pretty(&rows)?)
+        })(),
+        "create_task" => in_subtree(e, me, req(args, "agent").unwrap_or("")).and_then(|_| create_task(e, me, args)),
+        "update_task" => (|| {
+            let t = e.store.task(req(args, "id")?)?;
+            in_subtree(e, me, t.agent.as_deref().unwrap_or(""))?;
+            if let Some(to) = s(args, "agent") {
+                in_subtree(e, me, to)?;
+            }
+            update_task(e, me, args)
+        })(),
+        "request_changes" => (|| {
+            let t = e.store.task(req(args, "task_id")?)?;
+            in_subtree(e, me, t.agent.as_deref().unwrap_or(""))?;
+            let t = e.request_changes(&t.id, req(args, "feedback")?)?;
+            Ok(format!("{} sent back to {} with your feedback.", t.id, t.agent.unwrap_or_default()))
+        })(),
+        "list_tasks" => (|| {
+            let agents = e.store.list_agents()?;
+            let tree = Tree::new(&agents);
+            let mine: Vec<String> = tree.descendants(me).iter().map(|a| a.id.clone()).collect();
+            if let Some(a) = s(args, "agent") {
+                in_subtree(e, me, a)?;
+            }
+            let status = s(args, "status").and_then(TaskStatus::parse);
+            let rows: Vec<Value> = e
+                .store
+                .list_tasks(&TaskFilter { agent: s(args, "agent").map(str::to_string), status, ..Default::default() })?
+                .iter()
+                .filter(|t| t.agent.as_ref().is_some_and(|a| mine.contains(a)))
+                .map(task_row)
+                .collect();
+            if rows.is_empty() {
+                return Ok("No tasks match.".to_string());
+            }
+            Ok(serde_json::to_string_pretty(&rows)?)
+        })(),
+        "retire_agent" => (|| {
+            let id = req(args, "id")?;
+            in_subtree(e, me, id)?;
+            e.retire_agent(id, s(args, "reason"))?;
+            Ok(format!("{id} retired."))
+        })(),
+        _ => return None,
+    })
+}
+
+fn in_subtree(e: &Engine, me: &str, id: &str) -> Result<()> {
+    let agents = e.store.list_agents()?;
+    if Tree::new(&agents).is_ancestor(me, id) {
+        Ok(())
+    } else {
+        Err(Error::Denied(format!(
+            "`{id}` is not one of your sub-agents; you manage only your own subtree (ask your parent for anything else)"
+        )))
+    }
+}
+
+fn agent_row(a: &Agent, perms: BTreeMap<&str, &str>) -> Value {
+    let mut v = json!({"id": a.id, "name": a.name, "kind": a.kind, "role": a.role, "rank": a.rank, "parent": a.parent_agent,
+        "status": a.status, "currentTask": a.current_task, "paused": a.paused_at.is_some(),
+        "isolation": a.isolation, "branch": a.branch, "connections": a.connections});
+    if !perms.is_empty() {
+        v["permissions"] = json!(perms);
+    }
+    v
+}
+
+fn task_row(t: &pcc_core::Task) -> Value {
+    json!({"id": t.id, "title": t.title, "status": t.status, "agent": t.agent, "priority": t.priority,
+           "dependencies": t.dependencies, "mission": t.mission_id, "reason": t.status_reason,
+           "summary": t.result.as_ref().map(|r| r.summary.clone())})
+}
+
+fn rank_of(args: &Value) -> Result<Option<AgentRank>> {
+    match s(args, "rank") {
+        None => Ok(None),
+        Some("specialist") => Ok(Some(AgentRank::Specialist)),
+        Some("lieutenant") => Ok(Some(AgentRank::Lieutenant)),
+        Some(other) => Err(Error::invalid(format!("unknown rank `{other}` (specialist or lieutenant)"))),
+    }
+}
+
+fn record_decision(e: &mut Engine, me: &str, args: &Value) -> Result<String> {
+    let d = crate::hierarchy::decision_from_args(args);
+    let needs = d.needs_sub_agents;
+    e.record_delegation(me, d)?;
+    Ok(if needs {
+        "Decision recorded. Create the sub-agents you listed with create_agent, then give them tasks.".into()
+    } else {
+        "Decision recorded: no sub-agents. Do the work yourself (or with existing agents).".into()
+    })
+}
+
+fn create_agent(e: &mut Engine, me: &str, args: &Value) -> Result<String> {
+    let permissions = match args.get("permissions").and_then(Value::as_object) {
+        Some(obj) => {
+            let mut m = BTreeMap::new();
+            for (k, v) in obj {
+                let cap: Capability = serde_json::from_value(json!(k))
+                    .map_err(|_| Error::invalid(format!("unknown capability `{k}`")))?;
+                let acc: Access = serde_json::from_value(v.clone())
+                    .map_err(|_| Error::invalid(format!("invalid access for `{k}`")))?;
+                m.insert(cap, acc);
+            }
+            Some(m)
+        }
+        None => None,
+    };
+    let rank = rank_of(args)?;
+    let name = req(args, "name")?.to_string();
+    let role = req(args, "role")?.to_string();
+    // An inline reason counts as the decision for this one sub-agent.
+    if let Some(reason) = s(args, "decision_reason") {
+        e.record_delegation(
+            me,
+            crate::hierarchy::DelegationDecision {
+                needs_sub_agents: true,
+                reason: reason.to_string(),
+                children: vec![crate::hierarchy::PlannedChild {
+                    name: name.clone(),
+                    role: role.clone(),
+                    rank,
+                    reason: reason.to_string(),
+                }],
+            },
+        )?;
+    }
+    let a = e.create_agent(
+        AgentSpec {
+            id: s(args, "id").map(str::to_string),
+            provider: None,
+            name,
+            role,
+            instructions: s(args, "instructions").map(str::to_string),
+            permissions,
+            connections: args.get("connections").map(|_| strings(args, "connections")),
+            isolation: s(args, "isolation").map(str::to_string),
+            model: s(args, "model").map(str::to_string),
+            parent: s(args, "parent").map(str::to_string),
+            rank,
+        },
+        me,
+    )?;
+    Ok(format!(
+        "Agent `{}` created ({:?} under {}, {}, isolation {:?}{}). It starts when it receives a task or message.",
+        a.id,
+        a.rank,
+        a.parent_agent.as_deref().unwrap_or("-"),
+        a.role,
+        a.isolation,
+        a.branch.map(|b| format!(", branch {b}")).unwrap_or_default()
+    ))
+}
+
+fn create_task(e: &mut Engine, me: &str, args: &Value) -> Result<String> {
+    let priority = s(args, "priority")
+        .map(|p| Priority::parse(p).ok_or_else(|| Error::invalid(format!("invalid priority `{p}`"))))
+        .transpose()?;
+    let t = e.create_task(
+        TaskSpec {
+            title: req(args, "title")?.into(),
+            description: s(args, "description").map(str::to_string),
+            agent: Some(req(args, "agent")?.into()),
+            dependencies: Some(strings(args, "dependencies")),
+            priority,
+            requires_review: args.get("requires_review").and_then(Value::as_bool),
+            mission_id: s(args, "mission_id").map(str::to_string),
+            skills: Some(strings(args, "skills")),
+        },
+        me,
+    )?;
+    // Skills are all-or-nothing per session: say so when the worker cannot use them.
+    let agent = t.agent.clone().unwrap_or_default();
+    let skills_note = match e.store.get_agent(&agent)? {
+        Some(a) if !t.skills.is_empty() && !a.profile.skills_enabled => format!(
+            " Warning: {agent} runs with skills disabled, it cannot invoke {}; enable skills on the agent or pick another one.",
+            t.skills.join(", ")
+        ),
+        _ => String::new(),
+    };
+    Ok(format!(
+        "{} created for {} (status {}{}).{skills_note}",
+        t.id,
+        agent,
+        t.status.as_str(),
+        t.mission_id.map(|m| format!(", mission {m}")).unwrap_or_default()
+    ))
+}
+
+fn update_task(e: &mut Engine, me: &str, args: &Value) -> Result<String> {
+    let id = req(args, "id")?;
+    let status = s(args, "status")
+        .map(|x| TaskStatus::parse(x).ok_or_else(|| Error::invalid(format!("invalid status `{x}`"))))
+        .transpose()?;
+    let priority = s(args, "priority")
+        .map(|p| Priority::parse(p).ok_or_else(|| Error::invalid(format!("invalid priority `{p}`"))))
+        .transpose()?;
+    let t = e.update_task(
+        id,
+        TaskPatch {
+            status,
+            priority,
+            agent: s(args, "agent").map(|a| Some(a.to_string())),
+            description: s(args, "description").map(str::to_string),
+            ..Default::default()
+        },
+        me,
+    )?;
+    Ok(format!("{} is now {} (agent {}).", t.id, t.status.as_str(), t.agent.unwrap_or("-".into())))
+}
+
+/// Messages follow the hierarchy (see `hierarchy::delivery`).
+fn send_message(e: &mut Engine, me: &str, args: &Value) -> Result<String> {
+    let parent = e.store.agent(me)?.parent_agent;
+    let to = match s(args, "to") {
+        Some(t) => t.to_string(),
+        None => parent.ok_or_else(|| Error::invalid("missing `to`"))?,
+    };
+    let (m, route) =
+        e.route_message(me, &to, kind_of(args), req(args, "body")?, s(args, "task_id").map(str::to_string))?;
+    Ok(match route {
+        Some(path) if m.to != to => format!(
+            "{to} is outside your branch: message {} was handed to {} to relay (route {}).",
+            m.id,
+            m.to,
+            path.join(" → ")
+        ),
+        Some(path) => format!("Message {} sent to {to} across branches (route {}).", m.id, path.join(" → ")),
+        None => format!("Message {} queued for {to}; it is delivered to its session as soon as it is idle.", m.id),
+    })
 }
 
 fn read_memory(e: &Engine, args: &Value) -> Result<String> {
@@ -500,14 +720,7 @@ fn list_tasks(e: &Engine, args: &Value) -> Result<String> {
     if tasks.is_empty() {
         return Ok("No tasks match.".into());
     }
-    let rows: Vec<Value> = tasks
-        .iter()
-        .map(|t| {
-            json!({"id": t.id, "title": t.title, "status": t.status, "agent": t.agent, "priority": t.priority,
-                   "dependencies": t.dependencies, "mission": t.mission_id, "reason": t.status_reason,
-                   "summary": t.result.as_ref().map(|r| r.summary.clone())})
-        })
-        .collect();
+    let rows: Vec<Value> = tasks.iter().map(task_row).collect();
     Ok(serde_json::to_string_pretty(&rows)?)
 }
 

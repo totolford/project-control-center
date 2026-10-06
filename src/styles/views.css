@@ -316,6 +316,20 @@
 .perm-reason {
   color: var(--text);
 }
+.perm-resource {
+  word-break: break-all;
+}
+.perm-stale {
+  border-color: var(--border);
+}
+.perm-stale-head {
+  margin: 0 0 6px;
+}
+.perm-stale-details {
+  margin: 4px 0 10px;
+  padding-left: 18px;
+  color: var(--muted);
+}
 
 .toasts {
   position: fixed;

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0
+
+- Stability first: persistent PermissionManager (pending / approved / denied / expired /
+  cancelled / consumed / lost / recovered, expiry, idempotent answers, "no longer
+  available — checking the agent's real state" instead of a raw "not found"); idempotent
+  critical operations; persisted event journal (dotted names, severity, source, PID).
+- RecoveryManager and watchdog: process registry, soft recovery before any restart,
+  orphan detection (cleanup only on request), mission checkpoints with an
+  interrupted-mission dialog (Resume / Inspect / Abandon, last real action, files
+  written since the checkpoint), crash reports, MCP supervision with restart and test.
+- Renderer health monitor, error boundaries, Safe Recovery Overlay and a renderer
+  watchdog that reloads the interface without stopping agents, missions, MCP or AI Town;
+  Diagnostics page (process, agent, mission, MCP, permission and AI runtime trees,
+  CPU/RAM/GPU/VRAM, errors, restarts, crash history); Activity as an event chain.
+- Dynamic agent hierarchy: commander / lieutenants / specialists, required delegation
+  decision, maxHierarchyDepth (default 3), routing through parents, lieutenant
+  syntheses, promote / demote, real pause and sleeping agents; ranks in AI Town.
+- Local AI: hardware detection, explained model recommendations, Ollama / LM Studio /
+  llama.cpp runtime manager (installs and downloads only after confirmation), local
+  providers, ModelRouter (Local / Claude / Hybrid) with a routing journal, Central and
+  workers on a local model through Claude Code + Ollama's Anthropic-compatible API
+  (tool-capable models only), fallback policy, first-launch AI Setup wizard, AI Town
+  townspeople on the local runtime.
+
 ## 0.3.0
 
 - AI World built on the real a16z-infra/ai-town (MIT, vendored in `ai-town/`): the

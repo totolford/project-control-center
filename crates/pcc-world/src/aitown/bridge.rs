@@ -33,6 +33,15 @@ pub struct NexusAgent {
     pub tint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge: Option<String>,
+    /// `commander`, `lieutenant` or `specialist`.
+    pub rank: String,
+    /// Supervising agent (absent for Central).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// Runtime adapter, e.g. `claude-code`.
+    pub provider: String,
+    /// Paused by the user.
+    pub paused: bool,
 }
 
 /// What NEXUS knows about an agent right now.
@@ -58,6 +67,13 @@ pub struct AgentFacts {
     pub skills: Vec<String>,
     pub mcp: Vec<String>,
     pub connections: Vec<String>,
+    /// `commander`, `lieutenant` or `specialist` (empty = specialist).
+    pub rank: String,
+    pub parent_id: Option<String>,
+    pub provider: String,
+    pub paused: bool,
+    /// Home zone of the supervising lieutenant: idle specialists gather there.
+    pub parent_zone: Option<String>,
 }
 
 fn has_any(text: &str, words: &[&str]) -> bool {
@@ -65,7 +81,7 @@ fn has_any(text: &str, words: &[&str]) -> bool {
 }
 
 /// Zone matching the agent's specialty, used when it works or idles.
-fn home_zone(f: &AgentFacts) -> &'static str {
+pub fn home_zone(f: &AgentFacts) -> &'static str {
     if f.is_central {
         return "central_hq";
     }
@@ -107,23 +123,33 @@ fn action_zone(action: &str) -> Option<&'static str> {
     }
 }
 
-pub fn zone_for(f: &AgentFacts) -> &'static str {
-    match f.status.as_str() {
+pub fn zone_for(f: &AgentFacts) -> String {
+    zone_of(f).map(str::to_string).unwrap_or_else(|| f.parent_zone.clone().unwrap_or_else(|| home_zone(f).to_string()))
+}
+
+/// Zone from the agent's own state; `None` = idle at home (or near its lieutenant).
+fn zone_of(f: &AgentFacts) -> Option<&'static str> {
+    Some(match f.status.as_str() {
         "retired" => "archive",
         "working" | "awaiting_permission" => {
             if f.is_central {
-                return "central_hq";
+                return Some("central_hq");
             }
             f.current_action.as_deref().and_then(action_zone).unwrap_or_else(|| home_zone(f))
         }
         _ if f.task_status.as_deref() == Some("review") => "review_room",
-        _ => home_zone(f),
-    }
+        _ if f.is_central || f.parent_zone.is_none() => home_zone(f),
+        _ => return None,
+    })
 }
 
 /// Label and emoji shown above the character, from real state only.
 pub fn label_for(f: &AgentFacts) -> (String, Option<&'static str>) {
+    if f.paused && f.status != "working" && f.status != "retired" {
+        return ("Paused by you".into(), Some("⏸️"));
+    }
     match f.status.as_str() {
+        "sleeping" => ("Sleeping (session stopped, wakes on the next message)".into(), Some("😴")),
         "offline" => ("Offline (no Claude Code session)".into(), Some("💤")),
         "stopped" => ("Stopped".into(), Some("⏹️")),
         "disconnected" => ("Disconnected".into(), Some("🔌")),
@@ -170,7 +196,7 @@ pub fn to_nexus_agent(f: &AgentFacts) -> NexusAgent {
         is_central: f.is_central,
         status: f.status.clone(),
         status_label: label.chars().take(120).collect(),
-        zone: zone_for(f).into(),
+        zone: zone_for(f),
         emoji: emoji.map(str::to_string),
         mission: f.mission.clone(),
         task: f.task_title.clone(),
@@ -180,6 +206,10 @@ pub fn to_nexus_agent(f: &AgentFacts) -> NexusAgent {
         connections: f.connections.clone(),
         tint: f.tint.clone(),
         badge: f.badge.as_ref().map(|b| b.chars().take(8).collect()),
+        rank: if f.rank.is_empty() { "specialist".into() } else { f.rank.clone() },
+        parent_id: f.parent_id.clone(),
+        provider: f.provider.clone(),
+        paused: f.paused,
     }
 }
 
@@ -219,6 +249,27 @@ mod tests {
         let mut d = facts("waiting");
         d.role = "UI designer".into();
         assert_eq!(zone_for(&d), "design_studio");
+        // Idle specialists gather at their lieutenant's building; working ones go where they work.
+        d.parent_zone = Some("roblox_studio".into());
+        assert_eq!(zone_for(&d), "roblox_studio");
+        let mut w = facts("working");
+        w.parent_zone = Some("roblox_studio".into());
+        w.current_action = Some("Bash: npm test".into());
+        assert_eq!(zone_for(&w), "testing_lab");
+    }
+
+    #[test]
+    fn dormant_and_paused_labels_are_real_states() {
+        assert_eq!(label_for(&facts("sleeping")).1, Some("😴"));
+        let mut p = facts("waiting");
+        p.paused = true;
+        assert_eq!(label_for(&p).0, "Paused by you");
+        let mut p = facts("waiting");
+        p.parent_id = Some("lead".into());
+        p.rank = "lieutenant".into();
+        let n = to_nexus_agent(&p);
+        assert_eq!((n.rank.as_str(), n.parent_id.as_deref()), ("lieutenant", Some("lead")));
+        assert_eq!(to_nexus_agent(&facts("waiting")).rank, "specialist");
     }
 
     #[test]

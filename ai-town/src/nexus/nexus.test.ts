@@ -5,7 +5,7 @@ import { characters } from '../../data/characters';
 import { buildingLayout, signText } from './buildingLayout';
 import { cinematicShots, clampScale, isActive, minScale } from './camera';
 import { parseFromNexus } from './protocol';
-import { bubbleText, indexAgents, parseTint, resolveCharacter, visibleSpeech, visualState } from './state';
+import { bubbleText, family, indexAgents, parentLink, parseTint, rankLabel, rankPips, resolveCharacter, visibleSpeech, visualState } from './state';
 import type { NexusAgentRow, NexusState } from './state';
 
 function row(over: Partial<NexusAgentRow>): NexusAgentRow {
@@ -135,5 +135,41 @@ describe('protocol', () => {
       type: 'zoom',
       delta: 2,
     });
+  });
+});
+
+describe('agent hierarchy in the world', () => {
+  const central = row({ nexusId: 'central', name: 'Central', isCentral: true, rank: 'commander' });
+  const lead = row({ nexusId: 'lead', name: 'Lua Lead', rank: 'lieutenant', parentId: 'central' });
+  const kid = row({ nexusId: 'kid', name: 'Lua Files', rank: 'specialist', parentId: 'lead' });
+  const solo = row({ nexusId: 'solo', name: 'Solo', parentId: 'central' });
+  const all = [central, lead, kid, solo];
+
+  test('rank insignia and labels', () => {
+    expect([rankPips('commander'), rankPips('lieutenant'), rankPips('specialist'), rankPips(undefined)]).toEqual([3, 2, 0, 0]);
+    expect([rankLabel(central), rankLabel(lead), rankLabel(solo)]).toEqual(['Commander', 'Lieutenant', 'Specialist']);
+  });
+
+  test('dormant and paused agents are drawn as such', () => {
+    expect(visualState(row({ status: 'sleeping' }))).toBe('sleeping');
+    expect(visualState(row({ status: 'idle', paused: true }))).toBe('paused');
+    // A turn still running while pausing keeps its real state.
+    expect(visualState(row({ status: 'working', emoji: '⚙️', paused: true }))).toBe('working');
+  });
+
+  test('family: supervisor and direct reports', () => {
+    expect(family(lead, all)).toEqual({ parent: { nexusId: 'central', name: 'Central' }, children: [{ nexusId: 'kid', name: 'Lua Files', rank: 'specialist' }] });
+    expect(family(central, all).children.map((c) => c.nexusId)).toEqual(['lead', 'solo']);
+    expect(family(kid, all).children).toEqual([]);
+  });
+
+  test('links to the supervisor', () => {
+    const positions = new Map([['central', { x: 0, y: 0 }], ['lead', { x: 100, y: 0 }], ['kid', { x: 100, y: 50 }], ['solo', { x: 30, y: 30 }]]);
+    const byId = new Map(all.map((a) => [a.nexusId, a]));
+    expect(parentLink(kid, { x: 100, y: 50 }, positions, byId, null)).toEqual({ dx: 0, dy: -50, strong: false });
+    // Links to Central only when one end is selected.
+    expect(parentLink(solo, { x: 30, y: 30 }, positions, byId, null)).toBeNull();
+    expect(parentLink(solo, { x: 30, y: 30 }, positions, byId, 'solo')).toEqual({ dx: -30, dy: -30, strong: true });
+    expect(parentLink(central, { x: 0, y: 0 }, positions, byId, 'central')).toBeNull();
   });
 });

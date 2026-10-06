@@ -27,6 +27,9 @@ export function makeAgent(id: string, patch: Partial<Agent> = {}): Agent {
     createdBy: "user",
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
+    parentAgent: id === "central" ? null : "central",
+    rank: id === "central" ? "commander" : "specialist",
+    pausedAt: null,
     ...patch,
   };
 }
@@ -57,6 +60,9 @@ export function makeSettings(patch: Partial<ProjectSettings> = {}): ProjectSetti
     defaultSkillsEnabled: true,
     autoRecover: false,
     masterControl: { active: false, pc: false, github: false, mcp: false, ssh: false, skills: false, manageConnections: false },
+    maxHierarchyDepth: 3,
+    sleepAfterMinutes: 20,
+    permissionTimeoutMinutes: 30,
     ...patch,
   };
 }

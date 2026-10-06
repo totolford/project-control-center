@@ -22,7 +22,10 @@ async function testConnection(conn: Connection): Promise<TestResult | undefined>
   if (conn.kind === "mcp" || conn.kind === "roblox_studio") {
     const probe = await attempt(() => api.probeConnection(conn.id));
     if (!probe) return { ok: false, text: "Probe failed (see the error message)." };
-    return { ok: true, text: `${probe.serverName ?? conn.name} answered in ${probe.latencyMs} ms · ${probe.tools.length} tools` };
+    const parts = [`${probe.tools.length} tools`];
+    parts.push(probe.resources ? `${probe.resources.length} resources` : "resources not supported");
+    parts.push(probe.prompts ? `${probe.prompts.length} prompts` : "prompts not supported");
+    return { ok: true, text: `${probe.serverName ?? conn.name} answered in ${probe.latencyMs} ms · ${parts.join(" · ")}` };
   }
   const checked = await attempt(() => api.checkConnection(conn.id));
   if (!checked) return undefined;
@@ -83,6 +86,10 @@ export function useIntentRunner(interp: Interpretation) {
     const r = await perform(id);
     setBusy(null);
     if (r) setResult(r);
+    // A new MCP connection is tested at once: start it, discover tools, resources and prompts.
+    if (r?.type === "applied" && r.applied.created && r.applied.connection && (r.applied.connection.kind === "mcp" || r.applied.connection.kind === "roblox_studio")) {
+      await runTest(r.applied.connection);
+    }
   };
 
   const runTest = async (conn: Connection) => {

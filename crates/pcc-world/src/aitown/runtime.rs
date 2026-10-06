@@ -198,6 +198,8 @@ impl AiTownRuntime {
             Some(Ok(Some(status))) => {
                 self.last_error.get_or_insert_with(|| format!("convex dev exited ({status})"));
                 self.backend = None;
+                pcc_recovery::app().ended(REC_KEY, true, status.code(), Some(format!("convex dev exited ({status})")));
+                end_backend_records();
                 false
             }
             _ => false,
@@ -230,6 +232,13 @@ impl AiTownRuntime {
             .stderr(Stdio::piped())
             .spawn()?;
         pcc_claude::process::attach_pid_to_app_job(child.id());
+        pcc_recovery::app().register(
+            REC_KEY,
+            pcc_recovery::Registration::new(pcc_recovery::ProcessKind::AiTown, "AI Town (convex dev)")
+                .pid(Some(child.id()))
+                .image("node.exe")
+                .command("node convex/bin/main.js dev"),
+        );
         for pipe in [
             child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
             child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
@@ -244,6 +253,7 @@ impl AiTownRuntime {
                     if clean.trim().is_empty() {
                         continue;
                     }
+                    pcc_recovery::app().heartbeat(REC_KEY, "output", None);
                     if let Ok(mut l) = log.lock() {
                         l.push(clean);
                         let excess = l.len().saturating_sub(200);
@@ -265,6 +275,10 @@ impl AiTownRuntime {
                 // Functions deployed when our query answers.
                 if client.query("nexus:ping", serde_json::json!({})).is_ok() {
                     self.url = Some(url.clone());
+                    let pid = self.backend.as_ref().map(Child::id).unwrap_or(0);
+                    pcc_recovery::app().heartbeat(REC_KEY, "nexus:ping", Some("functions deployed"));
+                    pcc_recovery::app().set_state(REC_KEY, pcc_recovery::ProcessState::Running, None);
+                    register_backend_children(pid);
                     return Ok(url);
                 }
             }
@@ -281,6 +295,8 @@ impl AiTownRuntime {
     pub fn stop(&mut self) {
         if let Some(mut child) = self.backend.take() {
             kill_tree(&mut child);
+            pcc_recovery::app().ended(REC_KEY, false, None, Some("stopped by NEXUS".into()));
+            end_backend_records();
         }
         self.url = None;
     }
@@ -288,11 +304,61 @@ impl AiTownRuntime {
     pub fn url(&self) -> Option<&str> {
         self.url.as_deref()
     }
+
+    /// Sets environment variables of the local deployment (`convex env set`),
+    /// e.g. the LLM AI Town's townspeople use. Needs the backend running.
+    pub fn set_env(&mut self, vars: &[(String, String)]) -> Result<()> {
+        if !self.is_running() {
+            return Err(Error::Invalid("AI Town is not running".into()));
+        }
+        let cli = self.runtime.join("node_modules").join("convex").join("bin").join("main.js");
+        for (k, v) in vars {
+            let out = pcc_claude::process::std_command("node")
+                .arg(&cli)
+                .args(["env", "set", k, v])
+                .env("CONVEX_AGENT_MODE", "anonymous")
+                .current_dir(&self.runtime)
+                .stdin(Stdio::null())
+                .output()?;
+            if !out.status.success() {
+                let err = strip_ansi(String::from_utf8_lossy(&out.stderr).trim());
+                return Err(Error::Process(format!("convex env set {k} failed: {err}")));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Drop for AiTownRuntime {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+/// Registry key of `convex dev` (application-wide process registry).
+const REC_KEY: &str = "aitown:convex";
+
+/// The local Convex backend `convex dev` started, registered as its children.
+fn register_backend_children(pid: u32) {
+    let table = pcc_recovery::sys::list_processes();
+    for c in pcc_recovery::sys::descendants(&table, pid) {
+        if c.name.to_ascii_lowercase().contains("convex") {
+            pcc_recovery::app().register(
+                &format!("aitown:backend:{}", c.pid),
+                pcc_recovery::Registration::new(pcc_recovery::ProcessKind::AiTownBackend, "AI Town local backend")
+                    .pid(Some(c.pid))
+                    .parent(c.ppid)
+                    .image(c.name.clone()),
+            );
+        }
+    }
+}
+
+fn end_backend_records() {
+    for r in pcc_recovery::app().list() {
+        if r.key.starts_with("aitown:backend:") && !r.state.is_ended() {
+            pcc_recovery::app().ended(&r.key, false, None, Some("convex dev stopped".into()));
+        }
     }
 }
 

@@ -81,6 +81,8 @@ export class Agent {
         player: player.serialize(),
         otherFreePlayers: [...game.world.players.values()]
           .filter((p) => p.id !== player.id)
+          // NEXUS: characters of real NEXUS agents only act when their agent does.
+          .filter((p) => !p.human?.startsWith('nexus:'))
           .filter(
             (p) => ![...game.world.conversations.values()].find((c) => c.participants.has(p.id)),
           )

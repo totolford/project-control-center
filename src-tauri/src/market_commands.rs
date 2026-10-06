@@ -392,7 +392,11 @@ pub async fn market_install(
 ) -> CmdResult<MarketAction> {
     let e = entry(&state, &id).await?;
     if e.installed {
-        return Err(Error::Conflict(format!("{} is already installed", e.name)));
+        return Ok(MarketAction {
+            message: format!("{} is already installed", e.name),
+            ok: true,
+            ..Default::default()
+        });
     }
     let action = match e.install_method {
         InstallMethod::GithubSkill => {
@@ -488,7 +492,11 @@ fn short(sha: &str) -> &str {
 pub async fn market_uninstall(state: State<'_, AppState>, id: String) -> CmdResult<MarketAction> {
     let e = entry(&state, &id).await?;
     if !e.installed {
-        return Err(Error::invalid(format!("{} is not installed", e.name)));
+        return Ok(MarketAction {
+            message: format!("{} is already uninstalled", e.name),
+            ok: true,
+            ..Default::default()
+        });
     }
     let action = match e.install_method {
         InstallMethod::Plugin => {

@@ -67,6 +67,14 @@ impl Engine {
         }
         let config = if input.config.is_null() { json!({}) } else { input.config };
         kinds::validate(input.kind, &config)?;
+        // The same connection submitted twice (double click, retried call) is returned as is.
+        if let Some(existing) = self.store.list_connections()?.into_iter().find(|c| {
+            c.kind == input.kind
+                && c.name.eq_ignore_ascii_case(input.name.trim())
+                && crate::admin::equivalent(c.kind, &c.config, &config)
+        }) {
+            return Ok(existing);
+        }
         let credential_ref = match input.secrets.filter(|s| !s.is_empty()) {
             Some(values) => {
                 let r = secrets::new_ref();
@@ -125,7 +133,8 @@ impl Engine {
     }
 
     pub fn delete_connection(&mut self, id: &str) -> Result<()> {
-        let c = self.store.get_connection(id)?.ok_or_else(|| Error::not_found(format!("connection {id}")))?;
+        // Deleting twice (double click, stale list): already gone.
+        let Some(c) = self.store.get_connection(id)? else { return Ok(()) };
         if let Some(r) = &c.credential_ref {
             secrets::delete(r)?;
         }

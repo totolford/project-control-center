@@ -92,6 +92,12 @@ describe("applyEvent", () => {
     expect(again.pendingPermissions).toHaveLength(1);
     const resolved = applyEvent(again, ev("PermissionResolved", { id: "perm1", decision: "allow_once" }));
     expect(resolved.pendingPermissions).toEqual([]);
+    // A request that changed state on its own leaves the queue; a recovered one comes back.
+    const lost = applyEvent(requested, ev("PermissionUpdated", { ...req, status: "lost" }));
+    expect(lost.pendingPermissions).toEqual([]);
+    expect(lost.decisionVersion).toBe(requested.decisionVersion + 1);
+    const recovered = applyEvent(lost, ev("PermissionRequested", { ...req, status: "recovered" }));
+    expect(recovered.pendingPermissions).toHaveLength(1);
   });
 
   it("replaces mission counters from Mission* payloads", () => {

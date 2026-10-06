@@ -26,6 +26,10 @@ impl Engine {
     /// running (or `start_now`), otherwise it is queued and started when the
     /// running mission finishes.
     pub fn create_mission_from(&mut self, spec: MissionSpec) -> Result<Mission> {
+        // A double submit with the same client key gets the mission already created.
+        if let Some(m) = self.replayed_mission(spec.idempotency_key.as_deref())? {
+            return Ok(m);
+        }
         self.ensure_not_emergency()?;
         let prompt = spec.prompt.trim();
         if prompt.is_empty() {
@@ -55,6 +59,7 @@ impl Engine {
             archived_at: None,
         };
         self.store.upsert_mission(&m)?;
+        self.remember_mission(spec.idempotency_key.as_deref(), &m.id)?;
         let running = !self.store.active_mission_ids()?.is_empty();
         if running && !spec.start_now {
             let position = self.store.queued_missions()?.iter().position(|q| q.id == m.id).unwrap_or(0) + 1;
@@ -77,11 +82,17 @@ impl Engine {
         m.started_at = Some(pcc_core::now());
         m.updated_at = m.started_at.clone().unwrap_or_default();
         self.store.upsert_mission(m)?;
-        self.emit_mission(EventKind::MissionUpdated, &m.id, format!("Mission {} sent to Central", m.id));
+        self.emit_mission_named(
+            EventKind::MissionUpdated,
+            "mission.started",
+            &m.id,
+            format!("Mission {} sent to Central", m.id),
+        );
         self.autopilot = true;
         let body = mission_brief(m, &connections);
         self.wake(CENTRAL_ID)?;
         self.post_message(pcc_core::USER_ID, CENTRAL_ID, pcc_core::MessageKind::User, &body, None, Some(m.id.clone()))?;
+        self.checkpoint_mission(&m.id, "mission sent to Central", true);
         Ok(())
     }
 

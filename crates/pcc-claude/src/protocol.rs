@@ -57,6 +57,8 @@ pub enum Inbound {
         request_id: String,
         success: bool,
         error: Option<String>,
+        /// Body of a successful response (`mcp_status` server list, ...).
+        response: Value,
     },
     /// Anything else (rate limit notices, status, stream events, ...).
     Other {
@@ -156,6 +158,7 @@ pub fn parse_value(v: &Value) -> Inbound {
                 request_id: s(&r, "request_id").unwrap_or_default(),
                 success: s(&r, "subtype").as_deref() == Some("success"),
                 error: s(&r, "error"),
+                response: r.get("response").cloned().unwrap_or(Value::Null),
             }
         }
         other => Inbound::Other { kind: other.to_string(), subtype },

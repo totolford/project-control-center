@@ -18,6 +18,7 @@ import { AgentChat } from "../views/central/AgentChat";
 import { MissionPanel } from "../views/missions/MissionPanel";
 import { SkillPanel } from "../views/market/SkillPanel";
 import { useRecentActions } from "../workspace/hooks";
+import { engineLabel } from "../views/ai/aiLogic";
 
 type AgentTab = "chat" | "work" | "profile";
 
@@ -68,6 +69,21 @@ function Avatar({ agent }: { agent: Agent }) {
 }
 
 /** Identity and real session state of the agent the panel talks to, with its session controls. */
+/** " · Ollama · qwen3:8b" or " · Claude · opus": the engine the agent is configured for (AI Engines). */
+function EngineTag({ agent }: { agent: Agent }) {
+  const settings = useStore((s) => s.project?.settings);
+  const kind = agent.kind === "central" ? "central" : "worker";
+  const fallback = kind === "central" ? settings?.centralModel : settings?.workerModel;
+  const e = engineLabel(settings?.ai, kind, agent.profile.engine ?? null, agent.model ?? fallback ?? null);
+  if (!e.local && !agent.model) return null;
+  return (
+    <span className="mono" title={e.text}>
+      {" "}
+      · {e.local ? `${e.provider} · ${e.model}` : e.model}
+    </span>
+  );
+}
+
 function AgentPanelHeader({ agent, onBack }: { agent: Agent; onBack?: () => void }) {
   const readOnly = useReadOnly();
   const navigate = useStore((s) => s.navigate);
@@ -87,7 +103,7 @@ function AgentPanelHeader({ agent, onBack }: { agent: Agent; onBack?: () => void
         <span className="right-name">{central ? "CENTRAL AGENT" : agent.name}</span>
         <span className="right-sub">
           <StatusDot tone={status.tone} pulse={status.pulse} /> {status.label}
-          {agent.model && <span className="mono"> · {agent.model}</span>}
+          <EngineTag agent={agent} />
           {agent.totalCostUsd > 0 && <span> · {formatCost(agent.totalCostUsd)}</span>}
         </span>
       </div>

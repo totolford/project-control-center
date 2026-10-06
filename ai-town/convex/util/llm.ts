@@ -188,17 +188,12 @@ export async function chatCompletion(
 }
 
 export async function tryPullOllama(model: string, error: string) {
+  // NEXUS: models are never downloaded behind the user's back. They are
+  // installed from NEXUS (AI Engines) after the user confirmed the download.
   if (error.includes('try pulling')) {
-    console.error('Embedding model not found, pulling from Ollama');
-    const pullResp = await fetch(getLLMConfig().url + '/api/pull', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: model }),
-    });
-    console.log('Pull response', await pullResp.text());
-    throw { retry: true, error: `Dynamically pulled model. Original error: ${error}` };
+    throw new Error(
+      `Model ${model} is not installed in the local runtime. Install it from NEXUS → AI Engines. (${error})`,
+    );
   }
 }
 

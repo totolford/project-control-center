@@ -45,7 +45,7 @@ pub enum Target<'a> {
 pub async fn probe(target: Target<'_>, timeout: Duration) -> Result<McpProbe, String> {
     let fut = async {
         match target {
-            Target::Stdio { program, args, env, cwd } => probe_stdio(program, args, env, cwd).await,
+            Target::Stdio { program, args, env, cwd } => probe_stdio(program, args, env, cwd, timeout).await,
             Target::Http { url, headers } => {
                 let (url, headers) = (url.to_string(), headers.clone());
                 tokio::task::spawn_blocking(move || probe_http(&url, &headers)).await.map_err(|e| e.to_string())?
@@ -105,13 +105,42 @@ fn capability(init: &Value, name: &str) -> bool {
 
 // ------------------------------------------------------------ stdio
 
-async fn probe_stdio(program: &str, args: &[String], env: &[(String, String)], cwd: &Path) -> Result<McpProbe, String> {
+async fn probe_stdio(
+    program: &str,
+    args: &[String],
+    env: &[(String, String)],
+    cwd: &Path,
+    timeout: Duration,
+) -> Result<McpProbe, String> {
     let mut cmd = command(program);
     cmd.args(args).current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     for (k, v) in env {
         cmd.env(k, v);
     }
     let mut child = cmd.spawn().map_err(|e| format!("cannot start `{program}`: {e}"))?;
+    let pid = child.id();
+    // Timeout inside, so the process tree is stopped on every path.
+    let result = tokio::time::timeout(timeout.saturating_sub(Duration::from_millis(500)), talk_stdio(&mut child))
+        .await
+        .unwrap_or_else(|_| Err(format!("no answer within {}s", timeout.as_secs())));
+    // `cmd.exe /c ... mcp.bat` leaves the real server as a grandchild: stop the whole tree.
+    if let Some(pid) = pid {
+        kill_tree(pid);
+    }
+    let _ = child.kill().await;
+    result
+}
+
+fn kill_tree(pid: u32) {
+    #[cfg(windows)]
+    {
+        let _ = pcc_claude::process::std_command("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).output();
+    }
+    #[cfg(not(windows))]
+    let _ = pid;
+}
+
+async fn talk_stdio(child: &mut tokio::process::Child) -> Result<McpProbe, String> {
     let mut stdin = child.stdin.take().ok_or("no stdin")?;
     let mut lines = BufReader::new(child.stdout.take().ok_or("no stdout")?).lines();
     let mut stderr = child.stderr.take().ok_or("no stderr")?;
@@ -153,7 +182,6 @@ async fn probe_stdio(program: &str, args: &[String], env: &[(String, String)], c
             .map_err(|e| e.to_string())?;
         prompts = read_response_raw(&mut lines, 4).await.ok();
     }
-    let _ = child.kill().await;
     Ok(assemble(&init, latency_ms, tools, resources, prompts))
 }
 
@@ -331,5 +359,61 @@ mod tests {
     fn http_probe_reports_connection_errors() {
         let err = probe_http("http://127.0.0.1:1/mcp", &BTreeMap::new()).unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    /// The Roblox Studio command shape (`cmd.exe /c "cd /d <dir> && .\mcp.bat"`)
+    /// against a real stdio server (PowerShell); the server process tree is
+    /// stopped after the probe.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn stdio_probe_through_cmd_and_a_batch_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = r#"
+$pidFile = Join-Path $PSScriptRoot 'server.pid'
+Set-Content -Path $pidFile -Value $PID
+while ($null -ne ($line = [Console]::In.ReadLine())) {
+  $m = $line | ConvertFrom-Json
+  if ($null -eq $m.id) { continue }
+  switch ($m.method) {
+    'initialize' { $r = @{ protocolVersion = '2025-06-18'; capabilities = @{ tools = @{}; prompts = @{} }; serverInfo = @{ name = 'fake-roblox'; version = '1.0' } } }
+    'tools/list' { $r = @{ tools = @(@{ name = 'run_code' }, @{ name = 'get_script' }) } }
+    'prompts/list' { $r = @{ prompts = @(@{ name = 'explain' }) } }
+    default { $r = @{} }
+  }
+  [Console]::Out.WriteLine((@{ jsonrpc = '2.0'; id = $m.id; result = $r } | ConvertTo-Json -Compress -Depth 6))
+  [Console]::Out.Flush()
+}
+"#;
+        std::fs::write(dir.path().join("server.ps1"), script).unwrap();
+        std::fs::write(
+            dir.path().join("mcp.bat"),
+            "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"%~dp0server.ps1\"\r\n",
+        )
+        .unwrap();
+        let args = vec!["/c".to_string(), format!(r"cd /d {} && .\mcp.bat", dir.path().display())];
+        let probe = probe(
+            Target::Stdio { program: "cmd.exe", args: &args, env: &[], cwd: dir.path() },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(probe.server_name.as_deref(), Some("fake-roblox"));
+        assert_eq!(probe.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["run_code", "get_script"]);
+        assert_eq!(probe.prompts.as_ref().map(Vec::len), Some(1));
+        assert_eq!(probe.resources, None);
+        // The PowerShell server (a grandchild of cmd.exe) does not outlive the probe.
+        let pid: u32 = std::fs::read_to_string(dir.path().join("server.pid")).unwrap().trim().parse().unwrap();
+        let alive = || {
+            let out =
+                std::process::Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/NH"]).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).contains(&pid.to_string())
+        };
+        for _ in 0..20 {
+            if !alive() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(!alive(), "server process {pid} survived the probe");
     }
 }

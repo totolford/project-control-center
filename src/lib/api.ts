@@ -58,6 +58,18 @@ export const api = {
   stopAgent: (id: string) => invoke<void>("stop_agent", { id }),
   restartAgent: (id: string) => invoke<void>("restart_agent", { id }),
   interruptAgent: (id: string) => invoke<void>("interrupt_agent", { id }),
+  // Agent pyramid (src-tauri/src/hierarchy_commands.rs)
+  /** Specialist -> lieutenant (may then create specialists under itself). */
+  promoteAgent: (id: string) => invoke<T.Agent>("promote_agent", { id }),
+  /** Lieutenant -> specialist; its sub-agents move under its own parent. */
+  demoteAgent: (id: string) => invoke<T.Agent>("demote_agent", { id }),
+  /** Nothing is delivered until resumed; a running turn is interrupted. */
+  pauseAgent: (id: string) => invoke<T.Agent>("pause_agent", { id }),
+  resumeAgent: (id: string) => invoke<T.Agent>("resume_agent", { id }),
+  /** Stops an idle session now (resumed on the next message). False when not idle. */
+  sleepAgent: (id: string) => invoke<boolean>("sleep_agent", { id }),
+  delegationDecisions: (agentId: string | null, limit = 50) =>
+    invoke<T.DelegationRecord[]>("delegation_decisions", { agentId, limit }),
   retireAgent: (id: string) => invoke<void>("retire_agent", { id }),
   stopAll: () => invoke<void>("stop_all_agents"),
   /** Message from the user to an agent (delivered to its real session). */
@@ -80,8 +92,18 @@ export const api = {
     invoke<T.PccEvent[]>("list_events", { filter }),
 
   // ---------------------------------------------------------------- permissions
+  /** Idempotent: a repeated, late or stale decision returns an explanation (`applied: false`). */
   resolvePermission: (id: string, decision: T.PermissionDecision) =>
-    invoke<void>("resolve_permission", { id, decision }),
+    invoke<T.PermissionOutcome>("resolve_permission", { id, decision }),
+  /** Real state of a request: store, agent, live session, whether the action ran. */
+  permissionStatus: (id: string) => invoke<T.PermissionStatusReport>("permission_status", { id }),
+  /** Recent requests in any state, newest first. */
+  permissionHistory: (agentId: string | null, limit: number) =>
+    invoke<T.PermissionRecord[]>("permission_history", { agentId, limit }),
+  /** Asks the agent to retry an ended request's action; a new (re-linked) prompt follows if it still needs it. */
+  rerequestPermission: (id: string) => invoke<string>("rerequest_permission", { id }),
+  /** Persisted event journal (Activity page), newest first. */
+  journal: (filter: T.JournalFilter) => invoke<T.PccEvent[]>("journal", { filter }),
 
   // ---------------------------------------------------------------- memory
   memoryFiles: () => invoke<T.MemoryFile[]>("memory_files"),
@@ -287,7 +309,49 @@ export const api = {
   aiTownUpstreamApply: () => invoke<T.UpstreamApplyResult>("ai_town_upstream_apply"),
   setAgentAppearance: (agentId: string, appearance: T.AgentAppearance) =>
     invoke<T.Agent>("set_agent_appearance", { agentId, appearance }),
+
+  // ---------------------------------------------------------------- renderer health (src-tauri/src/health_commands.rs)
+  /** Resets the renderer watchdog; `recovered` is set once after a recovery. */
+  rendererHeartbeat: (report: T.RendererReport) => invoke<T.HeartbeatAck>("renderer_heartbeat", { report }),
+  /** Agents, missions, MCP and AI Town as the engine sees them (independent of the UI). */
+  coreStatus: () => invoke<T.CoreStatus>("core_status"),
+  /** Reloads this window from the backend and records why (kind: "manual" | "degraded"). */
+  rendererReload: (kind: "manual" | "degraded", reason: string, report: T.RendererReport | null) =>
+    invoke<void>("renderer_reload", { kind, reason, report }),
+  recordRendererIncident: (kind: string, reason: string, report: T.RendererReport | null) =>
+    invoke<T.RendererIncident>("record_renderer_incident", { kind, reason, report }),
+  rendererIncidents: (limit?: number) => invoke<T.RendererIncident[]>("renderer_incidents", { limit: limit ?? null }),
+  watchdogStatus: () => invoke<T.WatchdogStatus>("watchdog_status"),
+  /** CPU, RAM, NEXUS process tree, GPU/VRAM (nvidia-smi) — sampled now. */
+  diagnosticsResources: () => invoke<T.Resources>("diagnostics_resources"),
+
+  // ---------------------------------------------------------------- recovery (src-tauri/src/recovery_commands.rs)
+  /** NEXUS → registered processes (sessions, AI Town, terminals, local AI) → their OS children. */
+  processTree: () => invoke<T.ProcessNode[]>("process_tree"),
+  /** Previous run, interrupted missions, watchdog verdicts, crashed sessions, orphans. */
+  recoveryState: () => invoke<T.RecoveryState>("recovery_state"),
+  /** Project, application and interface crash reports, newest first. */
+  crashReports: () => invoke<T.CrashReport[]>("crash_reports"),
+  acknowledgeCrashReport: (id: string) => invoke<boolean>("acknowledge_crash_report", { id }),
+  resumeInterruptedMission: (id: string) => invoke<void>("resume_interrupted_mission", { id }),
+  /** Cancels the mission (files on disk are kept). */
+  abandonInterruptedMission: (id: string) => invoke<void>("abandon_interrupted_mission", { id }),
+  missionCheckpoints: (id: string) => invoke<T.CheckpointSummary[]>("mission_checkpoints", { id }),
+  missionCheckpoint: (id: string, seq?: number) => invoke<T.Checkpoint | null>("mission_checkpoint", { id, seq: seq ?? null }),
+  mcpSupervision: () => invoke<T.McpSupervision>("mcp_supervision"),
+  /** mcp_reconnect in the sessions that have the server (or only `agentId`'s). */
+  restartMcp: (server: string, agentId?: string) => invoke<string[]>("restart_mcp", { server, agentId: agentId ?? null }),
+  refreshMcpStatus: () => invoke<number>("refresh_mcp_status"),
+  scanOrphans: () => invoke<T.Orphan[]>("scan_orphans"),
+  /** State check, reason, saved context, modified files, soft stop, then termination. */
+  cleanupOrphan: (pid: number) => invoke<T.OrphanCleanup>("cleanup_orphan", { pid }),
 };
+
+export const HEALTH_CHANNEL = "pcc://health";
+
+export function onHealth(cb: (n: { kind: string; incident: T.RendererIncident }) => void): Promise<UnlistenFn> {
+  return listen<{ kind: string; incident: T.RendererIncident }>(HEALTH_CHANNEL, (e) => cb(e.payload));
+}
 
 export const AI_TOWN_CHANNEL = "pcc://ai-town";
 

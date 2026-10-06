@@ -9,6 +9,7 @@ import {
   CharacterLook,
   NexusWorld,
   bubbleText,
+  parentLink,
   parseTint,
   resolveCharacter,
   visibleSpeech,
@@ -60,7 +61,13 @@ export function makeDecorator(
       const said = speech.get(agent.nexusId);
       return {
         tint: parseTint(agent.tint),
-        underlay: <AgentGround agent={agent} selected={selected} />,
+        underlay: (
+          <AgentGround
+            agent={agent}
+            selected={selected}
+            link={parentLink(agent, { x, y }, positions, world.byId, selectedNexusId)}
+          />
+        ),
         overlay: (
           <AgentOverlay
             agent={agent}

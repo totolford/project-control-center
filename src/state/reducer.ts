@@ -8,7 +8,7 @@ import type {
   MigrationReport,
   Mission,
   PccEvent,
-  PermissionRequest,
+  PermissionRecord,
   ProjectInfo,
   ProjectSettings,
   ProjectSnapshot,
@@ -28,7 +28,8 @@ export interface ProjectData {
   tasks: Task[];
   missions: Mission[];
   connections: Connection[];
-  pendingPermissions: PermissionRequest[];
+  /** Open requests (pending or recovered), oldest first. */
+  pendingPermissions: PermissionRecord[];
   repo: RepoStatus | null;
   recovery: RecoveryInfo | null;
   /** Most recent persisted events (id > 0), newest first. */
@@ -69,7 +70,7 @@ export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | nul
     connections: snap.connections,
     pendingPermissions: snap.pendingPermissions,
     repo: snap.repo,
-    recovery: snap.recovery && snap.recovery.agents.length > 0 ? snap.recovery : null,
+    recovery: snap.recovery && (snap.recovery.agents.length > 0 || (snap.recovery.missions?.length ?? 0) > 0) ? snap.recovery : null,
     timeline: keep?.timeline ?? [],
     liveMessages: keep?.liveMessages ?? [],
     memoryVersion: keep?.memoryVersion ?? 0,
@@ -124,6 +125,11 @@ function withTimeline(data: ProjectData, e: PccEvent): ProjectData {
   return { ...data, timeline };
 }
 
+/** Still waiting for a user decision. */
+export function isOpenPermission(r: { status?: string }): boolean {
+  return r.status === undefined || r.status === "pending" || r.status === "recovered";
+}
+
 /** Applies one real-time event to the project data. */
 export function applyEvent(data: ProjectData, e: PccEvent): ProjectData {
   const next = withTimeline(data, e);
@@ -148,10 +154,19 @@ export function applyEvent(data: ProjectData, e: PccEvent): ProjectData {
       return hasId(p) ? { ...next, liveMessages: addLiveMessage(next.liveMessages, p as Message) } : next;
     case "PermissionRequested":
       return hasId(p)
-        ? { ...next, pendingPermissions: upsertById(next.pendingPermissions, p as PermissionRequest), decisionVersion: next.decisionVersion + 1 }
+        ? { ...next, pendingPermissions: upsertById(next.pendingPermissions, p as PermissionRecord), decisionVersion: next.decisionVersion + 1 }
         : next;
     case "PermissionResolved":
       return hasId(p) ? { ...next, pendingPermissions: removeById(next.pendingPermissions, p.id), decisionVersion: next.decisionVersion + 1 } : next;
+    case "PermissionUpdated": {
+      // Expired, lost, cancelled, consumed... leave the queue; recovered comes back.
+      if (!hasId(p)) return next;
+      const open = isOpenPermission(p as PermissionRecord);
+      const pendingPermissions = open
+        ? upsertById(next.pendingPermissions, p as PermissionRecord)
+        : removeById(next.pendingPermissions, p.id);
+      return { ...next, pendingPermissions, decisionVersion: next.decisionVersion + 1 };
+    }
     case "PermissionAutoApproved":
       return { ...next, decisionVersion: next.decisionVersion + 1 };
     case "EmergencyStop":

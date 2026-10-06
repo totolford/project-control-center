@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Info, Plug, Plus, RefreshCw } from "lucide-react";
+import { Activity, Info, Plug, Plus, RefreshCw } from "lucide-react";
 import { formatClock } from "../../lib/format";
 import { useConnections } from "../../store";
 import { EmptyState, PageHeader, Spinner } from "../../components/Common";
@@ -10,6 +10,7 @@ import { NexusServerDetail } from "./NexusServerDetail";
 import { ClaudeServerDetail } from "./ClaudeServerDetail";
 import { McpWizard } from "./McpWizard";
 import type { ProbeRecord } from "./ProbeView";
+import { McpSupervisionPanel } from "./McpSupervision";
 
 export function McpView() {
   const connections = useConnections();
@@ -43,6 +44,9 @@ export function McpView() {
             <button className="btn" onClick={() => void refresh()} disabled={loading} title="Ask Claude Code again (takes a few seconds)">
               {loading ? <Spinner size={12} /> : <RefreshCw size={14} />} Refresh
             </button>
+            <button className="btn" onClick={() => setSelected(null)} disabled={selected === null} title="Health of every MCP server: sessions, PIDs, tools, restarts">
+              <Activity size={14} /> Supervision
+            </button>
             <button className="btn primary" onClick={() => setAdding(true)}>
               <Plus size={14} /> Add MCP server
             </button>
@@ -74,10 +78,19 @@ export function McpView() {
             />
           )}
           {!nexusCurrent && !claudeCurrent && (
-            <EmptyState icon={<Plug size={22} />} title={selected ? "Server no longer listed" : "Select a server"}>
-              <Info size={12} /> Pick a NEXUS connection to manage agent access, or a Claude Code server to test it, toggle it for this project or
-              copy it into NEXUS.
-            </EmptyState>
+            <>
+              {selected ? (
+                <EmptyState icon={<Plug size={22} />} title="Server no longer listed">
+                  <Info size={12} /> Pick another server in the list.
+                </EmptyState>
+              ) : (
+                <div className="muted small sup-hint">
+                  <Info size={12} /> Pick a NEXUS connection to manage agent access, or a Claude Code server to test it, toggle it for this project
+                  or copy it into NEXUS.
+                </div>
+              )}
+              <McpSupervisionPanel />
+            </>
           )}
         </div>
       </div>

@@ -1,11 +1,12 @@
 // NEXUS addition: what is drawn above a character that is a real NEXUS
 // agent: name label with badge, status emoji (animated by state) and speech
-// bubble. Everything comes from the agent row and `nexusSpeech`.
+// bubble, rank pips and the link to its supervisor. Everything comes from the
+// agent row and `nexusSpeech`.
 import * as PIXI from 'pixi.js';
 import { Container, Graphics, Text } from '@pixi/react';
 import { useCallback, useMemo } from 'react';
 import { SIGN_FONT } from './Buildings';
-import { NexusAgentRow, STATE_COLOR, VisualState, visualState } from './state';
+import { NexusAgentRow, STATE_COLOR, VisualState, rankPips, visualState } from './state';
 
 export const REDUCED_MOTION =
   typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -31,6 +32,8 @@ const EMOJI: Partial<Record<VisualState, string>> = {
   review: '🔎',
   offline: '💤',
   starting: '⏳',
+  sleeping: '😴',
+  paused: '⏸️',
 };
 
 /** Emoji of the state: the bridge's own emoji when it sent one. */
@@ -38,7 +41,19 @@ export function stateEmoji(agent: NexusAgentRow, state: VisualState): string | u
   return agent.emoji || EMOJI[state];
 }
 
-function Label({ text, color, selected, dim }: { text: string; color: number; selected: boolean; dim: boolean }) {
+function Label({
+  text,
+  color,
+  selected,
+  dim,
+  pips,
+}: {
+  text: string;
+  color: number;
+  selected: boolean;
+  dim: boolean;
+  pips: number;
+}) {
   const width = Math.max(24, text.length * 5.6 + 14);
   const draw = useCallback(
     (g: PIXI.Graphics) => {
@@ -53,8 +68,18 @@ function Label({ text, color, selected, dim }: { text: string; color: number; se
       g.beginFill(color);
       g.drawRect(-width / 2 + 3, -2, 4, 4);
       g.endFill();
+      // Rank insignia: gold pips on top of the plate.
+      for (let i = 0; i < pips; i++) {
+        const x = -((pips - 1) * 5) / 2 + i * 5;
+        g.beginFill(0x181425);
+        g.drawRect(x - 2, -11, 5, 5);
+        g.endFill();
+        g.beginFill(0xfec742);
+        g.drawRect(x - 1, -10, 3, 3);
+        g.endFill();
+      }
     },
-    [width, color, selected],
+    [width, color, selected, pips],
   );
   return (
     <Container y={-27} alpha={dim ? 0.65 : 1}>
@@ -132,7 +157,13 @@ export function AgentOverlay({
 
   return (
     <>
-      <Label text={name} color={color} selected={selected} dim={state === 'offline'} />
+      <Label
+        text={name}
+        color={color}
+        selected={selected}
+        dim={state === 'offline' || state === 'sleeping'}
+        pips={rankPips(agent.isCentral ? 'commander' : agent.rank)}
+      />
       {emoji && (
         <Text
           text={emoji}
@@ -150,17 +181,39 @@ export function AgentOverlay({
   );
 }
 
-/** Drawn under the sprite: selection ring and the red pulse of an error. */
-export function AgentGround({ agent, selected }: { agent: NexusAgentRow; selected: boolean }) {
+/** Drawn under the sprite: link to the supervisor, selection ring, error pulse. */
+export function AgentGround({
+  agent,
+  selected,
+  link,
+}: {
+  agent: NexusAgentRow;
+  selected: boolean;
+  link?: { dx: number; dy: number; strong: boolean } | null;
+}) {
   const state = visualState(agent);
   const pulse =
     state === 'error' ? (REDUCED_MOTION ? 0.5 : 0.35 + 0.35 * Math.abs(Math.sin(Date.now() / 250))) : 0;
   return (
     <>
+      {link && <ParentLink dx={link.dx} dy={link.dy} strong={link.strong} />}
       {pulse > 0 && <ErrorRing alpha={pulse} />}
       {selected && <SelectedRing />}
     </>
   );
+}
+
+function ParentLink({ dx, dy, strong }: { dx: number; dy: number; strong: boolean }) {
+  const draw = useCallback(
+    (g: PIXI.Graphics) => {
+      g.clear();
+      g.lineStyle(strong ? 1.5 : 1, strong ? 0xfec742 : 0x9ad0ff, strong ? 0.9 : 0.35);
+      g.moveTo(0, 14);
+      g.lineTo(dx, dy + 14);
+    },
+    [dx, dy, strong],
+  );
+  return <Graphics draw={draw} />;
 }
 
 function ErrorRing({ alpha }: { alpha: number }) {

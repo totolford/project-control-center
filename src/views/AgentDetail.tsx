@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Archive, ArrowLeft, Crown, FolderOpen, Hand, Palette, Play, RotateCw, Square } from "lucide-react";
+import { Archive, ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Crown, FolderOpen, Hand, Palette, Pause, Play, RotateCw, Square } from "lucide-react";
 import { api } from "../lib/api";
 import { run } from "../lib/toast";
 import { isLive } from "../lib/labels";
 import { formatCost, formatDateTime, normalizeProgress } from "../lib/format";
 import type { Agent } from "../lib/types";
-import { useAgent, useStore, useTask } from "../store";
+import { useAgent, useAgents, useStore, useTask } from "../store";
 import { EmptyState } from "../components/Common";
 import { StatusBadge } from "../components/StatusBadge";
 import { ProgressBar } from "../components/ProgressBar";
@@ -18,6 +18,8 @@ import { AgentPermissions } from "./agent/AgentPermissions";
 import { AgentSessions } from "./agent/AgentSessions";
 import { CustomizeCharacter } from "./world/CustomizeCharacter";
 import { useAiTown } from "./world/aiTownStore";
+import { buildTree, canDemote, canPromote, clampDepth, findNode, rankOf } from "./agents/hierarchy";
+import { DemoteDialog } from "./agents/HierarchyView";
 
 type TabKey = "terminal" | "messages" | "permissions" | "memory" | "sessions";
 
@@ -46,7 +48,11 @@ function AgentMemory({ agent }: { agent: Agent }) {
 
 export function AgentControls({ agent }: { agent: Agent }) {
   const [confirmRetire, setConfirmRetire] = useState(false);
+  const [confirmDemote, setConfirmDemote] = useState(false);
   const [busy, setBusy] = useState(false);
+  const agents = useAgents();
+  const maxDepth = clampDepth(useStore((s) => s.project?.settings.maxHierarchyDepth));
+  const node = findNode(buildTree(agents), agent.id);
   const live = isLive(agent.status);
   const retired = agent.status === "retired";
   const act = async (fn: () => Promise<void>, text: string) => {
@@ -76,6 +82,46 @@ export function AgentControls({ agent }: { agent: Agent }) {
           <Hand size={13} /> Interrupt
         </button>
       )}
+      {agent.kind === "worker" && !retired && (
+        <button
+          className="btn"
+          disabled={busy}
+          title={agent.pausedAt ? "Deliver queued messages and tasks again" : "Interrupt the current turn; nothing is delivered until resumed"}
+          onClick={() =>
+            void act(
+              () => (agent.pausedAt ? api.resumeAgent(agent.id) : api.pauseAgent(agent.id)).then(() => undefined),
+              agent.pausedAt ? `${agent.name} resumed` : `${agent.name} paused`,
+            )
+          }
+        >
+          {agent.pausedAt ? <Play size={13} /> : <Pause size={13} />} {agent.pausedAt ? "Resume" : "Pause"}
+        </button>
+      )}
+      {node && agent.kind === "worker" && !retired && rankOf(agent) === "specialist" && (
+        <button
+          className="btn"
+          disabled={busy || !canPromote(node, maxDepth).allowed}
+          title={canPromote(node, maxDepth).reason}
+          onClick={() => void act(() => api.promoteAgent(agent.id).then(() => undefined), `${agent.name} promoted to lieutenant`)}
+        >
+          <ArrowUpFromLine size={13} /> Promote
+        </button>
+      )}
+      {node && rankOf(agent) === "lieutenant" && (
+        <button
+          className="btn"
+          disabled={busy || !canDemote(node).allowed}
+          title={canDemote(node).reason}
+          onClick={() =>
+            node.children.length > 0
+              ? setConfirmDemote(true)
+              : void act(() => api.demoteAgent(agent.id).then(() => undefined), `${agent.name} demoted to specialist`)
+          }
+        >
+          <ArrowDownToLine size={13} /> Demote
+        </button>
+      )}
+      {confirmDemote && node && <DemoteDialog node={node} onClose={() => setConfirmDemote(false)} />}
       {agent.kind === "worker" && !retired && (
         <button className="btn danger-ghost" disabled={busy} onClick={() => setConfirmRetire(true)}>
           <Archive size={13} /> Retire

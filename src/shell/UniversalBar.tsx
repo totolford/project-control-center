@@ -29,6 +29,10 @@ export function focusCommandBar(text?: string): void {
   useBarText.getState().focus(text);
 }
 
+/** Draft of the bar (saved in the UI checkpoint, restored after an interface reload). */
+export const getBarText = (): string => useBarText.getState().text;
+export const setBarText = (text: string): void => useBarText.getState().setText(text);
+
 const MODE: Record<string, { icon: typeof Sparkles; label: string }> = {
   ask: { icon: Sparkles, label: "Ask Central" },
   interpret: { icon: ScanSearch, label: "Explain command" },

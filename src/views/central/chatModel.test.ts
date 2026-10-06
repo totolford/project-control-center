@@ -115,3 +115,29 @@ describe("buildChat", () => {
     expect(items).toEqual([expect.objectContaining({ type: "error", text: "boom" })]);
   });
 });
+
+describe("hierarchy in the chat", () => {
+  it("shows delegation decisions and lieutenant creation", () => {
+    const d = classifyTool(
+      'mcp__pcc__record_delegation_decision {"needs_sub_agents":true,"reason":"Two independent domains","children":[{"name":"Lua Lead","role":"lua"},{"name":"UI","role":"ui"}]}',
+    );
+    expect(d).toMatchObject({ category: "nexus", detail: "Two independent domains", delegation: { kind: "decision", text: "delegate to 2 sub-agents" } });
+    expect(classifyTool('mcp__pcc__record_delegation_decision {"needs_sub_agents":false,"reason":"Trivial"}').delegation?.text).toBe(
+      "work without sub-agents",
+    );
+    expect(classifyTool('mcp__pcc__create_agent {"name":"Lua Lead","role":"lua","rank":"lieutenant"}').delegation).toEqual({
+      kind: "create_agent",
+      to: "Lua Lead",
+      text: "Lua Lead (lieutenant)",
+    });
+  });
+
+  it("marks messages NEXUS routed through the agent", () => {
+    const [item] = parseInput(
+      log("input", "[MESSAGE m9 · from alpha · request]\n[ROUTED by NEXUS · from alpha · for beta · path alpha → lead → beta]\nNeed the API schema"),
+    );
+    expect(item).toMatchObject({ type: "incoming", from: "alpha", routed: { from: "alpha", for: "beta", path: ["alpha", "lead", "beta"] } });
+    const [plain] = parseInput(log("input", "[MESSAGE m10 · from beta · info]\nhello"));
+    expect(plain).not.toHaveProperty("routed");
+  });
+});

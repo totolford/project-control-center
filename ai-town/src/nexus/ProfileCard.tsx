@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'react';
 import type { SpritesheetData } from '../../data/spritesheets/types';
 import { AgentAction, ToNexus } from './protocol';
-import { CharacterLook, NexusAgentRow, STATE_COLOR, hexColor, parseTint, visualState } from './state';
+import { CharacterLook, NexusAgentRow, STATE_COLOR, family as familyOf, hexColor, parseTint, rankLabel, visualState } from './state';
 import { stateEmoji } from './AgentOverlay';
 
 /** First "down" frame of a spritesheet, drawn pixelated and tinted like on the map. */
@@ -52,9 +52,10 @@ function firstFrame(data: SpritesheetData) {
 }
 
 const ACTIONS: { action: AgentAction; label: string; title: string }[] = [
-  { action: 'assignMission', label: 'Assign mission', title: 'Open New Mission in NEXUS' },
-  { action: 'pause', label: 'Pause', title: 'Interrupt the current Claude Code turn' },
+  { action: 'assignMission', label: 'Mission', title: 'Open New Mission in NEXUS' },
+  { action: 'pause', label: 'Pause', title: 'Interrupt the current turn; nothing is delivered until resumed' },
   { action: 'stop', label: 'Stop', title: 'Stop the Claude Code session' },
+  { action: 'restart', label: 'Restart', title: 'Restart the session (resumes its context)' },
   { action: 'follow', label: 'Follow', title: 'Camera follows this character' },
   { action: 'inspect', label: 'Inspect', title: 'Open the agent in NEXUS' },
   { action: 'customize', label: 'Skin', title: 'Customize Character' },
@@ -62,18 +63,26 @@ const ACTIONS: { action: AgentAction; label: string; title: string }[] = [
   { action: 'changeSkills', label: 'Skills', title: 'Change the skills' },
   { action: 'changeMcp', label: 'MCP', title: 'Change the MCP servers' },
   { action: 'changeConnections', label: 'Links', title: 'Change the connections' },
+  { action: 'viewTasks', label: 'Tasks', title: 'Open its tasks in NEXUS' },
+  { action: 'viewMemory', label: 'Memory', title: 'Open its memory in NEXUS' },
+  { action: 'viewTools', label: 'Tools', title: 'Open its tools and permissions in NEXUS' },
 ];
 
 export function ProfileCard({
   agent,
   look,
   following,
+  family,
+  onSelect,
   onClose,
   send,
 }: {
   agent: NexusAgentRow;
   look: CharacterLook | undefined;
   following: boolean;
+  /** Supervisor and direct reports (see `family` in state.ts). */
+  family: ReturnType<typeof familyOf>;
+  onSelect: (nexusId: string) => void;
   onClose: () => void;
   send: (msg: ToNexus) => void;
 }) {
@@ -81,7 +90,17 @@ export function ProfileCard({
   const color = hexColor(STATE_COLOR[state]);
   const emoji = stateEmoji(agent, state);
   const id = agent.nexusId;
-  const live = state !== 'offline';
+  const live = state !== 'offline' && state !== 'sleeping';
+  const rank = agent.isCentral ? 'commander' : agent.rank ?? 'specialist';
+  const actions = ACTIONS.map((a) =>
+    a.action === 'pause' && agent.paused
+      ? { action: 'resume' as AgentAction, label: 'Resume', title: 'Deliver queued messages and tasks again' }
+      : a,
+  );
+  if (rank === 'specialist' && !agent.isCentral)
+    actions.push({ action: 'promote', label: 'Promote', title: 'Make it a lieutenant: it may create and supervise specialists' });
+  if (rank === 'lieutenant')
+    actions.push({ action: 'demote', label: 'Demote', title: 'Make it a specialist; its sub-agents move to its parent' });
   return (
     <section
       className="nexus-card pointer-events-auto font-body text-brown-100"
@@ -98,6 +117,7 @@ export function ProfileCard({
             <h2 className="truncate font-display text-2xl leading-none tracking-wide">{agent.name}</h2>
           </div>
           <div className="truncate text-sm text-clay-100">
+            <span className={`nexus-rank nexus-rank-${rank}`}>{rankLabel(agent)}</span>{' '}
             {agent.isCentral ? 'Central agent' : agent.role || 'Agent'}
           </div>
           <div className="mt-1 flex items-center gap-1 text-sm" style={{ color }}>
@@ -125,7 +145,32 @@ export function ProfileCard({
           </>
         )}
         <dt>Model</dt>
-        <dd className="truncate">{agent.model ?? 'Default'}</dd>
+        <dd className="truncate">
+          {agent.model ?? 'Default'}
+          {agent.provider ? ` · ${agent.provider}` : ''}
+        </dd>
+        {family.parent && (
+          <>
+            <dt>Reports to</dt>
+            <dd className="truncate">
+              <button className="nexus-link" onClick={() => onSelect(family.parent!.nexusId)}>
+                {family.parent.name}
+              </button>
+            </dd>
+          </>
+        )}
+        {family.children.length > 0 && (
+          <>
+            <dt>Team</dt>
+            <dd className="nexus-team">
+              {family.children.map((c) => (
+                <button key={c.nexusId} className="nexus-link" title={c.rank} onClick={() => onSelect(c.nexusId)}>
+                  {c.name}
+                </button>
+              ))}
+            </dd>
+          </>
+        )}
       </dl>
       <div className="nexus-stats">
         <Stat label="Skills" items={agent.skills} />
@@ -142,12 +187,12 @@ export function ProfileCard({
         </button>
       </div>
       <div className="mt-2 grid grid-cols-5 gap-1">
-        {ACTIONS.map((a) => (
+        {actions.map((a) => (
           <button
             key={a.action}
             className={`nexus-btn nexus-btn-sm${a.action === 'follow' && following ? ' nexus-btn-on' : ''}`}
             title={a.title}
-            disabled={(a.action === 'pause' || a.action === 'stop') && !live}
+            disabled={a.action === 'stop' && !live}
             onClick={() => send({ type: 'action', nexusId: id, action: a.action })}
           >
             {a.label}

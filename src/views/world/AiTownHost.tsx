@@ -7,6 +7,8 @@ import { useRightContext } from "../../state/context";
 import { useUi } from "../../state/ui";
 import { useAgents, useStore } from "../../store";
 import { BUILDING_TARGET, NEXUS_ZONES, isTrustedEvent, parseAiTownMessage } from "./aitown";
+import { buildTree, canDemote, canPromote, clampDepth, findNode, type TreeNode } from "../agents/hierarchy";
+import { DemoteDialog } from "../agents/HierarchyView";
 
 type CameraMode = Extract<NexusToAiTown, { type: "camera" }>["mode"];
 type Outgoing = NexusToAiTown extends infer M ? (M extends { source: "nexus" } ? Omit<M, "source"> : never) : never;
@@ -25,6 +27,7 @@ export function AiTownHost({ world, compact, onCustomize, onSync, onAbout, onSto
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [camera, setCamera] = useState<CameraMode>("free");
+  const [demoting, setDemoting] = useState<TreeNode | null>(null);
   const agents = useAgents();
   const navigate = useStore((s) => s.navigate);
   const openAgent = useStore((s) => s.openAgent);
@@ -69,8 +72,32 @@ export function AiTownHost({ world, compact, onCustomize, onSync, onAbout, onSto
             navigate({ name: "missions" });
             break;
           case "pause":
-            void run(() => api.interruptAgent(agent.id), `${agent.name}: current turn interrupted`);
+            void run(() => api.pauseAgent(agent.id), `${agent.name} paused: nothing is delivered until resumed`);
             break;
+          case "resume":
+            void run(() => api.resumeAgent(agent.id), `${agent.name} resumed`);
+            break;
+          case "restart":
+            void run(() => api.restartAgent(agent.id), `Restarting ${agent.name}`);
+            break;
+          case "promote":
+          case "demote": {
+            const node = findNode(buildTree(agents), agent.id);
+            if (!node) break;
+            const settings = useStore.getState().project?.settings;
+            const check = m.action === "promote" ? canPromote(node, clampDepth(settings?.maxHierarchyDepth)) : canDemote(node);
+            if (!check.allowed) void run(() => Promise.reject(new Error(check.reason)));
+            else if (m.action === "promote") void run(() => api.promoteAgent(agent.id), `${agent.name} promoted to lieutenant`);
+            else if (node.children.length > 0) setDemoting(node);
+            else void run(() => api.demoteAgent(agent.id), `${agent.name} demoted to specialist`);
+            break;
+          }
+          case "viewTasks":
+            if (agent.currentTask) useStore.getState().openTask(agent.currentTask);
+            else navigate({ name: "tasks" });
+            break;
+          case "viewMemory":
+          case "viewTools":
           case "stop":
             void run(() => api.stopAgent(agent.id), `${agent.name} stopped`);
             break;
@@ -209,6 +236,7 @@ export function AiTownHost({ world, compact, onCustomize, onSync, onAbout, onSto
         <iframe ref={frame} key={world.frontend} src={world.frontend} title="AI Town"/>
         {!ready && <div className="aitown-loading tiny muted">Loading the town…</div>}
       </div>
+      {demoting && <DemoteDialog node={demoting} onClose={() => setDemoting(null)} />}
     </div>
   );
 }

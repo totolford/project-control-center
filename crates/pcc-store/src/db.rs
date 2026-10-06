@@ -60,6 +60,29 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX commands_agent ON commands(agent_id, id);
     CREATE INDEX commands_tool ON commands(tool_use_id);
     "#,
+    // v4: persistent permission requests, idempotency keys, event journal columns
+    r#"
+    CREATE TABLE permissions (
+        id TEXT PRIMARY KEY, status TEXT NOT NULL, agent_id TEXT NOT NULL, tool_name TEXT NOT NULL,
+        mission_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT,
+        data TEXT NOT NULL);
+    CREATE INDEX permissions_status ON permissions(status);
+    CREATE INDEX permissions_agent ON permissions(agent_id, created_at);
+    CREATE TABLE idempotency (
+        key TEXT PRIMARY KEY, scope TEXT NOT NULL, result TEXT NOT NULL, created_at TEXT NOT NULL);
+    ALTER TABLE events ADD COLUMN name TEXT;
+    ALTER TABLE events ADD COLUMN severity TEXT;
+    ALTER TABLE events ADD COLUMN source TEXT;
+    ALTER TABLE events ADD COLUMN pid INTEGER;
+    UPDATE events SET source = 'engine',
+        severity = CASE
+            WHEN kind = 'EmergencyStop' THEN 'critical'
+            WHEN kind IN ('Error', 'AgentCrashed', 'TaskFailed') THEN 'error'
+            WHEN kind IN ('PermissionRequested', 'UserRequested', 'ReviewRequested') THEN 'warning'
+            ELSE 'info' END;
+    CREATE INDEX events_ts ON events(ts);
+    CREATE INDEX events_name ON events(name);
+    "#,
 ];
 
 /// Schema version written by this build.

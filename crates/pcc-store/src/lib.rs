@@ -9,11 +9,14 @@
 
 pub mod compat;
 pub mod db;
+pub mod journal;
 pub mod layout;
 pub mod memory;
+pub mod permissions;
 pub mod recent;
 pub mod store;
 
+pub use journal::JournalFilter;
 pub use layout::{Layout, AGENT_DIR};
 pub use memory::{MemoryFile, MemoryScope};
 pub use store::{EventFilter, ProjectStore, TaskFilter};

@@ -38,8 +38,9 @@ impl Engine {
     }
 
     pub fn git_init(&mut self) -> Result<pcc_git::RepoStatus> {
-        if self.repo.is_some() {
-            return Err(Error::invalid("the project is already a git repository"));
+        // Initializing twice (double click) returns the existing repository.
+        if let Some(repo) = &self.repo {
+            return Ok(repo.status());
         }
         let repo = Repo::init(self.store.root())?;
         let status = repo.status();
@@ -75,10 +76,23 @@ impl Engine {
             return Err(Error::Conflict(format!("{agent} is working; wait until it is idle before merging")));
         }
         let wt = Path::new(&a.workdir);
+        // Merging twice: the second call reports it instead of an empty merge.
+        let base = repo.current_branch().unwrap_or_else(|| "HEAD".into());
+        if repo.diff(&base, &branch, Some(wt)).is_ok_and(|d| d.commits_ahead == 0) {
+            return Ok(MergeOutcome {
+                merged: false,
+                commit: None,
+                snapshot: None,
+                conflicts: vec![],
+                message: format!("Already merged: {branch} has no commits ahead of {base}"),
+            });
+        }
         if a.isolation == Isolation::Worktree && wt.exists() && !repo.dirty_files(wt)?.is_empty() {
             return Err(Error::Conflict(format!("{agent}'s worktree has uncommitted changes; commit them first")));
         }
-        let outcome = repo.merge_branch(&branch, &format!("Merge {branch} ({})", a.name))?;
+        self.checkpoint_active_missions(&format!("before merge of {branch}"), true);
+        let outcome = self.repo()?.merge_branch(&branch, &format!("Merge {branch} ({})", a.name))?;
+        self.checkpoint_active_missions(&format!("after merge of {branch}"), true);
         self.emit(Event::new(EventKind::GitChanged, outcome.message.clone(), json!(outcome)).agent(agent));
         Ok(outcome)
     }

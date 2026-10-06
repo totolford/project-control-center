@@ -33,6 +33,7 @@ impl Engine {
         if self.store.get_agent(&id)?.is_some() {
             return Err(Error::Conflict(format!("an agent with id `{id}` already exists")));
         }
+        let (parent, rank) = self.place_new_agent(created_by, spec.parent.as_deref(), spec.rank)?;
         let settings = self.store.settings();
         let mut perms = settings.default_worker_permissions.clone();
         if let Some(p) = &spec.permissions {
@@ -42,6 +43,10 @@ impl Engine {
         }
         if created_by != USER_ID {
             perms = perms.clamp_to(&settings.max_worker_permissions);
+            // A sub-agent never gets more than its supervisor.
+            if parent != CENTRAL_ID {
+                perms = perms.clamp_to(&self.store.agent(&parent)?.permissions);
+            }
         }
         let connections = spec.connections.clone().unwrap_or_default();
         let known: Vec<String> = self.store.list_connections()?.into_iter().map(|c| c.id).collect();
@@ -89,6 +94,9 @@ impl Engine {
             created_by: created_by.into(),
             created_at: now.clone(),
             updated_at: now,
+            parent_agent: Some(parent),
+            rank,
+            paused_at: None,
         };
         self.store.upsert_agent(&a)?;
         self.emit_agent(EventKind::AgentCreated, &a, format!("{created_by} created agent {} ({})", a.name, a.role));
@@ -138,6 +146,9 @@ impl Engine {
     pub fn retire_agent(&mut self, id: &str, reason: Option<&str>) -> Result<()> {
         if id == CENTRAL_ID {
             return Err(Error::invalid("the Central agent cannot be retired"));
+        }
+        if self.store.get_agent(id)?.is_some_and(|a| a.status == AgentStatus::Retired) {
+            return Ok(());
         }
         if self.has_active_task(id)? {
             return Err(Error::Conflict(format!("{id} still has a task in progress; reassign or cancel it first")));
@@ -192,6 +203,13 @@ impl Engine {
             None if created_by == CENTRAL_ID => {
                 let active = self.store.active_mission_ids()?;
                 (active.len() == 1).then(|| active[0].clone())
+            }
+            // A lieutenant's sub-tasks belong to the mission of its own task.
+            None if created_by != USER_ID && created_by != SYSTEM_ID => {
+                match self.store.get_agent(created_by)?.and_then(|a| a.current_task) {
+                    Some(t) => self.store.get_task(&t)?.and_then(|t| t.mission_id),
+                    None => None,
+                }
             }
             None => None,
         };
@@ -263,6 +281,7 @@ impl Engine {
         self.emit_task(kind, t, summary);
         if let Some(mid) = t.mission_id.clone() {
             self.emit_mission(EventKind::MissionUpdated, &mid, format!("{mid} progress"));
+            self.checkpoint_mission(&mid, &format!("{} {} → {}", t.id, from.as_str(), to.as_str()), false);
         }
         // Free the agent when its current task leaves the active states.
         if let Some(agent) = t.agent.clone() {
@@ -292,7 +311,8 @@ impl Engine {
         if let Some(r) = patch.requires_review {
             t.requires_review = r;
         }
-        if let Some(agent) = patch.agent {
+        // Assigning to the current agent again is a no-op (double submit).
+        if let Some(agent) = patch.agent.filter(|a| *a != t.agent) {
             if matches!(t.status, TaskStatus::InProgress) {
                 return Err(Error::Conflict(format!("{id} is in progress; cancel or wait before reassigning")));
             }
@@ -385,25 +405,21 @@ impl Engine {
         if to == TaskStatus::Review {
             note.push_str("\nREVIEW REQUIRED: approve with update_task(status=\"completed\") or call request_changes.");
         }
-        self.notify_central(&note, Some(t.id.clone()), t.mission_id.clone())?;
+        self.notify_supervisor(&t, &note)?;
         self.store.task(task_id)
     }
 
     pub fn fail_task(&mut self, agent: &str, task_id: &str, reason: &str) -> Result<Task> {
         let mut t = self.owned_task(agent, task_id)?;
         self.transition(&mut t, TaskStatus::Failed, Some(reason.into()))?;
-        self.notify_central(
-            &format!("{} \"{}\" FAILED ({}): {reason}", t.id, t.title, agent),
-            Some(t.id.clone()),
-            t.mission_id.clone(),
-        )?;
+        self.notify_supervisor(&t, &format!("{} \"{}\" FAILED ({}): {reason}", t.id, t.title, agent))?;
         self.store.task(task_id)
     }
 
     pub fn block_task(&mut self, agent: &str, task_id: &str, reason: &str) -> Result<Task> {
         let mut t = self.owned_task(agent, task_id)?;
         self.transition(&mut t, TaskStatus::Blocked, Some(reason.into()))?;
-        self.notify_central(&format!("{} \"{}\" is BLOCKED ({}): {reason}\nProvide what is needed with send_message to {agent}; the task resumes when the agent receives your message.", t.id, t.title, agent), Some(t.id.clone()), t.mission_id.clone())?;
+        self.notify_supervisor(&t, &format!("{} \"{}\" is BLOCKED ({}): {reason}\nProvide what is needed with send_message to {agent}; the task resumes when the agent receives your message.", t.id, t.title, agent))?;
         self.store.task(task_id)
     }
 
@@ -498,6 +514,7 @@ impl Engine {
         m.completed_at = Some(m.updated_at.clone());
         self.store.upsert_mission(&m)?;
         self.emit_mission(EventKind::MissionCompleted, id, format!("Mission {id} {:?}", status).to_lowercase());
+        self.checkpoint_mission(id, &format!("mission {}", status.as_str()), true);
         Ok(m)
     }
 
