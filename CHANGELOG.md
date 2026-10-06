@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Fix: in installed builds the AI Town runtime folder was the install folder's
+  bundled `ai-town/`, so starting AI Town erased the bundled files ("The AI Town
+  folder bundled with NEXUS was not found"). The runtime now lives in the app's data
+  folder (`ai-town-runtime`) and the copy refuses any overlap with the source.
+  Reinstall (or update) to restore the bundled files.
+
 ## 0.4.0
 
 - Stability first: persistent PermissionManager (pending / approved / denied / expired /

@@ -57,12 +57,40 @@ pub fn locate_source(resource_dir: Option<&Path>) -> Option<PathBuf> {
     candidates.into_iter().find(|c| c.join("convex").join("nexus.ts").is_file()).map(|p| p.canonicalize().unwrap_or(p))
 }
 
+/// Fallback runtime folder when the app's data folder is unknown. Never the
+/// install folder (`%LOCALAPPDATA%\NEXUS`), which holds the bundled source.
 pub fn default_runtime_dir() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(std::env::temp_dir);
-    base.join("NEXUS").join("ai-town")
+    base.join("NEXUS-data").join("ai-town-runtime")
+}
+
+/// Canonical form even for a path that doesn't exist yet: canonicalize the
+/// nearest existing ancestor (Windows adds `\\?\`) and re-append the rest.
+fn canonical(p: &Path) -> PathBuf {
+    let mut existing = p.to_path_buf();
+    let mut rest = Vec::new();
+    while !existing.exists() {
+        match (existing.file_name().map(|n| n.to_os_string()), existing.parent()) {
+            (Some(name), Some(parent)) => {
+                rest.push(name);
+                existing = parent.to_path_buf();
+            }
+            _ => return p.to_path_buf(),
+        }
+    }
+    let mut out = existing.canonicalize().unwrap_or(existing);
+    for name in rest.into_iter().rev() {
+        out.push(name);
+    }
+    out
+}
+
+fn same_or_nested(a: &Path, b: &Path) -> bool {
+    let (a, b) = (canonical(a), canonical(b));
+    a.starts_with(&b) || b.starts_with(&a)
 }
 
 fn version(program: &str) -> Option<String> {
@@ -105,6 +133,15 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
 /// Copies the bundled source over the runtime folder (NEXUS's own code, no
 /// third-party download). node_modules and the backend data are kept.
 pub fn sync_source(source: &Path, runtime: &Path) -> Result<()> {
+    // The runtime copy is replaced on every start: it must never be (or
+    // contain) the bundled source, or the source would delete itself.
+    if same_or_nested(source, runtime) {
+        return Err(Error::Invalid(format!(
+            "AI Town runtime folder {} overlaps the bundled source {}",
+            runtime.display(),
+            source.display()
+        )));
+    }
     std::fs::create_dir_all(runtime)?;
     for entry in RUNTIME_ENTRIES {
         let from = source.join(entry);
@@ -408,6 +445,21 @@ mod tests {
     fn finds_the_source_tree_in_dev() {
         let src = locate_source(None).expect("ai-town/ in the repository");
         assert!(src.join("convex").join("nexus.ts").is_file());
+    }
+
+    #[test]
+    fn never_syncs_onto_the_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("ai-town");
+        std::fs::create_dir_all(src.join("convex")).unwrap();
+        std::fs::write(src.join("convex").join("nexus.ts"), "x").unwrap();
+        assert!(sync_source(&src, &src).is_err());
+        assert!(sync_source(&src, &src.join("runtime")).is_err());
+        assert!(sync_source(&src, dir.path()).is_err());
+        assert!(src.join("convex").join("nexus.ts").is_file(), "source untouched");
+        let rt = dir.path().join("runtime");
+        sync_source(&src, &rt).unwrap();
+        assert!(rt.join("convex").join("nexus.ts").is_file());
     }
 
     #[test]

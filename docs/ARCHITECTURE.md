@@ -359,7 +359,8 @@ upstream files are marked `NEXUS:` and new code lives in `ai-town/convex/nexus*.
 `ai-town/convex/aiTown/nexusInputs.ts`, `ai-town/data/nexus*.ts` and `ai-town/src/nexus/`.
 
 * **Runtime** (`pcc-world::aitown::runtime`): the backend part of `ai-town/` is copied
-  to `%LOCALAPPDATA%\NEXUS\ai-town`, `npm ci` runs after the user's consent, and
+  to the app's local data folder (`ai-town-runtime`, separate from the install folder
+  that holds the bundled source), `npm ci` runs after the user's consent, and
   `convex dev` runs in anonymous local mode (127.0.0.1, no Convex account). The
   frontend is built into `public/ai-town/`, served by NEXUS at `/ai-town/` and embedded
   in an iframe (same origin, strict CSP; PixiJS uses `@pixi/unsafe-eval` instead of eval).

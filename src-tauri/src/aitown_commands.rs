@@ -37,7 +37,13 @@ pub(crate) async fn runtime_of(app: &AppHandle, state: &AppState) -> SharedRunti
     let mut guard = shared.lock().await;
     if guard.is_none() {
         let resources = app.path().resource_dir().ok();
-        *guard = Some(AiTownRuntime::new(runtime::locate_source(resources.as_deref()), runtime::default_runtime_dir()));
+        // The app's own data folder, never the install folder that holds the bundled source.
+        let runtime_dir = app
+            .path()
+            .app_local_data_dir()
+            .map(|d| d.join("ai-town-runtime"))
+            .unwrap_or_else(|_| runtime::default_runtime_dir());
+        *guard = Some(AiTownRuntime::new(runtime::locate_source(resources.as_deref()), runtime_dir));
     }
     drop(guard);
     shared
