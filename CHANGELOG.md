@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Fix "AI World view crashed: Cannot read properties of undefined (reading
+  'appearance')": using a connection emitted an agent event carrying the connection,
+  which the UI added to the agent list. The engine now emits a connection event, and
+  the UI only accepts real agent payloads and repairs missing agent profiles.
+
 ## 0.4.1
 
 - Fix: in installed builds the AI Town runtime folder was the install folder's

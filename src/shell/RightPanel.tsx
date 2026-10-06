@@ -60,7 +60,7 @@ function Resizer() {
 }
 
 function Avatar({ agent }: { agent: Agent }) {
-  const tint = agent.profile.appearance?.tint ?? undefined;
+  const tint = agent.profile?.appearance?.tint ?? undefined;
   return (
     <span className={`chat-avatar${agent.kind === "central" ? " is-central" : ""}`} style={tint ? { borderColor: tint } : undefined} aria-hidden="true">
       {agent.kind === "central" ? <Sparkles size={14} /> : agent.name.slice(0, 1).toUpperCase()}

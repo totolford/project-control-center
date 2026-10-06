@@ -50,7 +50,7 @@ export function CustomizeCharacter({ agent, world, onClose, onSaved }: {
   onClose: () => void;
   onSaved?: (a: Agent) => void;
 }) {
-  const current = agent.profile.appearance ?? {};
+  const current = agent.profile?.appearance ?? {};
   const builtins = useMemo(() => builtinSkinChoices(), []);
   const [skin, setSkin] = useState<string>(current.skin ?? defaultSkin(agent));
   const [preset, setPreset] = useState<string | null>(current.preset ?? null);

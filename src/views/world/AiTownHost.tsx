@@ -205,7 +205,7 @@ export function AiTownHost({ world, compact, onCustomize, onSync, onAbout, onSto
               .filter((a) => a.status !== "retired")
               .map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.profile.appearance?.displayName || a.name}
+                  {a.profile?.appearance?.displayName || a.name}
                 </option>
               ))}
           </select>

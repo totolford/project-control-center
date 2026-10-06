@@ -55,6 +55,17 @@ describe("applyEvent", () => {
     expect(created.agents.map((a) => a.id)).toEqual(["central", "w1", "w2"]);
   });
 
+  it("ignores non-agent payloads on agent events and repairs missing profiles", () => {
+    const base = fromSnapshot(snapshot({ agents: [agent("central")] }));
+    // 0.4.x emitted AgentUpdated with a connection when it was used: it must not become an agent.
+    const connection = { id: "conn-1", name: "Pi", kind: "ssh", enabled: true };
+    expect(applyEvent(base, ev("AgentUpdated", connection, 0)).agents.map((a) => a.id)).toEqual(["central"]);
+    const partial = { ...agent("w9"), profile: undefined } as unknown as Agent;
+    const repaired = applyEvent(base, ev("AgentCreated", partial)).agents.find((a) => a.id === "w9");
+    expect(repaired?.profile?.skillsEnabled).toBe(true);
+    expect(repaired?.profile?.env).toEqual({});
+  });
+
   it("does not add AgentUpdated (id 0) to the timeline but adds persisted events", () => {
     const base = fromSnapshot(snapshot());
     const a = applyEvent(base, ev("AgentUpdated", agent("central"), 0));

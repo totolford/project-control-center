@@ -72,7 +72,7 @@ impl Engine {
         if let Ok(Some(mut c)) = self.store.get_connection(&id) {
             c.last_used = Some(pcc_core::now());
             if self.store.upsert_connection(&c).is_ok() {
-                self.emit(Event::new(EventKind::AgentUpdated, format!("{} used", c.name), json!(c)));
+                self.emit(Event::new(EventKind::ConnectionChanged, format!("{} used", c.name), json!(c)));
             }
         }
     }

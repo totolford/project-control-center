@@ -64,7 +64,7 @@ export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | nul
   return {
     info: snap.info,
     settings: snap.settings,
-    agents: snap.agents,
+    agents: snap.agents.map(normalizeAgent),
     tasks: snap.tasks,
     missions: snap.missions,
     connections: snap.connections,
@@ -117,6 +117,26 @@ function hasId(v: unknown): v is { id: string } {
   return isObject(v) && typeof v.id === "string";
 }
 
+/** An agent payload (not some other object carrying an id, e.g. a connection). */
+function isAgentPayload(v: unknown): v is Agent {
+  return isObject(v) && typeof v.id === "string" && (v.kind === "central" || v.kind === "worker") && typeof v.name === "string";
+}
+
+/** Fills a missing or partial profile so views never read `undefined.appearance`. */
+export function normalizeAgent(a: Agent): Agent {
+  const profile = isObject(a.profile) ? a.profile : undefined;
+  if (profile && isObject(profile.env) && typeof profile.skillsEnabled === "boolean") return a;
+  return {
+    ...a,
+    profile: {
+      effort: profile?.effort ?? null,
+      skillsEnabled: typeof profile?.skillsEnabled === "boolean" ? profile.skillsEnabled : true,
+      env: isObject(profile?.env) ? (profile.env as Record<string, string>) : {},
+      ...(profile ?? {}),
+    } as Agent["profile"],
+  };
+}
+
 function withTimeline(data: ProjectData, e: PccEvent): ProjectData {
   if (e.id <= 0 || data.timeline.some((x) => x.id === e.id)) return data;
   const timeline = [e, ...data.timeline];
@@ -140,7 +160,7 @@ export function applyEvent(data: ProjectData, e: PccEvent): ProjectData {
     case "AgentStarted":
     case "AgentStopped":
     case "AgentCrashed":
-      return hasId(p) ? { ...next, agents: upsertById(next.agents, p as Agent) } : next;
+      return isAgentPayload(p) ? { ...next, agents: upsertById(next.agents, normalizeAgent(p)) } : next;
     case "TaskCreated":
     case "TaskUpdated":
     case "TaskCompleted":
