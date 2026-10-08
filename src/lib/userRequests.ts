@@ -1,18 +1,19 @@
 // Text of user requests (agents waiting for a human), pure and tested.
 
 import type { UserRequest } from "./types";
+import { t } from "../i18n";
 
 export function requestHeadline(req: UserRequest, agent: string, connection: string | null): string {
-  const target = connection ?? req.connectionId ?? "the project";
+  const target = connection ?? req.connectionId ?? t("bar.req.theProject");
   switch (req.kind) {
     case "secret":
-      return `${agent} needs \`${req.key ?? "a secret"}\` for ${target}`;
+      return t("bar.req.secret", { agent, key: req.key ?? t("bar.req.aSecret"), target });
     case "ssh_key_setup":
-      return `${agent} needs SSH key access to ${target}`;
+      return t("bar.req.ssh", { agent, target });
     case "github_login":
-      return `${agent} needs you to sign in to GitHub`;
+      return t("bar.req.github", { agent });
     case "action":
-      return req.title || `${agent} needs you`;
+      return req.title || t("bar.req.action", { agent });
   }
 }
 

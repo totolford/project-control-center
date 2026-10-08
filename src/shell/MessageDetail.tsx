@@ -7,6 +7,7 @@ import type { Message } from "../lib/types";
 import { useUi } from "../state/ui";
 import { useAgents, useLiveMessages, useMissions, useStore, useTask } from "../store";
 import { Loading } from "../components/Common";
+import { useT } from "../i18n";
 
 /** The conversation between the two parties of a message (history + live). */
 function useConversation(msg: Message): Message[] | null {
@@ -55,35 +56,36 @@ function MessageDrawer({ msg, onClose }: { msg: Message; onClose: () => void }) 
   const openTask = useStore((s) => s.openTask);
   const openMessage = useUi((s) => s.openMessage);
   const conversation = useConversation(msg);
-  const name = (id: string) => (id === "user" ? "You" : (agents.find((a) => a.id === id)?.name ?? id));
+  const t = useT();
+  const name = (id: string) => (id === "user" ? t("bar.notif.you") : (agents.find((a) => a.id === id)?.name ?? id));
   const mission = msg.missionId ? missions.find((m) => m.id === msg.missionId) : undefined;
   const current = conversation?.find((m) => m.id === msg.id) ?? msg;
 
   return (
-    <aside className="overlay-drawer" aria-label="Message detail">
+    <aside className="overlay-drawer" aria-label={t("msg.detail")}>
       <div className="drawer-header">
         <strong>{name(msg.from)}</strong>
         <ArrowRight size={13} className="muted" />
         <strong className="grow">{name(msg.to)}</strong>
         <span className="chip tone-blue">{msg.kind}</span>
-        <button className="icon-btn" onClick={onClose} aria-label="Close message">
+        <button className="icon-btn" onClick={onClose} aria-label={t("msg.close")}>
           <X size={15} />
         </button>
       </div>
       <div className="drawer-body">
         <div className="muted small">
-          {formatDateTime(msg.createdAt)} · {current.deliveredAt ? `delivered ${formatClock(current.deliveredAt)}` : "queued"}
-          {mission && ` · mission: ${mission.title}`}
+          {formatDateTime(msg.createdAt)} · {current.deliveredAt ? t("msg.delivered", { time: formatClock(current.deliveredAt) }) : t("msg.queued")}
+          {mission && t("msg.mission", { title: mission.title })}
         </div>
         {task && (
           <button className="link-btn small" onClick={() => openTask(task.id)}>
-            Task: {task.title}
+            {t("msg.task", { title: task.title })}
           </button>
         )}
         {msg.subject && <div className="strong msg-detail-subject">{msg.subject}</div>}
         <div className="prewrap summary">{msg.body}</div>
         <div className="section-label">
-          Conversation · {name(msg.from)} ↔ {name(msg.to)}
+          {t("msg.conversation", { a: name(msg.from), b: name(msg.to) })}
         </div>
         {conversation === null ? (
           <Loading />
@@ -93,7 +95,7 @@ function MessageDrawer({ msg, onClose }: { msg: Message; onClose: () => void }) 
               <button key={m.id} className={`convo-item${m.id === msg.id ? " current" : ""}${m.from === msg.from ? " left" : " right"}`} onClick={() => openMessage(m)}>
                 <span className="muted small">
                   {name(m.from)} · {formatClock(m.createdAt)} · {m.kind}
-                  {!m.deliveredAt && " · queued"}
+                  {!m.deliveredAt && ` · ${t("msg.queued")}`}
                 </span>
                 <span className="convo-body">{m.subject ?? m.body}</span>
               </button>

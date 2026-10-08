@@ -18,6 +18,7 @@ use pcc_world::aitown::bridge::{self, AgentFacts};
 use pcc_world::aitown::runtime::{self, AiTownRuntime, RuntimeStatus};
 use pcc_world::aitown::upstream::{self, ApplyResult, UpstreamReport};
 use pcc_world::aitown::ConvexClient;
+use pcc_world::hq::{self, HqStore, RoomIndex, WorldConfig};
 
 use crate::state::AppState;
 
@@ -255,6 +256,66 @@ struct Slow {
     skills: Vec<String>,
 }
 
+/// NEXUS HQ as the bridge last read it, and the revision AI Town has.
+struct Building {
+    store: HqStore,
+    config: Option<WorldConfig>,
+    modified: Option<std::time::SystemTime>,
+    sent: Option<u64>,
+    /// When the last read / push failed (retried after a pause).
+    failed_at: Option<Instant>,
+}
+
+impl Building {
+    /// Re-reads world.json when it changed on disk (created on first use).
+    fn refresh(&mut self, orch: &Orchestrator) {
+        let modified = self.store.modified();
+        if self.config.is_some() && modified == self.modified {
+            return;
+        }
+        if self.failed_at.is_some_and(|t| t.elapsed() < Duration::from_secs(10)) {
+            return;
+        }
+        let read = orch_world(orch);
+        match read {
+            Ok(cfg) => {
+                self.config = Some(cfg);
+                self.modified = self.store.modified();
+                self.failed_at = None;
+            }
+            Err(e) => {
+                // Keep the last good building; the world keeps running.
+                tracing::warn!("AI World: cannot read world.json: {e}");
+                self.failed_at = Some(Instant::now());
+            }
+        }
+    }
+
+    fn rooms(&self) -> RoomIndex {
+        match &self.config {
+            Some(c) => RoomIndex::new(c),
+            None => RoomIndex::new(&WorldConfig::default()),
+        }
+    }
+}
+
+/// The project's building, created from the project's real facts on first use.
+fn orch_world(orch: &Orchestrator) -> pcc_core::Result<WorldConfig> {
+    let facts = hq::ProjectFacts {
+        connections: orch
+            .store
+            .list_connections()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| {
+                let kind = serde_json::to_value(c.kind).ok().and_then(|v| v.as_str().map(str::to_string));
+                (kind.unwrap_or_default(), c.name)
+            })
+            .collect(),
+    };
+    hq::ensure_world(orch.store.root(), &orch.store.settings().ai_world_language, &facts)
+}
+
 /// Real agent state → AI Town, once a second.
 fn spawn_bridge(
     orch: Orchestrator,
@@ -270,7 +331,31 @@ fn spawn_bridge(
         let mut last_bubble: HashMap<String, Instant> = HashMap::new();
         let mut messages_since = pcc_core::now();
         let mut slow = Slow { at: None, skills: vec![] };
+        let mut building = Building {
+            store: HqStore::for_project(orch.store.root()),
+            config: None,
+            modified: None,
+            sent: None,
+            failed_at: None,
+        };
         loop {
+            // NEXUS HQ: redraw the map in AI Town when the building changed.
+            building.refresh(&orch);
+            if let Some(cfg) = building.config.as_ref().filter(|c| building.sent != Some(c.revision)) {
+                let layout = hq::payload(cfg);
+                let revision = cfg.revision;
+                let (c, w) = (client.clone(), world_id.clone());
+                let pushed = tokio::task::spawn_blocking(move || {
+                    c.mutation("nexus:applyLayout", json!({ "worldId": w, "layout": layout }))
+                })
+                .await;
+                match pushed {
+                    Ok(Ok(_)) => building.sent = Some(revision),
+                    Ok(Err(e)) => tracing::debug!("AI World layout push failed: {e}"),
+                    Err(e) => tracing::debug!("AI World layout push failed: {e}"),
+                }
+            }
+            let rooms = building.rooms();
             // Drain log lines: thinking state and what agents say.
             loop {
                 match logs.try_recv() {
@@ -299,8 +384,8 @@ fn spawn_bridge(
                 }
                 slow.at = Some(Instant::now());
             }
-            let facts = collect_facts(&orch, &last_kind, &slow.skills);
-            let agents: Vec<_> = facts.iter().map(bridge::to_nexus_agent).collect();
+            let facts = collect_facts(&orch, &last_kind, &slow.skills, &rooms);
+            let agents: Vec<_> = facts.iter().map(|f| bridge::to_nexus_agent(f, &rooms)).collect();
             let messages: Vec<_> = orch
                 .store
                 .list_messages(None, 50)
@@ -351,7 +436,12 @@ fn spawn_bridge(
     })
 }
 
-fn collect_facts(orch: &Orchestrator, last_kind: &HashMap<String, LogKind>, skills: &[String]) -> Vec<AgentFacts> {
+pub(crate) fn collect_facts(
+    orch: &Orchestrator,
+    last_kind: &HashMap<String, LogKind>,
+    skills: &[String],
+    rooms: &RoomIndex,
+) -> Vec<AgentFacts> {
     let store = &orch.store;
     let agents = store.list_agents().unwrap_or_default();
     let tasks = store.list_tasks(&TaskFilter::default()).unwrap_or_default();
@@ -411,19 +501,16 @@ fn collect_facts(orch: &Orchestrator, last_kind: &HashMap<String, LogKind>, skil
                 parent_id: a.parent_agent.clone(),
                 provider: a.provider.clone(),
                 paused: a.paused_at.is_some(),
-                parent_zone: None,
+                parent_room: None,
                 id: a.id,
             }
         })
         .collect();
-    // Idle specialists gather near their lieutenant's building.
-    let lieutenant_zones: HashMap<String, String> = facts
-        .iter()
-        .filter(|f| f.rank == "lieutenant")
-        .map(|f| (f.id.clone(), bridge::home_zone(f).to_string()))
-        .collect();
+    // Idle specialists gather in their lieutenant's room.
+    let lieutenant_rooms: HashMap<String, String> =
+        facts.iter().filter(|f| f.rank == "lieutenant").map(|f| (f.id.clone(), bridge::home_room(f, rooms))).collect();
     for f in &mut facts {
-        f.parent_zone = f.parent_id.as_ref().and_then(|p| lieutenant_zones.get(p).cloned());
+        f.parent_room = f.parent_id.as_ref().and_then(|p| lieutenant_rooms.get(p).cloned());
     }
     facts
 }

@@ -77,7 +77,31 @@ fn gpus() -> Vec<String> {
                 .collect();
         }
     }
+    #[cfg(not(windows))]
+    {
+        // `lspci -mm`: slot "class" "vendor" "device" …
+        if let Ok(o) = std_command("lspci").arg("-mm").output() {
+            return gpus_from_lspci(&String::from_utf8_lossy(&o.stdout));
+        }
+    }
     vec![]
+}
+
+/// Display controllers from `lspci -mm` output.
+pub fn gpus_from_lspci(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|l| {
+            let q: Vec<&str> = l.split('"').skip(1).step_by(2).collect();
+            match q.as_slice() {
+                [class, vendor, device, ..]
+                    if class.contains("VGA") || class.contains("3D") || class.contains("Display") =>
+                {
+                    Some(format!("{vendor} {device}"))
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Default, PartialEq)]
@@ -255,6 +279,14 @@ fn toml_section_keys(text: &str, sections: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gpus_from_lspci_machine_output() {
+        let t = "00:02.0 \"VGA compatible controller\" \"Intel Corporation\" \"Iris Xe\" -r0c \"Dell\" \"x\"\n\
+                 00:14.0 \"USB controller\" \"Intel Corporation\" \"USB 3.2\"\n\
+                 01:00.0 \"3D controller\" \"NVIDIA Corporation\" \"AD107M\"\n";
+        assert_eq!(gpus_from_lspci(t), ["Intel Corporation Iris Xe", "NVIDIA Corporation AD107M"]);
+    }
 
     #[test]
     fn insights_from_manifests() {

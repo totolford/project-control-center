@@ -12,6 +12,7 @@ import { useStore } from "../../store";
 import { getBarText, setBarText } from "../UniversalBar";
 import { loadCheckpoint, saveCheckpoint } from "./checkpoint";
 import { RendererHealth, type HealthSignal } from "./monitor";
+import { t } from "../../i18n";
 
 export const HEARTBEAT_MS = 5000;
 const HEARTBEAT_TIMEOUT_MS = 8000;
@@ -254,7 +255,7 @@ export function useRendererHealth(): void {
         useHealth.setState({ watchdog: ack?.watchdog ?? null, lastBeatAt: Date.now() });
         if (ack?.recovered) {
           useHealth.setState({ recovered: ack.recovered });
-          toast.info("Interface recovered. The engine kept running: agents, missions and MCP were not interrupted.");
+          toast.info(t("health.recoveredToast"));
         }
       } catch {
         if (stopped) return;

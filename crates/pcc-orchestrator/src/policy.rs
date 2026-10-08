@@ -214,6 +214,15 @@ mod tests {
     use pcc_core::{AgentStatus, ConnectionStatus, Isolation};
     use serde_json::json;
 
+    /// A path in the test project, in this OS's syntax (`C:\P\…`, `/P/…`).
+    fn p(rel: &str) -> String {
+        if cfg!(windows) {
+            format!(r"C:\P{}", rel.replace('/', r"\"))
+        } else {
+            format!("/P{rel}")
+        }
+    }
+
     fn agent(perms: PermissionSet, conns: &[&str]) -> Agent {
         Agent {
             id: "movement".into(),
@@ -227,7 +236,7 @@ mod tests {
             permissions: perms,
             connections: conns.iter().map(|s| s.to_string()).collect(),
             isolation: Isolation::Worktree,
-            workdir: r"C:\P\.agent-project\worktrees\movement".into(),
+            workdir: p("/.agent-project/worktrees/movement"),
             branch: Some("agent/movement".into()),
             current_task: None,
             current_action: None,
@@ -273,7 +282,7 @@ mod tests {
         evaluate(
             &PolicyInput {
                 agent: a,
-                project_root: PathBuf::from(r"C:\P"),
+                project_root: PathBuf::from(p("")),
                 connections: conns,
                 has_rule: &has,
                 autonomy,
@@ -298,7 +307,7 @@ mod tests {
             evaluate(
                 &PolicyInput {
                     agent: a,
-                    project_root: PathBuf::from(r"C:\P"),
+                    project_root: PathBuf::from(p("")),
                     connections: &conns,
                     has_rule: &has,
                     autonomy: &AutonomySettings::default(),
@@ -328,8 +337,7 @@ mod tests {
     #[test]
     fn unlocked_and_auto_approve() {
         let a = agent(PermissionSet::preset(pcc_core::PowerLevel::Low), &[]);
-        let wt = r"C:\P\.agent-project\worktrees\movement";
-        let file = json!({"file_path": format!(r"{wt}\a.txt")});
+        let file = json!({"file_path": p("/.agent-project/worktrees/movement/a.txt")});
         // Locked: low power cannot write.
         assert!(matches!(eval(&a, &[], "Write", file.clone(), &[]), Decision::Deny(_)));
         // Unlocked: maximum preset applies.
@@ -353,7 +361,14 @@ mod tests {
         ));
         // Outside the workspace stays manual by default.
         assert!(matches!(
-            eval_with(&a, &[], "Write", json!({"file_path": r"C:\Windows\x"}), &[], &auto),
+            eval_with(
+                &a,
+                &[],
+                "Write",
+                json!({"file_path": if cfg!(windows) { r"C:\Windows\x" } else { "/etc/x" }}),
+                &[],
+                &auto
+            ),
             Decision::Ask { .. }
         ));
         // Auto-approve never applies while locked.
@@ -376,10 +391,10 @@ mod tests {
     #[test]
     fn worker_defaults() {
         let a = agent(PermissionSet::worker_default(), &[]);
-        let wt = r"C:\P\.agent-project\worktrees\movement";
-        assert_eq!(eval(&a, &[], "Edit", json!({"file_path": format!(r"{wt}\src\a.luau")}), &[]), Decision::Allow);
-        assert_eq!(eval(&a, &[], "Read", json!({"file_path": r"C:\P\README.md"}), &[]), Decision::Allow);
-        assert!(matches!(eval(&a, &[], "Write", json!({"file_path": r"C:\P\src\a.luau"}), &[]), Decision::Ask { .. }));
+        let wt = p("/.agent-project/worktrees/movement/src/a.luau");
+        assert_eq!(eval(&a, &[], "Edit", json!({"file_path": wt}), &[]), Decision::Allow);
+        assert_eq!(eval(&a, &[], "Read", json!({"file_path": p("/README.md")}), &[]), Decision::Allow);
+        assert!(matches!(eval(&a, &[], "Write", json!({"file_path": p("/src/a.luau")}), &[]), Decision::Ask { .. }));
         assert_eq!(eval(&a, &[], "Bash", json!({"command": "npm test"}), &[]), Decision::Allow);
         assert!(matches!(eval(&a, &[], "Bash", json!({"command": "rm -rf build"}), &[]), Decision::Ask { .. }));
         assert_eq!(eval(&a, &[], "Bash", json!({"command": "rm -rf build"}), &["Bash!rm -rf build"]), Decision::Allow);

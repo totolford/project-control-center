@@ -108,6 +108,18 @@ fn isolation_line(agent: &Agent) -> String {
     }
 }
 
+/// Central's autonomy level (its power preset) in one line.
+fn autonomy_line(a: &Agent) -> String {
+    let level = crate::central::autonomy_level(a);
+    let what = match level {
+        Some(pcc_core::PowerLevel::Low) => "read-only tools without asking; NEXUS does not push missions forward on its own — ask before changing anything",
+        Some(pcc_core::PowerLevel::Normal) | None => "act within your permissions; risky operations ask the user",
+        Some(pcc_core::PowerLevel::High) => "act autonomously within your permissions; drive missions to completion",
+        Some(pcc_core::PowerLevel::Maximum) => "maximum autonomy within the permissions the user granted; protections (destructive commands, paths outside the project, manual capabilities) still ask",
+    };
+    format!("Autonomy level: **{}** — {what}.", crate::central::autonomy_label(level))
+}
+
 fn hierarchy_section(ctx: &PromptContext<'_>) -> String {
     let agents = ctx.store.list_agents().unwrap_or_default();
     crate::hierarchy::prompt_section(&agents, ctx.agent, ctx.store.settings().max_hierarchy_depth)
@@ -138,6 +150,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
                         },
                     ),
                     ("isolation_line", isolation.into()),
+                    ("autonomy_line", autonomy_line(a)),
                     ("hierarchy_section", hierarchy_section(ctx)),
                     ("connections_section", connections_section(ctx)),
                     (

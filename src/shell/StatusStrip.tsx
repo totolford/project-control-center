@@ -3,6 +3,7 @@ import { isLive } from "../lib/labels";
 import { useUi } from "../state/ui";
 import { useAgents, useMissions, usePendingPermissions, useStore } from "../store";
 import { MissionProgress } from "../components/ProgressBar";
+import { useT } from "../i18n";
 
 /** One-line global status: mission progress, running agents, pending permissions, errors. */
 export function StatusStrip() {
@@ -12,6 +13,7 @@ export function StatusStrip() {
   const turnErrors = useStore((s) => s.turnErrors);
   const navigate = useStore((s) => s.navigate);
   const setDeferred = useUi((s) => s.setPermissionsDeferred);
+  const t = useT();
   const mission = [...missions].filter((m) => m.status === "active" || m.status === "planning").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const running = agents.filter((a) => isLive(a.status)).length;
   const errors = agents.filter((a) => a.status === "crashed" || turnErrors[a.id]).length;
@@ -24,17 +26,17 @@ export function StatusStrip() {
             <MissionProgress mission={mission} />
           </>
         ) : (
-          <span className="muted">No active mission</span>
+          <span className="muted">{t("shell.strip.noMission")}</span>
         )}
       </button>
       <span className="strip-item">
-        <span className={`dot tone-${running > 0 ? "green" : "grey"}`} /> {running} running
+        <span className={`dot tone-${running > 0 ? "green" : "grey"}`} /> {t("shell.strip.running", { count: running })}
       </span>
-      <button className={`strip-item${pending > 0 ? " warn" : ""}`} onClick={() => setDeferred(false)} disabled={pending === 0} title="Pending permission requests">
-        <ShieldAlert size={12} /> {pending} pending
+      <button className={`strip-item${pending > 0 ? " warn" : ""}`} onClick={() => setDeferred(false)} disabled={pending === 0} title={t("shell.strip.pendingTitle")}>
+        <ShieldAlert size={12} /> {t("shell.strip.pending", { count: pending })}
       </button>
-      <span className={`strip-item${errors > 0 ? " error" : ""}`} title="Agents crashed or whose last turn failed">
-        <CircleAlert size={12} /> {errors} {errors === 1 ? "error" : "errors"}
+      <span className={`strip-item${errors > 0 ? " error" : ""}`} title={t("shell.strip.errorsTitle")}>
+        <CircleAlert size={12} /> {t("shell.strip.errors", { count: errors })}
       </span>
     </div>
   );

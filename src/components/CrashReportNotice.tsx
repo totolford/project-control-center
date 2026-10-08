@@ -5,6 +5,7 @@ import { formatClock } from "../lib/format";
 import type { CrashReport } from "../lib/types";
 import { useStore } from "../store";
 import { Chip } from "./StatusBadge";
+import { useT } from "../i18n";
 
 /** Reports still to show: not acknowledged, engine or application side (the interface shows its own). */
 export function pendingReports(reports: CrashReport[]): CrashReport[] {
@@ -34,6 +35,7 @@ function List({ label, items }: { label: string; items: string[] }) {
  * (never over the recovery dialog), and acknowledged when dismissed. History stays on the Diagnostics page.
  */
 export function CrashReportNotice() {
+  const t = useT();
   const recoveryOpen = useStore((s) => Boolean(s.project?.recovery));
   const projectRoot = useStore((s) => s.project?.info.root ?? null);
   const [reports, setReports] = useState<CrashReport[]>([]);
@@ -70,14 +72,14 @@ export function CrashReportNotice() {
           <strong>{r.title}</strong>
           <span className="muted small">
             {r.component} · {formatClock(r.at)}
-            {reports.length > 1 ? ` · ${reports.length - 1} more` : ""}
+            {reports.length > 1 ? ` · ${t("comp.crash.more", { count: reports.length - 1 })}` : ""}
           </span>
         </div>
-        <Chip tone={SEVERITY_TONE[r.severity] ?? "grey"}>{r.severity}</Chip>
-        <button className="icon-btn" onClick={() => setOpen(!open)} aria-label={open ? "Hide details" : "Show details"} aria-expanded={open}>
+        <Chip tone={SEVERITY_TONE[r.severity] ?? "grey"}>{t.dynamic(`comp.severity.${r.severity}`, undefined, r.severity)}</Chip>
+        <button className="icon-btn" onClick={() => setOpen(!open)} aria-label={open ? t("comp.hideDetails") : t("comp.showDetails")} aria-expanded={open}>
           {open ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         </button>
-        <button className="icon-btn" onClick={dismiss} aria-label="Dismiss report">
+        <button className="icon-btn" onClick={dismiss} aria-label={t("comp.crash.dismiss")}>
           <X size={14} />
         </button>
       </div>
@@ -86,14 +88,14 @@ export function CrashReportNotice() {
         <dl className="kv crash-notice-facts small">
           {r.possibleCause && (
             <>
-              <dt>Possible cause</dt>
+              <dt>{t("comp.crash.cause")}</dt>
               <dd>{r.possibleCause}</dd>
             </>
           )}
-          <List label="Preserved" items={r.preserved} />
-          <List label="Restarted" items={r.restarted} />
-          <List label="Lost" items={r.lost} />
-          <List label="Details" items={r.details} />
+          <List label={t("comp.crash.preserved")} items={r.preserved} />
+          <List label={t("comp.crash.restarted")} items={r.restarted} />
+          <List label={t("comp.crash.lost")} items={r.lost} />
+          <List label={t("comp.details")} items={r.details} />
         </dl>
       )}
     </div>

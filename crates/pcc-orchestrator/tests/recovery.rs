@@ -157,6 +157,10 @@ async fn interrupted_mission_is_described_precisely_after_a_restart() {
     {
         let o = open_store(ProjectStore::create(tmp.path(), "Test").unwrap());
         let store = o.store.clone();
+        // The manual path (Resume / Inspect / Abandon): automatic resume off.
+        let mut s = store.settings();
+        s.mission_recovery.auto_resume_missions = false;
+        store.save_settings(s).unwrap();
         o.lock().await.create_mission("HANG while preparing the release", Some("Ship it".into())).unwrap();
         wait_for("Central's long call", || logged(&store, "central", LogKind::ToolUse, "npm run build")).await;
         central_pid = pid_of(&o, "central").await;
@@ -190,13 +194,15 @@ async fn interrupted_mission_is_described_precisely_after_a_restart() {
     assert_eq!(report.title, "NEXUS recovered from an unexpected failure");
     assert!(report.details.iter().any(|d| d.contains("src/release.txt")));
 
-    // Resume: Central gets the same precise brief.
+    // Resume: Central gets a verified resume report with the same facts.
     o.lock().await.resume_mission("M-0001").unwrap();
-    wait_for("recovery brief", || logged(&store, "central", LogKind::Input, "[RECOVERY] Mission M-0001")).await;
+    wait_for("resume report", || logged(&store, "central", LogKind::Input, "[NEXUS RESUME REPORT]")).await;
+    assert!(logged(&store, "central", LogKind::Input, "Mission: M-0001"));
     assert!(logged(&store, "central", LogKind::Input, "src/release.txt"));
+    assert!(logged(&store, "central", LogKind::Input, "Last action: central — Running Long build"));
     assert!(o.lock().await.recovery_state().interrupted_missions.is_empty());
     let cps = o.lock().await.mission_checkpoints("M-0001");
-    assert_eq!(cps[0].reason, "resumed after interruption");
+    assert!(cps[0].reason.starts_with("resumed after interruption"), "{}", cps[0].reason);
     let report = o.lock().await.crash_reports().into_iter().find(|r| r.component == "nexus").unwrap();
     assert!(report.restarted.iter().any(|r| r.contains("M-0001")), "{:?}", report.restarted);
     o.close().await;

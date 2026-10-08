@@ -2,6 +2,7 @@
 
 mod ai_commands;
 mod aitown_commands;
+mod central_commands;
 mod commands;
 mod control_commands;
 mod health_commands;
@@ -10,9 +11,12 @@ mod market_commands;
 mod mission_commands;
 mod ops_commands;
 mod permission_commands;
+mod platform_commands;
 mod recovery_commands;
 mod state;
+mod usage_commands;
 mod world_commands;
+mod world_hq_commands;
 
 use tauri::{Manager, RunEvent};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -60,6 +64,7 @@ pub fn run() {
             tracing::info!("{} {} starting", APP_NAME, app.package_info().version);
             app.manage(health_commands::HealthMonitor::new(&data_dir));
             recovery_commands::init(&data_dir);
+            pcc_ai::capability::set_store_dir(data_dir.clone());
             let state = AppState::new(data_dir, log_dir);
             AppState::apply_app_settings(&state.load_app_settings());
             app.manage(state);
@@ -68,6 +73,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            platform_commands::platform_info,
+            platform_commands::platform_capabilities,
+            platform_commands::open_system_terminal,
             ai_commands::ai_settings,
             ai_commands::ai_save_settings,
             ai_commands::ai_setup_state,
@@ -75,8 +83,8 @@ pub fn run() {
             ai_commands::ai_hardware,
             ai_commands::ai_recommend,
             ai_commands::ai_overview,
-            ai_commands::ai_runtime_command,
-            ai_commands::ai_runtime_winget,
+            ai_commands::ai_runtime_plan,
+            ai_commands::ai_runtime_install,
             ai_commands::ai_runtime_latest,
             ai_commands::ai_runtime_start,
             ai_commands::ai_runtime_stop,
@@ -151,6 +159,9 @@ pub fn run() {
             permission_commands::permission_history,
             permission_commands::rerequest_permission,
             permission_commands::journal,
+            usage_commands::usage_summary,
+            usage_commands::usage_records,
+            usage_commands::usage_prices,
             commands::memory_files,
             commands::save_memory,
             commands::consolidate_memory,
@@ -243,6 +254,11 @@ pub fn run() {
             aitown_commands::ai_town_upstream_check,
             aitown_commands::ai_town_upstream_apply,
             aitown_commands::set_agent_appearance,
+            world_hq_commands::ai_world_hq,
+            world_hq_commands::ai_world_hq_apply,
+            world_hq_commands::ai_world_hq_restore,
+            world_hq_commands::ai_world_hq_warning,
+            world_hq_commands::ai_world_hq_crash,
             world_commands::world_get,
             world_commands::world_providers,
             world_commands::world_analyze,
@@ -266,6 +282,12 @@ pub fn run() {
             health_commands::renderer_incidents,
             health_commands::watchdog_status,
             health_commands::diagnostics_resources,
+            central_commands::central_state,
+            central_commands::central_resume_report,
+            central_commands::central_resume,
+            central_commands::central_dismiss_auto_resume,
+            central_commands::ai_capability_reports,
+            central_commands::ai_capability_test,
             recovery_commands::process_tree,
             recovery_commands::recovery_state,
             recovery_commands::crash_reports,

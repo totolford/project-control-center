@@ -1,5 +1,6 @@
 // Visual state of an agent panel, derived only from real agent/task data.
 
+import { t, type MessageKey } from "../i18n";
 import type { Tone } from "../lib/labels";
 import type { Agent, Task } from "../lib/types";
 
@@ -18,20 +19,33 @@ export type VisualState =
   | "stopped"
   | "retired";
 
-export const VISUAL_STATE: Record<VisualState, { label: string; tone: Tone; pulse?: boolean }> = {
-  working: { label: "Working", tone: "green", pulse: true },
-  thinking: { label: "Thinking", tone: "green", pulse: true },
-  starting: { label: "Starting", tone: "amber" },
-  awaiting_permission: { label: "Awaiting permission", tone: "amber", pulse: true },
-  waiting: { label: "Waiting", tone: "blue" },
-  blocked: { label: "Blocked", tone: "orange" },
-  review: { label: "Review", tone: "accent" },
-  completed: { label: "Completed", tone: "green" },
-  error: { label: "Error", tone: "red" },
-  disconnected: { label: "Disconnected", tone: "orange" },
-  offline: { label: "Offline", tone: "grey" },
-  stopped: { label: "Stopped", tone: "grey" },
-  retired: { label: "Retired", tone: "dim" },
+type StateMeta = { readonly label: string; tone: Tone; pulse?: boolean };
+
+/** `label` is read at render time, in the current interface language. */
+function meta(key: MessageKey, tone: Tone, pulse?: boolean): StateMeta {
+  return {
+    tone,
+    ...(pulse ? { pulse } : {}),
+    get label() {
+      return t(key);
+    },
+  };
+}
+
+export const VISUAL_STATE: Record<VisualState, StateMeta> = {
+  working: meta("vstate.working", "green", true),
+  thinking: meta("vstate.thinking", "green", true),
+  starting: meta("vstate.starting", "amber"),
+  awaiting_permission: meta("vstate.awaiting_permission", "amber", true),
+  waiting: meta("vstate.waiting", "blue"),
+  blocked: meta("vstate.blocked", "orange"),
+  review: meta("vstate.review", "accent"),
+  completed: meta("vstate.completed", "green"),
+  error: meta("vstate.error", "red"),
+  disconnected: meta("vstate.disconnected", "orange"),
+  offline: meta("vstate.offline", "grey"),
+  stopped: meta("vstate.stopped", "grey"),
+  retired: meta("vstate.retired", "dim"),
 };
 
 export interface StateInputs {

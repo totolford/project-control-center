@@ -8,6 +8,7 @@ import type { PanelBodyProps } from "../workspace/registry";
 import { useUi } from "../state/ui";
 import { useAgents, useConnections } from "../store";
 import { ConnectionStatusBlock } from "./ConnectionPanel";
+import { useT } from "../i18n";
 
 function toolName(text: string): string {
   return parseToolUse(text).name;
@@ -16,12 +17,13 @@ function toolName(text: string): string {
 /** Recent tool calls an agent made through this connection's MCP server (`mcp__<connectionId>__*`). */
 const AgentStudioCalls = memo(function AgentStudioCalls({ agent, connectionId }: { agent: Agent; connectionId: string }) {
   const keep = useCallback((e: LogEntry) => e.kind === "tool_use" && mcpServerOf(toolName(e.text)) === connectionId, [connectionId]);
+  const t = useT();
   const calls = useFilteredLogs(agent.id, keep, 8, 500);
   return (
     <div className="studio-agent">
       <div className="small strong">{agent.name}</div>
       {calls.length === 0 ? (
-        <div className="muted small">No Studio tool calls in recent logs.</div>
+        <div className="muted small">{t("panel.studio.noCalls")}</div>
       ) : (
         <ul className="action-list">
           {[...calls].reverse().map((c) => {
@@ -40,6 +42,7 @@ const AgentStudioCalls = memo(function AgentStudioCalls({ agent, connectionId }:
 });
 
 export const RobloxStudioPanel = memo(function RobloxStudioPanel({ spec }: PanelBodyProps) {
+  const t = useT();
   const connections = useConnections();
   const agents = useAgents();
   const openDialog = useUi((s) => s.openDialog);
@@ -50,10 +53,10 @@ export const RobloxStudioPanel = memo(function RobloxStudioPanel({ spec }: Panel
   if (!conn) {
     return (
       <div className="empty">
-        <div className="empty-title">Roblox Studio · Not configured</div>
-        <div className="empty-body">Add a Roblox Studio connection (its MCP server) so agents can work in Studio.</div>
+        <div className="empty-title">{t("panel.studio.notConfigured")}</div>
+        <div className="empty-body">{t("panel.studio.addHint")}</div>
         <button className="btn btn-sm" onClick={() => openDialog({ type: "addConnection" })}>
-          <Plus size={12} /> Add connection
+          <Plus size={12} /> {t("panel.addConnection")}
         </button>
       </div>
     );
@@ -64,11 +67,11 @@ export const RobloxStudioPanel = memo(function RobloxStudioPanel({ spec }: Panel
       <ConnectionStatusBlock conn={conn} />
       <div className="studio-preview">
         <MonitorOff size={18} />
-        <span>Live Studio preview is unavailable (not exposed by the Studio MCP server).</span>
+        <span>{t("panel.studio.noPreview")}</span>
       </div>
-      <div className="section-label">Recent Studio tool calls</div>
+      <div className="section-label">{t("panel.studio.recent")}</div>
       {granted.length === 0 ? (
-        <div className="muted small">Grant this connection to an agent to let it use Studio.</div>
+        <div className="muted small">{t("panel.studio.grant")}</div>
       ) : (
         granted.map((a) => <AgentStudioCalls key={a.id} agent={a} connectionId={conn.id} />)
       )}

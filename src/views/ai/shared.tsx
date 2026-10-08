@@ -106,6 +106,7 @@ export function ConsentModal({
   children,
   confirmLabel,
   danger,
+  confirmDisabled,
   onConfirm,
   onClose,
 }: {
@@ -113,6 +114,8 @@ export function ConsentModal({
   children: ReactNode;
   confirmLabel: string;
   danger?: boolean;
+  /** The action cannot run (its reason is shown in the body). */
+  confirmDisabled?: boolean;
   onConfirm: () => Promise<unknown> | void;
   onClose: () => void;
 }) {
@@ -129,7 +132,7 @@ export function ConsentModal({
           </button>
           <button
             className={`btn ${danger ? "danger" : "primary"}`}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             onClick={async () => {
               setBusy(true);
               try {

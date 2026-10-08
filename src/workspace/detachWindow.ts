@@ -8,6 +8,7 @@ import { toast } from "../lib/toast";
 import { detachLabel, detachUrl } from "./detach";
 import { addPanelToActive, closePanel, type PanelNode, type PanelSpec } from "./layout";
 import { useWorkspace } from "./store";
+import { t } from "../i18n";
 
 const REDOCK_EVENT = "nexus://redock";
 
@@ -34,7 +35,7 @@ export async function detachPanel(panel: PanelNode, title: string): Promise<void
     useWorkspace.getState().update((ws) => closePanel(ws, panel.id));
     void win.once("tauri://destroyed", () => redock(label));
   } catch (e) {
-    toast.error(`Cannot open the panel in a window: ${errorMessage(e)}`);
+    toast.error(t("ws.detachFailed", { error: errorMessage(e) }));
   }
 }
 

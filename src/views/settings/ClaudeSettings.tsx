@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FolderOpen, LockOpen, LogIn, Save } from "lucide-react";
 import { api } from "../../lib/api";
 import { useLoad } from "../../lib/useLoad";
+import { saveAppSettings } from "../../i18n/prefs";
 import { attempt, run } from "../../lib/toast";
 import { useStore } from "../../store";
 import { openClaudeInTerminal } from "../../terminal/openInTerminal";
@@ -21,7 +22,7 @@ function ExecutableField({ onSaved }: { onSaved: () => void }) {
   const dirty = (app.data?.claudePath ?? "") !== path.trim();
   const save = async () => {
     setSaving(true);
-    const saved = await attempt(() => api.saveAppSettings({ claudePath: path.trim() || null }), "Claude Code executable saved");
+    const saved = await attempt(() => saveAppSettings({ claudePath: path.trim() || null }), "Claude Code executable saved");
     setSaving(false);
     if (saved) onSaved();
   };

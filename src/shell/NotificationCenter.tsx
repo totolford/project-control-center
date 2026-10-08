@@ -4,6 +4,7 @@ import { formatClock } from "../lib/format";
 import { useUi } from "../state/ui";
 import { useAgents, useStore, useTimeline } from "../store";
 import { deriveNotifications, unreadCount, type Notification } from "../workspace/notifications";
+import { useT } from "../i18n";
 
 export function NotificationCenter() {
   const timeline = useTimeline();
@@ -13,10 +14,11 @@ export function NotificationCenter() {
   const lastReadId = useUi((s) => s.lastReadId);
   const markRead = useUi((s) => s.markRead);
   const ref = useRef<HTMLDivElement>(null);
+  const t = useT();
   const list = useMemo(() => {
     const names = new Map(agents.map((a) => [a.id, a.name]));
-    return deriveNotifications(timeline, (id) => (id === "user" ? "You" : (names.get(id) ?? id)));
-  }, [timeline, agents]);
+    return deriveNotifications(timeline, (id) => (id === "user" ? t("bar.notif.you") : (names.get(id) ?? id)));
+  }, [timeline, agents, t]);
   const unread = unreadCount(list, lastReadId);
 
   useEffect(() => {
@@ -41,33 +43,33 @@ export function NotificationCenter() {
     const ui = useUi.getState();
     markRead(n.id);
     setOpen(false);
-    const t = n.target;
-    if (!t) return;
-    if (t.type === "permission") ui.setPermissionsDeferred(false);
-    else if (t.type === "request") ui.setRequestsCollapsed(false);
-    else if (t.type === "agent") openAgent(t.id);
-    else if (t.type === "task") openTask(t.id);
-    else if (t.type === "mission") navigate({ name: "missions" });
-    else ui.openMessage(t.message);
+    const target = n.target;
+    if (!target) return;
+    if (target.type === "permission") ui.setPermissionsDeferred(false);
+    else if (target.type === "request") ui.setRequestsCollapsed(false);
+    else if (target.type === "agent") openAgent(target.id);
+    else if (target.type === "task") openTask(target.id);
+    else if (target.type === "mission") navigate({ name: "missions" });
+    else ui.openMessage(target.message);
   };
 
   return (
     <div className="notif-anchor" ref={ref}>
-      <button className="icon-btn notif-btn" onClick={() => setOpen(!open)} aria-label={`Notifications (${unread} unread)`} title="Notifications">
+      <button className="icon-btn notif-btn" onClick={() => setOpen(!open)} aria-label={t("bar.notif.aria", { count: unread })} title={t("bar.notif.title")}>
         <Bell size={15} />
         {unread > 0 && <span className="notif-count">{unread > 99 ? "99+" : unread}</span>}
       </button>
       {open && (
-        <div className="notif-panel" role="dialog" aria-label="Notifications">
+        <div className="notif-panel" role="dialog" aria-label={t("bar.notif.title")}>
           <div className="notif-head">
-            <strong>Notifications</strong>
+            <strong>{t("bar.notif.title")}</strong>
             <span className="spacer" />
             <button className="btn btn-sm ghost" onClick={() => list[0] && markRead(list[0].id)} disabled={unread === 0}>
-              <CheckCheck size={12} /> Mark all read
+              <CheckCheck size={12} /> {t("bar.notif.markAll")}
             </button>
           </div>
           <div className="notif-list">
-            {list.length === 0 && <div className="muted small pad">Nothing yet. Events from agents appear here as they happen.</div>}
+            {list.length === 0 && <div className="muted small pad">{t("bar.notif.empty")}</div>}
             {list.map((n) => (
               <button key={n.id} className={`notif-item${n.id > lastReadId ? " unread" : ""}`} onClick={() => activate(n)}>
                 <span className={`dot tone-${n.tone}`} />

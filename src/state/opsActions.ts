@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
-import { ROLLBACK_NOTICE } from "../lib/compat";
+import { rollbackNotice } from "../lib/compat";
 import { attempt, run } from "../lib/toast";
 import type { Mission } from "../lib/types";
 import { showTerminal } from "../terminal/openInTerminal";
@@ -41,7 +41,7 @@ export async function missionForCentral(prompt: string, title?: string): Promise
 /** Restores a backup (the backend closes the project first) and returns to the welcome screen with an explanation. */
 export async function rollbackAndClose(root: string, backupId: string): Promise<boolean> {
   if (!(await run(() => api.rollbackProject(root, backupId), "Backup restored"))) return false;
-  useUi.getState().setWelcomeNotice(ROLLBACK_NOTICE);
+  useUi.getState().setWelcomeNotice(rollbackNotice());
   useStore.getState().closeProject();
   return true;
 }

@@ -74,7 +74,7 @@ pub struct SkillRoots {
 impl SkillRoots {
     /// `plugins` is the output of `claude plugin list --json`.
     pub fn new(project_root: Option<&Path>, plugins: &[Value]) -> SkillRoots {
-        let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
+        let home = pcc_platform::platform().home_dir();
         SkillRoots {
             user: home.map(|h| h.join(".claude").join("skills")),
             project: project_root.map(|p| p.join(".claude").join("skills")),

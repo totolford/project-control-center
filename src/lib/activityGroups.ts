@@ -2,21 +2,19 @@
 
 import type { Tone } from "./labels";
 import type { EventKind } from "./types";
+import { t } from "../i18n";
 
 export type ActivityGroup = "agents" | "tasks" | "messages" | "tools" | "permissions" | "mcp_skills" | "git" | "safety" | "requests" | "project";
 
-export const ACTIVITY_GROUPS: { key: ActivityGroup; label: string }[] = [
-  { key: "agents", label: "Agents" },
-  { key: "tasks", label: "Tasks & missions" },
-  { key: "messages", label: "Messages" },
-  { key: "tools", label: "Tools" },
-  { key: "permissions", label: "Permissions" },
-  { key: "mcp_skills", label: "MCP / skills" },
-  { key: "git", label: "Git" },
-  { key: "safety", label: "Safety" },
-  { key: "requests", label: "User requests" },
-  { key: "project", label: "Project" },
-];
+const GROUP_KEYS: ActivityGroup[] = ["agents", "tasks", "messages", "tools", "permissions", "mcp_skills", "git", "safety", "requests", "project"];
+
+/** Label read at render time, in the interface language. */
+export const ACTIVITY_GROUPS: { key: ActivityGroup; readonly label: string }[] = GROUP_KEYS.map((key) => ({
+  key,
+  get label() {
+    return t.dynamic(`activity.group.${key}`, undefined, key);
+  },
+}));
 
 const GROUP_OF: Record<EventKind, ActivityGroup> = {
   ProjectOpened: "project",

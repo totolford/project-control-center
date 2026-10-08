@@ -53,6 +53,10 @@ export type ChatItem =
       routed?: { from: string; for: string; path: string[] };
     }
   | { type: "task"; key: string; ts: string; taskId: string; title: string; text: string }
+  /** The verified recovery report NEXUS gives Central when a mission resumes (crates/pcc-orchestrator/src/resume.rs). */
+  | { type: "resume"; key: string; ts: string; report: ParsedResumeReport }
+  /** A reminder of NEXUS's mission supervisor (crates/pcc-orchestrator/src/central.rs). */
+  | { type: "supervisor"; key: string; ts: string; text: string }
   /** Any other input written to the session (instructions, nudges). */
   | { type: "prompt"; key: string; ts: string; text: string }
   | { type: "agent"; key: string; ts: string; text: string; nested: boolean }
@@ -62,6 +66,69 @@ export type ChatItem =
   | { type: "error"; key: string; ts: string; text: string }
   | { type: "status"; key: string; ts: string; text: string; warn: boolean }
   | { type: "stderr"; key: string; ts: string; lines: string[] };
+
+export const RESUME_MARKER = "[NEXUS RESUME REPORT]";
+export const SUPERVISOR_MARKER = "[NEXUS SUPERVISOR]";
+
+export interface ResumeFact {
+  label: string;
+  value: string;
+}
+
+export interface ParsedResumeReport {
+  /** "Control Center recovered.", "Resume requested: …", "Nothing to resume: …". */
+  headline: string;
+  /** NEXUS was interrupted (crash, kill, reboot) while the mission ran. */
+  recovered: boolean;
+  /** No running or interrupted mission was found. */
+  nothing: boolean;
+  facts: ResumeFact[];
+  /** Verified progress, when the report has it. */
+  progress: { verified: number; total: number } | null;
+  /** MCP servers of the `MCP:` fact (`server ✓ detail · …`). */
+  mcp: { server: string; state: "ok" | "failed" | "unknown"; detail: string }[];
+  /** The instruction NEXUS adds for Central. */
+  instruction: string;
+}
+
+/** `[NEXUS RESUME REPORT]` text (one `Key: value` fact per line, a blank line, the instruction) → parsed, or null. */
+export function parseResumeReport(text: string): ParsedResumeReport | null {
+  const body = text.trimStart();
+  if (!body.startsWith(RESUME_MARKER)) return null;
+  const lines = body.slice(RESUME_MARKER.length).replace(/^\r?\n/, "").split(/\r?\n/);
+  const headline = (lines.shift() ?? "").trim();
+  const facts: ResumeFact[] = [];
+  let i = 0;
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) break;
+    const sep = line.indexOf(": ");
+    if (sep > 0) facts.push({ label: line.slice(0, sep).trim(), value: line.slice(sep + 2).trim() });
+    else if (facts.length) facts[facts.length - 1].value += `\n${line.trim()}`;
+  }
+  const instruction = lines.slice(i).join("\n").trim();
+  const fact = (label: string) => facts.find((f) => f.label === label)?.value;
+  const pm = fact("Verified progress")?.match(/^(\d+)\/(\d+)/);
+  const mcpValue = fact("MCP");
+  const mcp =
+    mcpValue && !mcpValue.startsWith("none")
+      ? mcpValue.split(" · ").map((part) => {
+          const m = part.match(/^(.*?) ([✓✗?])(?: (.*))?$/);
+          if (!m) return { server: part, state: "unknown" as const, detail: "" };
+          const state = m[2] === "✓" ? ("ok" as const) : m[2] === "✗" ? ("failed" as const) : ("unknown" as const);
+          return { server: m[1], state, detail: m[3] ?? "" };
+        })
+      : [];
+  return {
+    headline,
+    recovered: headline.startsWith("Control Center recovered"),
+    nothing: headline.startsWith("Nothing to resume"),
+    facts,
+    progress: pm ? { verified: Number(pm[1]), total: Number(pm[2]) } : null,
+    mcp,
+    instruction,
+  };
+}
 
 const NESTED = "↳ ";
 const PART_SEPARATOR = "\n\n---\n\n";
@@ -177,6 +244,11 @@ export function parseInput(entry: LogEntry): ChatItem[] {
       }
       const text = body.join("\n").trim();
       if (message[2] === "user") return { type: "user", key, ts: entry.ts, text };
+      if (message[2] === "system") {
+        const report = parseResumeReport(text);
+        if (report) return { type: "resume", key, ts: entry.ts, report };
+        if (text.startsWith(SUPERVISOR_MARKER)) return { type: "supervisor", key, ts: entry.ts, text: text.slice(SUPERVISOR_MARKER.length).trim() };
+      }
       const routed = parseRouted(text);
       return { type: "incoming", key, ts: entry.ts, from: message[2], kind: message[3].trim(), subject, text, ...(routed ? { routed } : {}) };
     }

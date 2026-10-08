@@ -13,6 +13,7 @@ import { ACTIVITY_GROUPS, groupOf, kindTone, toolOf, type ActivityGroup } from "
 import { toggleIn } from "../lib/autonomy";
 import { groupByMission, matches, mergeEntries, SEVERITIES, toEntry, type ChainFilter, type JournalEntry, type MissionGroup, type Severity } from "./diagnostics/journal";
 import { callOptional, hasApi } from "./diagnostics/optional";
+import { rich, useT } from "../i18n";
 
 const SEVERITY_TONE: Record<Severity, "grey" | "amber" | "red"> = { info: "grey", warning: "amber", error: "red", critical: "red" };
 const SEVERITY_ICON = { info: Info, warning: TriangleAlert, error: CircleAlert, critical: OctagonAlert };
@@ -21,6 +22,7 @@ const PAGE = 500;
 const GROUP_PREVIEW = 60;
 
 export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () => void }) {
+  const t = useT();
   const agents = useAgents();
   const missions = useMissions();
   const openAgent = useStore((s) => s.openAgent);
@@ -29,38 +31,38 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
   const entry = toEntry(event);
   return (
-    <aside className="drawer" aria-label="Event detail">
+    <aside className="drawer" aria-label={t("act.detail")}>
       <div className="drawer-header">
         <Chip tone={kindTone(event.kind)}>{event.kind}</Chip>
         <h2 className="grow">#{event.id}</h2>
-        <button className="icon-btn" onClick={onClose} aria-label="Close event detail">
+        <button className="icon-btn" onClick={onClose} aria-label={t("act.closeDetail")}>
           <X size={16} />
         </button>
       </div>
       <div className="drawer-body">
         <p>{event.summary}</p>
         <dl className="kv">
-          <dt>Event</dt>
+          <dt>{t("act.event")}</dt>
           <dd className="mono">{entry.name}</dd>
-          <dt>Severity</dt>
+          <dt>{t("act.severity")}</dt>
           <dd>
-            <Chip tone={SEVERITY_TONE[entry.severity]}>{entry.severity}</Chip>
+            <Chip tone={SEVERITY_TONE[entry.severity]}>{t.dynamic(`act.sev.${entry.severity}`, undefined, entry.severity)}</Chip>
           </dd>
-          <dt>Source</dt>
+          <dt>{t("act.source")}</dt>
           <dd>{entry.source}</dd>
           {entry.pid !== null && (
             <>
-              <dt>Process</dt>
+              <dt>{t("act.process")}</dt>
               <dd className="mono">PID {entry.pid}</dd>
             </>
           )}
-          <dt>Time</dt>
+          <dt>{t("act.time")}</dt>
           <dd>
             {formatDateTime(event.ts)} ({formatClock(event.ts)})
           </dd>
           {event.agentId && (
             <>
-              <dt>Agent</dt>
+              <dt>{t("act.agent")}</dt>
               <dd>
                 <button className="link-btn" onClick={() => openAgent(event.agentId!)}>
                   {agentName(event.agentId)}
@@ -70,7 +72,7 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
           )}
           {event.taskId && (
             <>
-              <dt>Task</dt>
+              <dt>{t("act.task")}</dt>
               <dd>
                 <button className="link-btn mono" onClick={() => openTask(event.taskId!)}>
                   {event.taskId}
@@ -80,22 +82,20 @@ export function EventDetail({ event, onClose }: { event: PccEvent; onClose: () =
           )}
           {event.missionId && (
             <>
-              <dt>Mission</dt>
+              <dt>{t("act.mission")}</dt>
               <dd>{missions.find((m) => m.id === event.missionId)?.title ?? event.missionId}</dd>
             </>
           )}
         </dl>
         {event.kind === "ToolUsed" && toolOf(event.payload) && (
-          <p>
-            Tool <code>{toolOf(event.payload)}</code>
-          </p>
+          <p>{rich(t("act.tool"), { tool: <code>{toolOf(event.payload)}</code> })}</p>
         )}
         {event.kind === "AgentMessage" && (
           <button className="btn btn-sm" onClick={() => openMessage(event.payload as Message)}>
-            Open message
+            {t("act.openMessage")}
           </button>
         )}
-        <div className="section-label">Payload</div>
+        <div className="section-label">{t("act.payload")}</div>
         <JsonView value={event.payload} />
       </div>
     </aside>
@@ -126,10 +126,11 @@ async function loadPage(f: ChainFilter, before?: number): Promise<Loaded> {
 }
 
 function ChainRow({ e, agentName, selected, onSelect }: { e: JournalEntry; agentName: string | null; selected: boolean; onSelect: (e: JournalEntry) => void }) {
+  const t = useT();
   const Icon = SEVERITY_ICON[e.severity];
   return (
     <li className={`chain-row sev-${e.severity}${selected ? " selected" : ""}`}>
-      <button className="chain-btn" onClick={() => onSelect(e)} aria-label={`${e.severity} ${e.name}: ${e.summary}`}>
+      <button className="chain-btn" onClick={() => onSelect(e)} aria-label={`${t.dynamic(`act.sev.${e.severity}`, undefined, e.severity)} ${e.name}: ${e.summary}`}>
         <span className="chain-node" aria-hidden="true">
           <Icon size={11} />
         </span>
@@ -163,6 +164,7 @@ function GroupCard({
   selectedId: number | undefined;
   onSelect: (e: JournalEntry) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(true);
   const [all, setAll] = useState(false);
   const status = group.mission ? MISSION_STATUS[group.mission.status] : null;
@@ -182,17 +184,17 @@ function GroupCard({
         {(["critical", "error", "warning"] as Severity[]).map((s) =>
           group.counts[s] > 0 ? (
             <Chip key={s} tone={SEVERITY_TONE[s]}>
-              {group.counts[s]} {s}
+              {group.counts[s]} {t.dynamic(`act.sev.${s}`, undefined, s)}
             </Chip>
           ) : null,
         )}
-        <span className="muted small">{group.entries.length} events</span>
+        <span className="muted small">{t("act.events", { count: group.entries.length })}</span>
       </header>
       {open && (
         <>
           {!all && group.entries.length > GROUP_PREVIEW && (
             <button className="link-btn small chain-more" onClick={() => setAll(true)}>
-              Show {group.entries.length - GROUP_PREVIEW} earlier events
+              {t("act.showEarlier", { count: group.entries.length - GROUP_PREVIEW })}
             </button>
           )}
           <ol className="chain">
@@ -208,6 +210,7 @@ function GroupCard({
 
 /** Spec §47: the readable chain of real events (journal), grouped by mission, with filters. */
 export function Activity() {
+  const t = useT();
   const agents = useAgents();
   const missions = useMissions();
   const timeline = useTimeline();
@@ -274,30 +277,30 @@ export function Activity() {
   return (
     <div className="page page-fill">
       <PageHeader
-        title="Activity"
-        subtitle="The chain of real events in this project: who did what, in which mission and process, and what the engine recovered."
+        title={t("act.title")}
+        subtitle={t("act.subtitle")}
         actions={
-          <div className="seg-btns" role="group" aria-label="Display">
+          <div className="seg-btns" role="group" aria-label={t("act.display")}>
             <button className={`btn btn-sm${mode === "chain" ? " primary" : ""}`} aria-pressed={mode === "chain"} onClick={() => setMode("chain")}>
-              By mission
+              {t("act.byMission")}
             </button>
             <button className={`btn btn-sm${mode === "timeline" ? " primary" : ""}`} aria-pressed={mode === "timeline"} onClick={() => setMode("timeline")}>
-              Timeline
+              {t("act.timeline")}
             </button>
           </div>
         }
       />
       <div className="filters">
-        <select value={agentId} onChange={(e) => setAgentId(e.target.value)} aria-label="Filter by agent">
-          <option value="">All agents</option>
+        <select value={agentId} onChange={(e) => setAgentId(e.target.value)} aria-label={t("act.filterAgent")}>
+          <option value="">{t("act.allAgents")}</option>
           {agents.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
             </option>
           ))}
         </select>
-        <select value={missionId} onChange={(e) => setMissionId(e.target.value)} aria-label="Filter by mission">
-          <option value="">All missions</option>
+        <select value={missionId} onChange={(e) => setMissionId(e.target.value)} aria-label={t("act.filterMission")}>
+          <option value="">{t("act.allMissions")}</option>
           {missions.map((m) => (
             <option key={m.id} value={m.id}>
               {m.title}
@@ -306,27 +309,27 @@ export function Activity() {
         </select>
         {mode === "chain" ? (
           <>
-            <select value={severity} onChange={(e) => setSeverity(e.target.value as Severity | "")} aria-label="Minimum severity">
-              <option value="">All severities</option>
+            <select value={severity} onChange={(e) => setSeverity(e.target.value as Severity | "")} aria-label={t("act.minSeverity")}>
+              <option value="">{t("act.allSeverities")}</option>
               {SEVERITIES.slice(1).map((s) => (
                 <option key={s} value={s}>
-                  {s} and above
+                  {t("act.andAbove", { severity: t.dynamic(`act.sev.${s}`, undefined, s) })}
                 </option>
               ))}
             </select>
-            <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Filter by source">
-              <option value="">All sources</option>
+            <select value={source} onChange={(e) => setSource(e.target.value)} aria-label={t("act.filterSource")}>
+              <option value="">{t("act.allSources")}</option>
               {sources.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </select>
-            <input className="filter-search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search events, agents, PIDs…" aria-label="Search events" />
+            <input className="filter-search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("act.searchPlaceholder")} aria-label={t("act.search")} />
           </>
         ) : (
-          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Filter by kind">
-            <option value="">All kinds</option>
+          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label={t("act.filterKind")}>
+            <option value="">{t("act.allKinds")}</option>
             {kinds.map((k) => (
               <option key={k} value={k}>
                 {k}
@@ -335,7 +338,7 @@ export function Activity() {
           </select>
         )}
       </div>
-      <div className="chips-row activity-groups" role="group" aria-label="Event groups">
+      <div className="chips-row activity-groups" role="group" aria-label={t("act.groups")}>
         {ACTIVITY_GROUPS.map((g) => {
           const on = groups.includes(g.key);
           return (
@@ -346,7 +349,7 @@ export function Activity() {
         })}
         {groups.length > 0 && (
           <button className="link-btn small" onClick={() => setGroups([])}>
-            Show all
+            {t("act.showAll")}
           </button>
         )}
       </div>
@@ -361,25 +364,25 @@ export function Activity() {
             />
           ) : error ? (
             <div className="pad">
-              <Chip tone="red">Unavailable</Chip> <span className="muted">The event journal could not be read: {error}</span>
+              <Chip tone="red">{t("common.unavailable")}</Chip> <span className="muted">{t("act.journalError", { error })}</span>
             </div>
           ) : !loaded ? (
             <Loading />
           ) : (
             <div className="chain-scroll">
-              {chain.length === 0 && <div className="muted pad">No event matches these filters.</div>}
+              {chain.length === 0 && <div className="muted pad">{t("act.noMatch")}</div>}
               {chain.map((g) => (
                 <GroupCard key={g.missionId ?? "none"} group={g} agentName={agentName} selectedId={selected?.id} onSelect={setSelected} />
               ))}
               <div className="muted small pad center">
                 {loaded.hasMore ? (
                   <button className="link-btn small" onClick={() => void loadMore()} disabled={loadingMore}>
-                    {loadingMore ? "Loading…" : "Load older events"}
+                    {loadingMore ? t("common.loading") : t("act.loadOlder")}
                   </button>
                 ) : (
-                  "Beginning of the journal"
+                  t("act.journalStart")
                 )}
-                {loaded.via === "events" && <div>This engine has no journal API: severity, source and PID are derived from the event kind.</div>}
+                {loaded.via === "events" && <div>{t("act.noJournalApi")}</div>}
               </div>
             </div>
           )}

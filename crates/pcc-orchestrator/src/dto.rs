@@ -30,6 +30,10 @@ pub struct RecoveryInfo {
     /// How the previous NEXUS run ended.
     #[serde(default)]
     pub previous_run: Option<String>,
+    /// The mission NEXUS resumed by itself at open (Settings → Missions →
+    /// Recovery → auto-resume): shown as a notice, not a blocking dialog.
+    #[serde(default)]
+    pub auto_resumed: Option<crate::central::AutoResumeNotice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

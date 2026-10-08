@@ -45,7 +45,7 @@ pub fn definitions() -> Vec<Value> {
         ),
         tool(
             "add_mcp_from_command",
-            "Register an MCP server from a `claude mcp add ...` command line (as the user gave it). Values after -e / -H are stored in Windows Credential Manager. Reuses an equivalent server.",
+            "Register an MCP server from a `claude mcp add ...` command line (as the user gave it). Values after -e / -H are stored in the OS credential store (Windows Credential Manager, or the Secret Service on Linux). Reuses an equivalent server.",
             json!({"command": {"type": "string"}}),
             &["command"],
         ),

@@ -96,11 +96,28 @@ export interface Health {
   error: string | null;
 }
 
+/** What NEXUS would run to install / update / uninstall something (pcc_platform::install). */
+export interface InstallPlan {
+  action: string;
+  method: "winget" | "script" | "apt" | "manual";
+  program: string;
+  args: string[];
+  display: string;
+  /** Asks for the administrator password (pkexec) or UAC. */
+  elevated: boolean;
+  source: string;
+  available: boolean;
+  reason: string | null;
+  docsUrl: string | null;
+}
+
 export interface RuntimeStatus {
   id: RuntimeId;
   name: string;
   description: string;
   wingetId: string;
+  /** `winget (Ollama.Ollama)`, `official install script (…)`, `apt (…)`. */
+  installSource: string;
   installed: boolean;
   executable: string | null;
   version: string | null;
@@ -138,6 +155,8 @@ export interface AiOverview {
   setupAt: string | null;
   setupSkipped: boolean;
   winget: boolean;
+  /** How runtimes are installed on this OS: `winget`, `apt / official install scripts`. */
+  installer: string;
   runtimes: RuntimeStatus[];
   models: LocalModel[];
   modelsError: string | null;
@@ -154,6 +173,7 @@ export interface SetupState {
 export interface Benchmark {
   model: string;
   tokensPerSecond: number | null;
+  promptTokens: number | null;
   completionTokens: number | null;
   totalMs: number;
   sample: string;

@@ -5,12 +5,14 @@ import { attempt } from "../lib/toast";
 import type { Orphan, OrphanCleanup } from "../lib/types";
 import { useStore } from "../store";
 import { Spinner } from "./Common";
+import { useT } from "../i18n";
 
 /**
  * Processes left running by a previous NEXUS run. Nothing is stopped automatically: the user
  * chooses, and a cleanup goes through state check, reason, saved context, modified files, soft stop.
  */
 export function OrphanNotice() {
+  const t = useT();
   const projectRoot = useStore((s) => s.project?.info.root ?? null);
   const recoveryOpen = useStore((s) => Boolean(s.project?.recovery));
   const [orphans, setOrphans] = useState<Orphan[]>([]);
@@ -56,12 +58,10 @@ export function OrphanNotice() {
       <div className="crash-notice-head">
         <Skull size={16} aria-hidden />
         <div className="crash-notice-title">
-          <strong>
-            {orphans.length} process{orphans.length === 1 ? "" : "es"} left by a previous NEXUS run
-          </strong>
-          <span className="muted small">Still running without NEXUS. Nothing is stopped unless you ask.</span>
+          <strong>{t("comp.orphan.title", { count: orphans.length })}</strong>
+          <span className="muted small">{t("comp.orphan.sub")}</span>
         </div>
-        <button className="icon-btn" onClick={() => setHidden(true)} aria-label="Keep them running and hide">
+        <button className="icon-btn" onClick={() => setHidden(true)} aria-label={t("comp.orphan.hide")}>
           <X size={14} />
         </button>
       </div>
@@ -73,7 +73,7 @@ export function OrphanNotice() {
               <div className="muted">{o.reason}</div>
             </div>
             <button className="btn btn-sm danger" onClick={() => void cleanup(o)} disabled={busy !== null}>
-              {busy === o.pid ? <Spinner size={12} /> : null} Clean up
+              {busy === o.pid ? <Spinner size={12} /> : null} {t("comp.orphan.cleanup")}
             </button>
           </li>
         ))}

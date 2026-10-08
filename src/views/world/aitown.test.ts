@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AiTownStatus } from "../../lib/types";
 import {
-  BUILDING_TARGET,
   NEXUS_SKIN_PRESETS,
-  NEXUS_ZONES,
   builtinSkinChoices,
   hostPhase,
   isTrustedEvent,
@@ -16,16 +14,20 @@ import { buildSpritesheetData, detectLayout, frameRect, layoutErrors } from "./s
 
 describe("AI Town bridge messages", () => {
   it("accepts only well-formed messages from AI Town", () => {
-    expect(parseAiTownMessage({ source: "ai-town", type: "ready" })).toEqual({ source: "ai-town", type: "ready" });
+    expect(parseAiTownMessage({ source: "ai-town", type: "ready" })).toEqual({ source: "ai-town", type: "ready", safeMode: false });
+    expect(parseAiTownMessage({ source: "ai-town", type: "ready", safeMode: true })).toMatchObject({ safeMode: true });
     expect(parseAiTownMessage({ source: "ai-town", type: "talk", nexusId: "w1" })).toEqual({ source: "ai-town", type: "talk", nexusId: "w1" });
     expect(parseAiTownMessage({ source: "ai-town", type: "select", nexusId: null })).toEqual({ source: "ai-town", type: "select", nexusId: null });
-    expect(parseAiTownMessage({ source: "ai-town", type: "openBuilding", zone: "mcp_lab" })).toMatchObject({ zone: "mcp_lab" });
+    expect(parseAiTownMessage({ source: "ai-town", type: "openRoom", roomId: "mcp_lab" })).toEqual({ source: "ai-town", type: "openRoom", roomId: "mcp_lab" });
+    expect(parseAiTownMessage({ source: "ai-town", type: "camera", mode: "mission" })).toMatchObject({ mode: "mission" });
     expect(parseAiTownMessage({ source: "ai-town", type: "action", nexusId: "w1", action: "stop" })).toMatchObject({ action: "stop" });
     expect(parseAiTownMessage({ source: "ai-town", type: "camera", mode: "follow", nexusId: 3 })).toEqual({ source: "ai-town", type: "camera", mode: "follow", nexusId: undefined });
-    // Rejected: other sources, unknown types, zones, actions, missing ids.
+    // Rejected: other sources, unknown types, room ids, actions, missing ids.
     expect(parseAiTownMessage({ source: "nexus", type: "ready" })).toBeNull();
     expect(parseAiTownMessage({ source: "ai-town", type: "rm -rf" })).toBeNull();
-    expect(parseAiTownMessage({ source: "ai-town", type: "openBuilding", zone: "bank" })).toBeNull();
+    expect(parseAiTownMessage({ source: "ai-town", type: "openBuilding", zone: "skill_shop" })).toBeNull();
+    expect(parseAiTownMessage({ source: "ai-town", type: "openRoom", roomId: "../etc" })).toBeNull();
+    expect(parseAiTownMessage({ source: "ai-town", type: "camera", mode: "drone" })).toBeNull();
     expect(parseAiTownMessage({ source: "ai-town", type: "action", nexusId: "w1", action: "delete" })).toBeNull();
     expect(parseAiTownMessage({ source: "ai-town", type: "talk" })).toBeNull();
     expect(parseAiTownMessage("ready")).toBeNull();
@@ -39,11 +41,16 @@ describe("AI Town bridge messages", () => {
     expect(isTrustedEvent({ source: frame, origin: "http://tauri.localhost" }, null, "http://tauri.localhost")).toBe(false);
   });
 
-  it("every building leads somewhere real", () => {
-    expect(Object.keys(BUILDING_TARGET).sort()).toEqual(NEXUS_ZONES.map((z) => z.id).sort());
-    expect(BUILDING_TARGET.skill_shop).toEqual({ kind: "view", view: "market" });
-    expect(BUILDING_TARGET.central_hq).toEqual({ kind: "central" });
-    expect(BUILDING_TARGET.github_office).toEqual({ kind: "view", view: "github" });
+  it("passes repair warnings and crash contexts on, checked and bounded", () => {
+    const warning = { code: "AI_WORLD_CHARACTER_APPEARANCE_MISSING", nexusId: "w1", detail: "no appearance", repair: "Default appearance restored. World rendering continues." };
+    expect(parseAiTownMessage({ source: "ai-town", type: "warning", warning })).toEqual({ source: "ai-town", type: "warning", warning });
+    expect(parseAiTownMessage({ source: "ai-town", type: "warning", warning: { ...warning, code: "rm -rf" } })).toBeNull();
+    expect(parseAiTownMessage({ source: "ai-town", type: "warning", warning: { ...warning, detail: "x".repeat(900) } })).toMatchObject({ warning: { detail: "x".repeat(300) } });
+    const crash = parseAiTownMessage({ source: "ai-town", type: "crash", context: { message: "boom", characterId: "w1", roomId: "server_room" } });
+    expect(crash).toMatchObject({ type: "crash", context: { message: "boom", characterId: "w1" } });
+    expect(parseAiTownMessage({ source: "ai-town", type: "crash", context: { message: 3 } })).toMatchObject({ context: { message: "" } });
+    expect(parseAiTownMessage({ source: "ai-town", type: "crash", context: { blob: "x".repeat(30_000) } })).toBeNull();
+    expect(parseAiTownMessage({ source: "ai-town", type: "crash", context: [] })).toBeNull();
   });
 
   it("derives the page phase from the runtime status", () => {

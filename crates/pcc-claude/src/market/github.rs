@@ -26,9 +26,7 @@ pub struct GhCli {
 
 impl GhCli {
     pub fn find() -> Option<GhCli> {
-        let name = if cfg!(windows) { "gh.exe" } else { "gh" };
-        let path = std::env::var_os("PATH")?;
-        std::env::split_paths(&path).map(|d| d.join(name)).find(|p| p.is_file()).map(|exe| GhCli { exe })
+        pcc_platform::find_program(&pcc_platform::platform().executable_name("gh")).map(|exe| GhCli { exe })
     }
 
     fn run(&self, args: &[&str]) -> Result<Vec<u8>> {

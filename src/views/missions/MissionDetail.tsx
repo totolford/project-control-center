@@ -28,6 +28,8 @@ import {
   type SelectionItem,
 } from "./logic";
 import "./missions.css";
+import { UsageBlock } from "../usage/UsageBlock";
+import { t } from "../../i18n";
 
 const PRIORITIES: Priority[] = ["low", "normal", "high", "critical"];
 
@@ -275,6 +277,9 @@ export const MissionDetail = memo(function MissionDetail({ mission: m, compact =
           <div className="prewrap summary">{m.summary}</div>
         </>
       )}
+
+      <div className="section-label">{t("usage.block.title")}</div>
+      <UsageBlock missionId={m.id} />
 
       <div className="section-label">Recent activity</div>
       {events === null ? (

@@ -2,12 +2,20 @@ import { memo } from "react";
 import { CAPABILITIES } from "../lib/labels";
 import type { Access, Capability, PermissionSet } from "../lib/types";
 import { Segmented } from "./Tabs";
+import { lazyLabels, useT } from "../i18n";
 
-const ACCESS_OPTIONS: { value: Access; label: string; tone: string }[] = [
-  { value: "deny", label: "Deny", tone: "seg-red" },
-  { value: "ask", label: "Ask", tone: "seg-amber" },
-  { value: "allow", label: "Allow", tone: "seg-green" },
-];
+const ACCESS_LABEL = lazyLabels<Access>({ deny: "comp.access.deny", ask: "comp.access.ask", allow: "comp.access.allow" });
+
+const ACCESS_OPTIONS: { value: Access; readonly label: string; tone: string }[] = [
+  { value: "deny", tone: "seg-red" },
+  { value: "ask", tone: "seg-amber" },
+  { value: "allow", tone: "seg-green" },
+].map((o) => ({
+  ...(o as { value: Access; tone: string }),
+  get label() {
+    return ACCESS_LABEL[o.value as Access];
+  },
+}));
 
 const RANK: Record<Access, number> = { deny: 0, ask: 1, allow: 2 };
 
@@ -24,6 +32,7 @@ export const PermissionEditor = memo(function PermissionEditor({
   /** Optional upper bound; capabilities above it are flagged (the backend clamps them). */
   ceiling?: PermissionSet;
 }) {
+  const t = useT();
   const set = (cap: Capability, access: Access) => onChange({ ...value, [cap]: access });
   return (
     <div className="perm-grid">
@@ -36,8 +45,8 @@ export const PermissionEditor = memo(function PermissionEditor({
               <span className="perm-group">{c.group}</span>
               <span>{c.label}</span>
               {over && (
-                <span className="perm-over" title={`Exceeds project maximum (${ceiling?.[c.key]})`}>
-                  above max
+                <span className="perm-over" title={t("comp.access.overTitle", { max: ACCESS_LABEL[ceiling?.[c.key] ?? "deny"] })}>
+                  {t("comp.access.over")}
                 </span>
               )}
             </div>

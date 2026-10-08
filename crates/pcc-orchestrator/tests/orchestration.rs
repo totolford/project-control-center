@@ -63,6 +63,17 @@ async fn mission_runs_through_central_and_worker() {
     assert_eq!(builder.created_by, "central");
     assert!(builder.total_cost_usd > 0.0);
 
+    // Every turn was recorded as AI usage, attributed to agent, task and mission.
+    let usage = store.usage(&pcc_store::UsageFilter::default()).unwrap();
+    assert!(usage.iter().any(
+        |r| r.agent_id.as_deref() == Some("central") && r.category == pcc_core::usage::UsageCategory::CentralAgent
+    ));
+    let work: Vec<_> = usage.iter().filter(|r| r.agent_id.as_deref() == Some("builder")).collect();
+    assert!(work.iter().any(|r| r.mission_id.as_deref() == Some("M-0001") && r.task_id.is_some()));
+    // Per-turn deltas of the cumulative counters: 10 input / 5 output tokens each.
+    assert!(work.iter().all(|r| r.input_tokens == Some(10) && r.output_tokens == Some(5)));
+    assert!(work.iter().all(|r| r.model.as_deref() == Some("claude-fake-1") && r.provider == "claude"));
+
     // Messages really went through the sessions.
     let msgs = store.list_messages(None, 100).unwrap();
     assert!(msgs.iter().any(|m| m.to == "central" && m.body.contains("TASK-0001") && m.delivered_at.is_some()));

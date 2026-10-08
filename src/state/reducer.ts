@@ -70,7 +70,8 @@ export function fromSnapshot(snap: ProjectSnapshot, previous?: ProjectData | nul
     connections: snap.connections,
     pendingPermissions: snap.pendingPermissions,
     repo: snap.repo,
-    recovery: snap.recovery && (snap.recovery.agents.length > 0 || (snap.recovery.missions?.length ?? 0) > 0) ? snap.recovery : null,
+    recovery:
+      snap.recovery && (snap.recovery.agents.length > 0 || (snap.recovery.missions?.length ?? 0) > 0 || snap.recovery.autoResumed) ? snap.recovery : null,
     timeline: keep?.timeline ?? [],
     liveMessages: keep?.liveMessages ?? [],
     memoryVersion: keep?.memoryVersion ?? 0,

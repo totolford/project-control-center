@@ -15,9 +15,10 @@ export const aiApi = {
   hardware: (refresh = false) => invoke<A.HardwareInfo>("ai_hardware", { refresh }),
   recommend: (refresh = false) => invoke<A.Recommendation>("ai_recommend", { refresh }),
   overview: () => invoke<A.AiOverview>("ai_overview"),
-  /** The exact winget command, shown before the user confirms. */
-  runtimeCommand: (runtime: string, action: string) => invoke<string>("ai_runtime_command", { runtime, action }),
-  runtimeWinget: (runtime: string, action: string) => invoke<string>("ai_runtime_winget", { runtime, action }),
+  /** The exact installer command (winget, install script or apt), shown before the user confirms. */
+  runtimePlan: (runtime: string, action: string) => invoke<A.InstallPlan>("ai_runtime_plan", { runtime, action }),
+  /** Runs the plan shown by `runtimePlan` (recomputed by the backend). */
+  runtimeInstall: (runtime: string, action: string) => invoke<string>("ai_runtime_install", { runtime, action }),
   runtimeLatest: (runtime: string) => invoke<string | null>("ai_runtime_latest", { runtime }),
   runtimeStart: (runtime: string, modelPath?: string) =>
     invoke<A.Health>("ai_runtime_start", { runtime, baseUrl: null, modelPath: modelPath ?? null }),

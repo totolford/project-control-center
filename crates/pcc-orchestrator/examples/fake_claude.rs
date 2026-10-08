@@ -13,6 +13,9 @@
 //!   "TRY CREATE" / "CREATE DEEP" try to create agents; "ROUTE TO <id>" sends a message.
 //! * Recovery: "HANG" starts a long Bash call that never returns (a turn stuck in a
 //!   tool); "SILENT" goes quiet mid-turn without any tool running.
+//! * Central execution: "REPORT BLOCKED" calls report_mission_blocked; "MCP FAIL" makes an
+//!   MCP tool call that fails; a NEXUS resume report or supervisor reminder is acknowledged;
+//!   "IDLE" ends the turn without doing anything (a stalling Central).
 
 use std::collections::VecDeque;
 use std::io::{self, BufRead, Write};
@@ -119,6 +122,9 @@ fn main() {
                 } else if text.contains("SILENT") {
                     io.say("thinking");
                     std::thread::sleep(std::time::Duration::from_secs(600));
+                } else if text.contains("IDLE") && !text.contains("REPORT BLOCKED") {
+                    // A Central that ends its turns without doing anything.
+                    io.say("ack");
                 } else if text.contains("PLAN HIERARCHY") {
                     let d = io.tool("record_delegation_decision", json!({"needs_sub_agents": true, "reason": "Lua is a separate domain",
                         "children": [{"name": "Lua Lead", "role": "Lua domain lead", "rank": "lieutenant", "reason": "many files"}]}));
@@ -190,6 +196,22 @@ fn main() {
                         json!({"kind": "ssh", "host": "192.168.1.157", "user": "PI"}),
                     );
                     io.say(&format!("again: {again}"));
+                } else if text.contains("REPORT BLOCKED") {
+                    let r = io.tool(
+                        "report_mission_blocked",
+                        json!({"reason": "Which Roblox place should I publish to?", "needs": "user_decision"}),
+                    );
+                    io.say(&format!("blocked: {r}"));
+                } else if text.contains("MCP FAIL") {
+                    io.out(json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "toolu_mcp", "name": "mcp__roblox__get_script",
+                        "input": {"path": "Workspace.Script"}}]}, "parent_tool_use_id": null}));
+                    io.out(json!({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_mcp",
+                        "content": "MCP error -32000: Connection closed", "is_error": true}]}, "parent_tool_use_id": null}));
+                    io.say("the MCP call failed");
+                } else if text.contains("[NEXUS RESUME REPORT]") {
+                    io.say("Resuming from the verified point.");
+                } else if text.contains("[NEXUS SUPERVISOR]") {
+                    io.say("noted");
                 } else if text.contains("DANGER") {
                     let decision = io.permission("rm -rf build");
                     io.say(&format!("dangerous command {decision}"));
@@ -199,9 +221,15 @@ fn main() {
                 } else {
                     io.say("ack");
                 }
-                io.out(json!({"type": "result", "subtype": "success", "is_error": false, "result": "ok", "total_cost_usd": 0.01, "num_turns": 1, "duration_ms": 5}));
+                // Like Claude Code: modelUsage is cumulative for the process.
+                let n = TURNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                io.out(json!({"type": "result", "subtype": "success", "is_error": false, "result": "ok", "total_cost_usd": 0.01, "num_turns": 1, "duration_ms": 5,
+                    "modelUsage": {"claude-fake-1": {"inputTokens": 10 * n, "outputTokens": 5 * n, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0}}}));
             }
             _ => {}
         }
     }
 }
+
+/// Turns answered by this process.
+static TURNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

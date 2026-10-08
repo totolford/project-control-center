@@ -67,10 +67,11 @@ pub fn unexpected_exit_report(pid: u32, started_at: &str, running: &[ProcessReco
     let mut r = CrashReport::new("nexus", "NEXUS recovered from an unexpected failure");
     r.severity = pcc_recovery::Severity::Error;
     r.what_happened = format!("The previous NEXUS instance (pid {pid}, started {started_at}) ended without closing.");
-    r.possible_cause =
-        "The application crashed, was killed (Task Manager, taskkill) or Windows restarted or lost power. \
-NEXUS does not know which; the application log of the previous run may say more."
-            .into();
+    r.possible_cause = format!(
+        "The application crashed, was killed ({}) or {} or lost power. NEXUS does not know which; the application log of the previous run may say more.",
+        pcc_platform::external_kill_examples(),
+        pcc_platform::os_restart_phrase()
+    );
     r.preserved.push("Projects, missions, tasks and agent conversations (stored on disk)".into());
     r.preserved.push("Uncommitted files on disk (nothing is reverted)".into());
     for p in running {

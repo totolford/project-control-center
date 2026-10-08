@@ -9,8 +9,10 @@ import { addPanelToActive } from "../workspace/layout";
 import type { PanelBodyProps } from "../workspace/registry";
 import { useWorkspace } from "../workspace/store";
 import { sortAgents, useAgentNumber, useAgents, useConnections, useStore } from "../store";
+import { useT } from "../i18n";
 
 const AgentCard = memo(function AgentCard({ agent }: { agent: Agent }) {
+  const t = useT();
   const state = useVisualState(agent.id);
   const number = useAgentNumber(agent.id);
   const provider = useProviderName(agent.provider);
@@ -22,14 +24,14 @@ const AgentCard = memo(function AgentCard({ agent }: { agent: Agent }) {
   return (
     <div className={`agent-card${agent.status === "retired" ? " retired" : ""}`}>
       <div className="row">
-        <button className="link-btn strong grow ellipsis" onClick={() => openAgent(agent.id)} title="Open details">
+        <button className="link-btn strong grow ellipsis" onClick={() => openAgent(agent.id)} title={t("panel.swarm.openDetails")}>
           <span className="muted">#{number}</span> {agent.name}
         </button>
         {agent.kind === "worker" && (
           <button
             className="icon-btn"
-            title="Show terminal in this tab"
-            aria-label={`Show ${agent.name} terminal`}
+            title={t("panel.swarm.showTerminal")}
+            aria-label={t("panel.swarm.showTerminalOf", { name: agent.name })}
             onClick={() => update((ws) => addPanelToActive(ws, { type: "AgentTerminal", agentId: agent.id }))}
           >
             <SquareTerminal size={13} />
@@ -58,9 +60,10 @@ const AgentCard = memo(function AgentCard({ agent }: { agent: Agent }) {
 });
 
 export function SwarmGrid() {
+  const t = useT();
   const agents = useAgents();
   const sorted = useMemo(() => sortAgents(agents), [agents]);
-  if (sorted.length === 0) return <div className="muted pad">No agents yet. Start a mission and Central will assemble the swarm.</div>;
+  if (sorted.length === 0) return <div className="muted pad">{t("panel.swarm.empty")}</div>;
   return (
     <div className="swarm-grid">
       {sorted.map((a) => (

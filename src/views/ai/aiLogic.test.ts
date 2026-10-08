@@ -109,6 +109,7 @@ const runtime = (id: RuntimeStatus["id"], over: Partial<RuntimeStatus>): Runtime
   name: id,
   description: "",
   wingetId: "",
+  installSource: "",
   installed: false,
   executable: null,
   version: null,

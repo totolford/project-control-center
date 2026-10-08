@@ -30,7 +30,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "appimage", "deb"],
     "publisher": "NEXUS contributors",
     "copyright": "MIT License",
     "category": "DeveloperTool",
@@ -59,6 +59,15 @@
         "installMode": "currentUser",
         "installerIcon": "icons/icon.ico",
         "displayLanguageSelector": false
+      }
+    },
+    "linux": {
+      "deb": {
+        "section": "devel",
+        "recommends": ["git"]
+      },
+      "appimage": {
+        "bundleMediaFramework": false
       }
     }
   },

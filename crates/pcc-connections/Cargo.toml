@@ -8,14 +8,26 @@ license.workspace = true
 [dependencies]
 pcc-core.workspace = true
 pcc-claude.workspace = true
+pcc-platform.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-keyring = { version = "3", features = ["windows-native"] }
 ureq = "2"
 sysinfo = { version = "0.37", default-features = false, features = ["system", "disk"] }
+
+# The OS credential store: Windows Credential Manager; on Linux the Secret
+# Service (GNOME Keyring, KWallet) over D-Bus. `vendored` builds libdbus from
+# source, so no -dev package is needed to compile.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(not(any(windows, target_os = "linux")))'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
 
 [dev-dependencies]
 tempfile.workspace = true

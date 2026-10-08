@@ -4,6 +4,8 @@ import { App } from "./App";
 import { parseDetachHash } from "./workspace/detach";
 import { PanelWindow } from "./workspace/PanelWindow";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { restoreRememberedLocale } from "./i18n/prefs";
+import { t } from "./i18n";
 import "@xterm/xterm/css/xterm.css";
 import "./styles/base.css";
 import "./styles/views.css";
@@ -24,11 +26,12 @@ import "./styles/ai.css";
 
 // Detached panel windows load the same bundle with `#panel=<spec>`.
 const detached = parseDetachHash(window.location.hash);
+restoreRememberedLocale();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {detached ? (
-      <ErrorBoundary label="Detached panel">
+      <ErrorBoundary label={t("comp.boundary.detached")}>
         <PanelWindow spec={detached} />
       </ErrorBoundary>
     ) : (

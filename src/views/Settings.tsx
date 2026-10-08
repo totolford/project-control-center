@@ -12,6 +12,8 @@ import { ClaudeSettings } from "./settings/ClaudeSettings";
 import { SessionDefaults } from "./settings/SessionDefaults";
 import { ImprovementSettings } from "./settings/ImprovementSettings";
 import { CompatibilitySettings } from "./settings/CompatibilitySettings";
+import { LanguageSettings } from "./settings/LanguageSettings";
+import { CentralAutonomySettings, RecoverySettings } from "./settings/RecoverySettings";
 
 function numberOrNull(v: string): number | null {
   const n = Number(v);
@@ -75,6 +77,10 @@ export function Settings() {
         }
       />
 
+      <div id="settings-language">
+        <LanguageSettings draft={draft} set={set} />
+      </div>
+
       <div id="settings-claude">
         <ClaudeSettings />
       </div>
@@ -130,6 +136,14 @@ export function Settings() {
           <p className="muted small">Upper bound no worker can exceed, even when Central requests more.</p>
           <PermissionEditor value={draft.maxWorkerPermissions} onChange={(v) => set("maxWorkerPermissions", v)} />
         </Section>
+      </div>
+
+      <div id="settings-autonomy">
+        <CentralAutonomySettings />
+      </div>
+
+      <div id="settings-recovery">
+        <RecoverySettings value={draft.missionRecovery} onChange={(v) => set("missionRecovery", v)} />
       </div>
 
       <div id="settings-improvement">

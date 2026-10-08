@@ -10,6 +10,7 @@ import { AddPanelMenu } from "./AddPanelMenu";
 import { PanelFrame } from "./PanelFrame";
 import { NodeView } from "./SplitView";
 import { useDrag, useWorkspace } from "./store";
+import { useT } from "../i18n";
 
 const EDGE = 0.25;
 
@@ -71,13 +72,14 @@ function useEscapeRestores() {
 
 /** Swarm actions shown on the right of the center tab bar while a tiling tab is active. */
 export function SwarmTools() {
+  const t = useT();
   const railOpen = useUi((s) => s.railOpen);
   const toggleRail = useUi((s) => s.toggleRail);
   return (
     <>
       <AddAgentMenu />
       <AddPanelMenu />
-      <button className="icon-btn" onClick={toggleRail} title={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"} aria-label={railOpen ? "Hide CONTROL rail" : "Show CONTROL rail"}>
+      <button className="icon-btn" onClick={toggleRail} title={railOpen ? t("ws.hideRail") : t("ws.showRail")} aria-label={railOpen ? t("ws.hideRail") : t("ws.showRail")}>
         {railOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
       </button>
     </>
@@ -86,14 +88,15 @@ export function SwarmTools() {
 
 /** The Swarm view: the tiling layout of the active tab (the tab bar is the center's, see AppShell). */
 export function SwarmWorkspace() {
+  const t = useT();
   const ws = useWorkspace((s) => s.ws);
   const railOpen = useUi((s) => s.railOpen);
   usePanelDragging();
   useEscapeRestores();
-  if (!ws) return <Loading text="Loading workspace…" />;
+  if (!ws) return <Loading text={t("ws.loading")} />;
   // While a window tab is active (the center is switching), show the first tiling tab.
   const active = getActiveTab(ws);
-  const tab = active.view ? (ws.tabs.find((t) => !t.view) ?? active) : active;
+  const tab = active.view ? (ws.tabs.find((x) => !x.view) ?? active) : active;
   const maximized = tab.maximized ? listPanels(tab.root).find((p) => p.id === tab.maximized) : undefined;
   return (
     <div className="swarm">
@@ -109,7 +112,7 @@ export function SwarmWorkspace() {
             </div>
           ) : (
             <div className="swarm-empty">
-              <div className="muted small pad">This tab is empty — add panels with “+ Panel”. The swarm right now:</div>
+              <div className="muted small pad">{t("ws.emptyTab")}</div>
               <SwarmGrid />
             </div>
           )}

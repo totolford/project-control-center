@@ -15,6 +15,7 @@ import { sendToAgent } from "../views/central/send";
 import { CommandCard } from "./command/CommandCard";
 import { SLASH_COMMANDS, parseBar, suggest, type BarAction, type Suggestion } from "./command/slash";
 import { StatusStrip } from "./StatusStrip";
+import { t, type MessageKey } from "../i18n";
 
 /** Text of the bar, shared so the Ctrl+K palette and shortcuts can prefill and focus it. */
 const useBarText = create<{ text: string; focusTick: number; setText: (t: string) => void; focus: (t?: string) => void }>((set) => ({
@@ -33,24 +34,24 @@ export function focusCommandBar(text?: string): void {
 export const getBarText = (): string => useBarText.getState().text;
 export const setBarText = (text: string): void => useBarText.getState().setText(text);
 
-const MODE: Record<string, { icon: typeof Sparkles; label: string }> = {
-  ask: { icon: Sparkles, label: "Ask Central" },
-  interpret: { icon: ScanSearch, label: "Explain command" },
-  slash: { icon: Slash, label: "Command" },
+const MODE: Record<string, { icon: typeof Sparkles; label: MessageKey }> = {
+  ask: { icon: Sparkles, label: "bar.mode.ask" },
+  interpret: { icon: ScanSearch, label: "bar.mode.interpret" },
+  slash: { icon: Slash, label: "bar.mode.slash" },
 };
 
 function hintFor(action: BarAction): string {
   switch (action.type) {
     case "empty":
-      return "Type / for commands · Ctrl+K search";
+      return t("bar.hint.empty");
     case "ask":
-      return "Enter asks Central";
+      return t("bar.hint.ask");
     case "interpret":
-      return "Enter explains it, nothing runs yet · Alt+Enter asks Central";
+      return t("bar.hint.interpret");
     case "unknown":
-      return `Unknown command — try ${SLASH_COMMANDS.map((c) => `/${c.name}`).join(" ")}`;
+      return t("bar.hint.unknown", { list: SLASH_COMMANDS.map((c) => `/${c.name}`).join(" ") });
     default:
-      return "Enter runs the command";
+      return t("bar.hint.run");
   }
 }
 
@@ -151,7 +152,7 @@ export function UniversalBar() {
       case "agent":
         if (!a.agentId) {
           if (a.query) {
-            toast.error(`No agent named “${a.query}”.`);
+            toast.error(t("bar.noAgent", { name: a.query }));
             return false;
           }
           s.navigate({ name: "agents" });
@@ -176,13 +177,13 @@ export function UniversalBar() {
         return true;
       case "model":
         if (!a.agentId || !a.model) {
-          toast.error("Usage: /model <agent> <model>, e.g. /model Central opus");
+          toast.error(t("bar.modelUsage"));
           return false;
         }
         if (readOnly) return false;
         return (await setAgentModel({ id: a.agentId, name: agentName(a.agentId) }, a.model === "default" ? null : a.model)) !== undefined;
       case "unknown":
-        toast.error(`Unknown command /${a.command}. Commands: ${SLASH_COMMANDS.map((c) => `/${c.name}`).join(", ")}`);
+        toast.error(t("bar.unknownCommand", { command: a.command, list: SLASH_COMMANDS.map((c) => `/${c.name}`).join(", ") }));
         return false;
     }
   };
@@ -217,7 +218,7 @@ export function UniversalBar() {
         </div>
       )}
       {open && (
-        <ul className="ubar-suggest" id={listId} role="listbox" aria-label="Suggestions">
+        <ul className="ubar-suggest" id={listId} role="listbox" aria-label={t("bar.suggestions")}>
           {suggestions.map((s, i) => (
             <li
               key={s.insert}
@@ -240,20 +241,20 @@ export function UniversalBar() {
       )}
       <div className="ubar-row">
         <div className={`ubar-field mode-${action.type}`}>
-          <span className="ubar-mode" title={mode.label}>
+          <span className="ubar-mode" title={t(mode.label)}>
             <ModeIcon size={13} aria-hidden="true" />
-            <span className="ubar-mode-label">{mode.label}</span>
+            <span className="ubar-mode-label">{t(mode.label)}</span>
           </span>
           <textarea
             ref={inputRef}
             className="ubar-input"
             rows={1}
             value={text}
-            placeholder={readOnly ? "Compatibility mode: read-only — / commands still work" : "Ask Central Agent…  ( / for commands )"}
+            placeholder={readOnly ? t("bar.placeholderReadOnly") : t("bar.placeholder")}
             spellCheck={action.type === "ask" || action.type === "empty"}
             disabled={busy}
             role="combobox"
-            aria-label="Ask Central Agent or type a command"
+            aria-label={t("bar.aria")}
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             aria-autocomplete="list"
@@ -281,7 +282,7 @@ export function UniversalBar() {
             }}
           />
           <span className="ubar-hint muted small">{hintFor(action)}</span>
-          <button className="btn btn-sm primary" onClick={() => void submit(false)} disabled={busy || blocked || action.type === "empty"} aria-label="Run">
+          <button className="btn btn-sm primary" onClick={() => void submit(false)} disabled={busy || blocked || action.type === "empty"} aria-label={t("bar.run")}>
             {busy ? <Spinner size={11} /> : <CornerDownLeft size={12} />}
           </button>
         </div>

@@ -1,5 +1,6 @@
 // Command Center logic over the CLI tree parsed from `claude --help` (pure, tested).
 
+import { quotePosix } from "./platform";
 import type { CliCommand, CliOption } from "./types";
 
 export function commandKey(c: Pick<CliCommand, "path">): string {
@@ -118,4 +119,14 @@ export function quotePs(arg: string): string {
 export function powershellLine(exe: string | null, args: string[]): string {
   const head = exe ? `& ${quotePs(exe)}` : "claude";
   return [head, ...args.map(quotePs)].join(" ");
+}
+
+/** POSIX shell (bash, zsh) line that runs Claude Code with `args`. */
+export function posixLine(exe: string | null, args: string[]): string {
+  return [exe ? quotePosix(exe) : "claude", ...args.map(quotePosix)].join(" ");
+}
+
+/** The Claude Code line for the default shell of this OS. */
+export function claudeShellLine(exe: string | null, args: string[], windows: boolean): string {
+  return windows ? powershellLine(exe, args) : posixLine(exe, args);
 }

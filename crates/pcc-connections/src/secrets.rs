@@ -1,5 +1,7 @@
-//! Secrets live in the Windows Credential Manager (DPAPI protected, per user).
-//! The project only stores an opaque `credentialRef`.
+//! Secrets live in the OS credential store: Windows Credential Manager (DPAPI
+//! protected, per user) or, on Linux, the Secret Service (GNOME Keyring,
+//! KWallet). The project only stores an opaque `credentialRef`; secrets never
+//! reach `.agent-project/`, logs, mission files or chat history.
 
 use std::collections::BTreeMap;
 
@@ -15,20 +17,44 @@ fn entry(reference: &str) -> Result<keyring::Entry> {
     if !reference.starts_with("pcc-") {
         return Err(Error::invalid("invalid credential reference"));
     }
-    keyring::Entry::new(SERVICE, reference).map_err(|e| Error::Storage(format!("credential store: {e}")))
+    keyring::Entry::new(SERVICE, reference).map_err(|e| Error::Storage(store_error("credential store", &e)))
+}
+
+/// A readable message, with what to do when Linux has no Secret Service.
+fn store_error(what: &str, e: &keyring::Error) -> String {
+    let unreachable = matches!(e, keyring::Error::PlatformFailure(_) | keyring::Error::NoStorageAccess(_));
+    if cfg!(target_os = "linux") && unreachable {
+        format!(
+            "{what}: no Secret Service is available ({e}). Start or unlock GNOME Keyring or KWallet \
+             (on a server or WSL: install gnome-keyring and run it in the session); NEXUS never stores secrets in files"
+        )
+    } else {
+        format!("{what}: {e}")
+    }
+}
+
+/// Whether the credential store answers: `Ok(name)` or the reason it cannot
+/// be used. Reads one entry that never exists; nothing is written.
+pub fn store_status() -> std::result::Result<String, String> {
+    let name = pcc_platform::credential_store_name().to_string();
+    let e = keyring::Entry::new(SERVICE, "pcc-probe-never-stored").map_err(|e| store_error(&name, &e))?;
+    match e.get_password() {
+        Ok(_) | Err(keyring::Error::NoEntry) => Ok(name),
+        Err(e) => Err(store_error(&name, &e)),
+    }
 }
 
 /// Stores a map of named secret values (e.g. `password`, `API_KEY`).
 pub fn set(reference: &str, values: &BTreeMap<String, String>) -> Result<()> {
     let json = serde_json::to_string(values)?;
-    entry(reference)?.set_password(&json).map_err(|e| Error::Storage(format!("cannot save secret: {e}")))
+    entry(reference)?.set_password(&json).map_err(|e| Error::Storage(store_error("cannot save secret", &e)))
 }
 
 pub fn get(reference: &str) -> Result<BTreeMap<String, String>> {
     match entry(reference)?.get_password() {
         Ok(json) => Ok(serde_json::from_str(&json)?),
         Err(keyring::Error::NoEntry) => Ok(BTreeMap::new()),
-        Err(e) => Err(Error::Storage(format!("cannot read secret: {e}"))),
+        Err(e) => Err(Error::Storage(store_error("cannot read secret", &e))),
     }
 }
 
@@ -40,7 +66,7 @@ pub fn keys(reference: &str) -> Result<Vec<String>> {
 pub fn delete(reference: &str) -> Result<()> {
     match entry(reference)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(Error::Storage(format!("cannot delete secret: {e}"))),
+        Err(e) => Err(Error::Storage(store_error("cannot delete secret", &e))),
     }
 }
 
@@ -65,6 +91,14 @@ mod tests {
     #[test]
     fn rejects_foreign_refs() {
         assert!(get("some-other-app").is_err());
+    }
+
+    #[test]
+    fn store_status_names_the_store_or_explains() {
+        match store_status() {
+            Ok(name) => assert_eq!(name, pcc_platform::credential_store_name()),
+            Err(why) => assert!(!why.is_empty()),
+        }
     }
 
     #[cfg(windows)]

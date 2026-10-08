@@ -29,6 +29,7 @@ pcc-pty.workspace = true
 pcc-world.workspace = true
 pcc-recovery.workspace = true
 pcc-ai.workspace = true
+pcc-platform.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

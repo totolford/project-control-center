@@ -305,4 +305,42 @@ mod tests {
         m.close(&info.id).unwrap();
         assert!(m.list().is_empty());
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn runs_a_real_shell() {
+        let m = PtyManager::new();
+        let (tx, rx) = mpsc::channel();
+        let info = m
+            .spawn(
+                PtySpec {
+                    title: "sh".into(),
+                    program: "sh".into(),
+                    args: vec![],
+                    cwd: std::env::temp_dir().to_string_lossy().into_owned(),
+                    env: vec![],
+                    cols: 100,
+                    rows: 30,
+                },
+                move |e| {
+                    let _ = tx.send(e);
+                },
+            )
+            .unwrap();
+        m.write(&info.id, "echo nexus-pty-$((40+2))\n").unwrap();
+        let mut seen = String::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while !seen.contains("nexus-pty-42") && std::time::Instant::now() < deadline {
+            if let Ok(PtyEvent::Data { data, .. }) = rx.recv_timeout(Duration::from_millis(200)) {
+                seen.push_str(&data);
+            }
+        }
+        assert!(seen.contains("nexus-pty-42"), "{seen}");
+        m.resize(&info.id, 120, 40).unwrap();
+        m.write(&info.id, "exit\n").unwrap();
+        let exited = (0..100).any(|_| matches!(rx.recv_timeout(Duration::from_millis(200)), Ok(PtyEvent::Exit { .. })));
+        assert!(exited);
+        m.close(&info.id).unwrap();
+        assert!(m.list().is_empty());
+    }
 }

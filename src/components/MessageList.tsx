@@ -7,6 +7,7 @@ import type { Agent, Message } from "../lib/types";
 import { useAgents, useLiveMessages, useStore } from "../store";
 import { useUi } from "../state/ui";
 import { Loading } from "./Common";
+import { t as translate, useT } from "../i18n";
 
 /** Message history for one agent (or all when null), merged with live AgentMessage events. Newest first. */
 export function useMessages(agentId: string | null, limit: number): { messages: Message[]; loading: boolean } {
@@ -32,7 +33,7 @@ export function useMessages(agentId: string | null, limit: number): { messages: 
 }
 
 function nameOf(agents: Agent[], id: string): string {
-  if (id === "user") return "You";
+  if (id === "user") return translate("bar.notif.you");
   return agents.find((a) => a.id === id)?.name ?? id;
 }
 
@@ -54,6 +55,7 @@ const Party = memo(function Party({ id, agents }: { id: string; agents: Agent[] 
 });
 
 export const MessageRow = memo(function MessageRow({ msg, agents, compact }: { msg: Message; agents: Agent[]; compact?: boolean }) {
+  const t = useT();
   const openTask = useStore((s) => s.openTask);
   const openMessage = useUi((s) => s.openMessage);
   return (
@@ -69,7 +71,7 @@ export const MessageRow = memo(function MessageRow({ msg, agents, compact }: { m
         <Party id={msg.from} agents={agents} />
         <ArrowRight size={12} className="muted" />
         <Party id={msg.to} agents={agents} />
-        <span className={`chip tone-${msg.kind === "request" ? "accent" : msg.kind === "response" ? "green" : "grey"}`}>{msg.kind}</span>
+        <span className={`chip tone-${msg.kind === "request" ? "accent" : msg.kind === "response" ? "green" : "grey"}`}>{t.dynamic(`comp.msg.kind.${msg.kind}`, undefined, msg.kind)}</span>
         {msg.subject && <span className="msg-subject">{msg.subject}</span>}
         <span className="spacer" />
         {msg.taskId && (
@@ -80,15 +82,15 @@ export const MessageRow = memo(function MessageRow({ msg, agents, compact }: { m
               openTask(msg.taskId!);
             }}
           >
-            task
+            {t("comp.msg.task")}
           </button>
         )}
         {msg.deliveredAt ? (
-          <span className="muted small" title={`Delivered ${formatClock(msg.deliveredAt)}`}>
-            delivered
+          <span className="muted small" title={t("comp.msg.deliveredAt", { time: formatClock(msg.deliveredAt) })}>
+            {t("comp.msg.delivered")}
           </span>
         ) : (
-          <span className="chip tone-amber">queued</span>
+          <span className="chip tone-amber">{t("msg.queued")}</span>
         )}
       </div>
       <div className={`msg-body${compact ? " clamp" : ""}`}>{msg.body}</div>
@@ -97,10 +99,11 @@ export const MessageRow = memo(function MessageRow({ msg, agents, compact }: { m
 });
 
 export function MessageList({ agentId, limit, compact }: { agentId: string | null; limit: number; compact?: boolean }) {
+  const t = useT();
   const { messages, loading } = useMessages(agentId, limit);
   const agents = useAgents();
   if (loading) return <Loading />;
-  if (messages.length === 0) return <div className="muted small pad">No messages yet.</div>;
+  if (messages.length === 0) return <div className="muted small pad">{t("comp.msg.empty")}</div>;
   return (
     <div className="msg-list">
       {messages.map((m) => (

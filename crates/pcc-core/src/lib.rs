@@ -11,6 +11,7 @@ pub mod model;
 pub mod permission_records;
 pub mod permissions;
 pub mod tasks;
+pub mod usage;
 
 pub use ai::{AiEngineSettings, AiMode, EngineProvider, FallbackPolicy, LocalEndpoint};
 pub use error::{Error, Result};

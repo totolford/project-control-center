@@ -31,6 +31,7 @@ import { AiWorldView } from "../views/world";
 import { MarketView } from "../views/market/MarketView";
 import { DiagnosticsView } from "../views/diagnostics/DiagnosticsView";
 import { AiEnginesView } from "../views/ai/AiEnginesView";
+import { UsageView } from "../views/usage/UsageView";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { FolderContext } from "../state/opsActions";
 import { NewAgentDialog } from "../views/agent/NewAgentDialog";
@@ -47,6 +48,7 @@ import { RightPanel } from "./RightPanel";
 import { UniversalBar } from "./UniversalBar";
 import { ALL_NAV_ITEMS } from "./navItems";
 import "../styles/shell-03.css";
+import { t } from "../i18n";
 
 const VIEWS: Record<Exclude<ViewName, "agent">, ComponentType> = {
   swarm: SwarmWorkspace,
@@ -72,11 +74,12 @@ const VIEWS: Record<Exclude<ViewName, "agent">, ComponentType> = {
   market: MarketView,
   diagnostics: DiagnosticsView,
   ai: AiEnginesView,
+  usage: UsageView,
   settings: Settings,
 };
 
 function viewLabel(name: ViewName): string {
-  return name === "agent" ? "Agent" : (ALL_NAV_ITEMS.find((i) => i.name === name)?.label ?? name);
+  return name === "agent" ? t("nav.agent") : (ALL_NAV_ITEMS.find((i) => i.name === name)?.label ?? name);
 }
 
 /** Views that manage their own scrolling (tiling, terminals). */
@@ -121,17 +124,17 @@ export function AppShell({ onCloseProject, onFolder }: { onCloseProject: () => v
           <div className="shell-center">
             <WorkspaceTabs>{view.name === "swarm" && <SwarmTools />}</WorkspaceTabs>
             <main className={`shell-main${FILL_VIEWS.includes(view.name) ? " is-fill" : ""}`}>
-              <ErrorBoundary label={`${viewLabel(view.name)} view`} resetKey={`${view.name}:${view.agentId ?? ""}`}>
+              <ErrorBoundary label={t("shell.view", { name: viewLabel(view.name) })} resetKey={`${view.name}:${view.agentId ?? ""}`}>
                 {main}
               </ErrorBoundary>
             </main>
           </div>
-          <ErrorBoundary label="Right panel" compact>
+          <ErrorBoundary label={t("shell.rightPanel")} compact>
             <RightPanel />
           </ErrorBoundary>
         </div>
         <div className="shell-bottom">
-          <ErrorBoundary label="Command bar" compact>
+          <ErrorBoundary label={t("shell.commandBar")} compact>
             <UniversalBar />
           </ErrorBoundary>
         </div>

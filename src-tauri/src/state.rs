@@ -97,11 +97,22 @@ pub struct AppState {
 }
 
 /// Application-level settings (not tied to a project).
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
     /// Explicit Claude Code executable; auto-detected when empty.
     pub claude_path: Option<String>,
+    /// Interface language: "auto" (follow the system) or a locale ("fr", "en"). A project may
+    /// override it.
+    pub ui_language: String,
+    /// AI World language, same values as `ui_language`.
+    pub ai_world_language: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self { claude_path: None, ui_language: "auto".into(), ai_world_language: "auto".into() }
+    }
 }
 
 impl AppState {

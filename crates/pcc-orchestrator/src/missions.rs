@@ -621,6 +621,15 @@ pub async fn ask_claude(claude: &Path, model: &str, prompt: String, timeout: Dur
             if err.trim().is_empty() { "no output".into() } else { truncate(&err, 300) }
         ))
     })?;
+    // A failed answer may still have used tokens: record before checking.
+    for r in pcc_core::usage::oneshot_records(
+        &v,
+        pcc_core::usage::UsageCategory::BackgroundAgent,
+        "mission-analysis",
+        Some(model),
+    ) {
+        pcc_core::usage::record(r);
+    }
     if v.get("is_error").and_then(Value::as_bool).unwrap_or(false) {
         return Err(Error::Process(v.get("result").and_then(Value::as_str).unwrap_or("Claude Code error").into()));
     }

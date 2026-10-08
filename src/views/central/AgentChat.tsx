@@ -31,6 +31,7 @@ import { useAgent, useAgents, useReadOnly } from "../../store";
 import { Loading, Spinner } from "../../components/Common";
 import { buildChat, type ChatItem, type StepCategory, type StepSummary, type ToolStep } from "./chatModel";
 import { sendToAgent } from "./send";
+import { MissionBlocks, ResumeCard, SupervisorNote, useCentralState } from "./CentralCards";
 import { useChatLogs } from "./useChatLogs";
 
 const STEP_ICON: Record<StepCategory, LucideIcon> = {
@@ -198,6 +199,10 @@ const ChatRow = memo(function ChatRow({ item, pending, agentName, nameOf }: { it
           </details>
         </div>
       );
+    case "resume":
+      return <ResumeCard report={item.report} ts={item.ts} />;
+    case "supervisor":
+      return <SupervisorNote text={item.text} ts={item.ts} />;
     case "prompt":
       return (
         <details className="chat-details chat-prompt">
@@ -245,6 +250,12 @@ const ChatRow = memo(function ChatRow({ item, pending, agentName, nameOf }: { it
       );
   }
 });
+
+/** Missions Central declared blocked on the user (report_mission_blocked). */
+function CentralBlocks() {
+  const state = useCentralState();
+  return <MissionBlocks blocks={state?.blocks ?? []} />;
+}
 
 /** Message box under a chat: Enter sends, Shift+Enter adds a line. */
 export function ChatComposer({ agentId, placeholder, disabled, hint }: { agentId: string; placeholder: string; disabled?: string; hint?: string }) {
@@ -372,6 +383,7 @@ export function AgentChat({ agentId, placeholder }: { agentId: string; placehold
           <ArrowDown size={12} /> Latest
         </button>
       )}
+      {agentId === "central" && <CentralBlocks />}
       <ChatComposer
         agentId={agentId}
         placeholder={placeholder ?? `Message ${name}…`}

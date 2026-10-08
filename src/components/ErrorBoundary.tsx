@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { RefreshCw, RotateCcw, TriangleAlert } from "lucide-react";
 import { errorMessage } from "../lib/api";
 import { reloadInterface, reportRenderError } from "../shell/health/health";
+import { t } from "../i18n";
 
 interface Props {
   /** What this boundary protects, shown in the recovery card ("Missions view", "Right panel"…). */
@@ -50,21 +51,19 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className={`crash-card${this.props.compact ? " compact" : ""}`} role="alert">
         <div className="crash-head">
           <TriangleAlert size={16} aria-hidden="true" />
-          <strong>{this.props.label} crashed</strong>
+          <strong>{t("comp.boundary.crashed", { label: this.props.label })}</strong>
         </div>
-        <p className="crash-text">
-          Only this part of the interface failed. NEXUS is not stopped: agents, missions and MCP keep running in the engine.
-        </p>
+        <p className="crash-text">{t("comp.boundary.text")}</p>
         <details className="crash-details">
-          <summary>Error details</summary>
+          <summary>{t("comp.boundary.details")}</summary>
           <pre>{error.message}</pre>
         </details>
         <div className="crash-actions">
           <button className="btn btn-sm primary" onClick={this.retry}>
-            <RotateCcw size={12} /> Retry
+            <RotateCcw size={12} /> {t("common.retry")}
           </button>
           <button className="btn btn-sm" onClick={() => void reloadInterface("manual", `${this.props.label} crashed: ${error.message}`)}>
-            <RefreshCw size={12} /> Reload interface
+            <RefreshCw size={12} /> {t("comp.boundary.reload")}
           </button>
         </div>
       </div>

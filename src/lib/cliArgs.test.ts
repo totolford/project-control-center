@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildArgs,
   categories,
+  claudeShellLine,
   commandLabel,
   filterCommands,
   flattenCommands,
@@ -101,5 +102,11 @@ describe("argument building", () => {
   it("builds a PowerShell line, quoting what needs it", () => {
     expect(powershellLine("C:\\Program Files\\claude.exe", ["auth", "login"])).toBe("& 'C:\\Program Files\\claude.exe' auth login");
     expect(powershellLine(null, ["mcp", "add", "it's"])).toBe("claude mcp add 'it''s'");
+  });
+
+  it("builds a POSIX shell line on Linux", () => {
+    expect(claudeShellLine("/home/ada/.local/bin/claude", ["auth", "login"], false)).toBe("/home/ada/.local/bin/claude auth login");
+    expect(claudeShellLine(null, ["mcp", "add", "it's", "a b"], false)).toBe("claude mcp add 'it'\\''s' 'a b'");
+    expect(claudeShellLine(null, ["doctor"], true)).toBe("claude doctor");
   });
 });

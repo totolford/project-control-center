@@ -1,5 +1,7 @@
 // Pure formatting helpers shared by all views.
 
+import { t } from "../i18n";
+
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
@@ -22,19 +24,18 @@ export function formatDateTime(iso: string | null | undefined): string {
 
 /** Relative time such as "just now", "5m ago", "3h ago", "2d ago". */
 export function formatRelative(iso: string | null | undefined, now: number = Date.now()): string {
-  if (!iso) return "never";
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "never";
-  const s = Math.round((now - t) / 1000);
-  if (s < 0) return "just now";
-  if (s < 10) return "just now";
-  if (s < 60) return `${s}s ago`;
+  if (!iso) return t("fmt.never");
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return t("fmt.never");
+  const s = Math.round((now - at) / 1000);
+  if (s < 10) return t("fmt.justNow");
+  if (s < 60) return t("fmt.secondsAgo", { n: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t("fmt.minutesAgo", { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return t("fmt.hoursAgo", { n: h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
+  if (d < 30) return t("fmt.daysAgo", { n: d });
   return formatDateTime(iso).slice(0, 10);
 }
 

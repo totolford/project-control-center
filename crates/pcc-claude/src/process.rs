@@ -1,5 +1,6 @@
-//! Process helpers: hidden console windows, a kill-on-close job object and
-//! process-tree termination on Windows.
+//! Process helpers: hidden console windows and a kill-on-close job object on
+//! Windows, process groups and parent-death signals on Linux (see
+//! `pcc_platform::process`), and process-tree termination on both.
 
 use std::process::Stdio;
 
@@ -7,11 +8,7 @@ use std::process::Stdio;
 pub fn command(program: impl AsRef<std::ffi::OsStr>) -> tokio::process::Command {
     let mut c = tokio::process::Command::new(program);
     c.stdin(Stdio::null()).kill_on_drop(true);
-    #[cfg(windows)]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        c.creation_flags(CREATE_NO_WINDOW);
-    }
+    pcc_platform::process::prepare_tokio(&mut c);
     c
 }
 
@@ -19,17 +16,14 @@ pub fn command(program: impl AsRef<std::ffi::OsStr>) -> tokio::process::Command 
 pub fn std_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
     let mut c = std::process::Command::new(program);
     c.stdin(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        c.creation_flags(CREATE_NO_WINDOW);
-    }
+    pcc_platform::process::prepare_std(&mut c);
     c
 }
 
 /// Places the process in a job object that kills it (and its children) when
-/// the application exits, even on a crash. No-op outside Windows.
+/// the application exits, even on a crash. On Linux the same guarantee comes
+/// from `PR_SET_PDEATHSIG`, set when the command is built ([`command`]) or
+/// spawned (`pcc_platform::process::spawn_tied`): nothing to do here.
 pub fn attach_to_app_job(child: &tokio::process::Child) {
     #[cfg(windows)]
     win::attach(child);
@@ -58,24 +52,13 @@ pub async fn kill_tree(pid: u32) {
     }
     #[cfg(not(windows))]
     {
-        let _ = command("kill").args(["-9", &pid.to_string()]).status().await;
+        pcc_platform::process::kill_tree(pid, true);
     }
 }
 
 /// Whether a process with this pid currently exists.
 pub fn pid_alive(pid: u32) -> bool {
-    #[cfg(windows)]
-    {
-        std_command("tasklist")
-            .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).contains(&format!("\"{pid}\"")))
-            .unwrap_or(false)
-    }
-    #[cfg(not(windows))]
-    {
-        std::path::Path::new(&format!("/proc/{pid}")).exists()
-    }
+    pcc_platform::process::pid_alive(pid)
 }
 
 #[cfg(windows)]

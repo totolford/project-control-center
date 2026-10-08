@@ -15,8 +15,10 @@ pub mod memory;
 pub mod permissions;
 pub mod recent;
 pub mod store;
+pub mod usage;
 
 pub use journal::JournalFilter;
 pub use layout::{Layout, AGENT_DIR};
 pub use memory::{MemoryFile, MemoryScope};
 pub use store::{EventFilter, ProjectStore, TaskFilter};
+pub use usage::UsageFilter;

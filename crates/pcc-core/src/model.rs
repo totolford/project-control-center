@@ -77,6 +77,13 @@ pub struct ProjectSettings {
     pub permission_timeout_minutes: u32,
     /// AI engines: Claude, local runtime or hybrid, for Central, workers and NEXUS's own AI work.
     pub ai: crate::ai::AiEngineSettings,
+    /// Interface language override for this project: "auto" (use the app setting) or a locale
+    /// ("fr", "en").
+    pub ui_language: String,
+    /// AI World language override for this project, same values as `ui_language`.
+    pub ai_world_language: String,
+    /// Settings → Missions → Recovery: what NEXUS does by itself after a crash or restart.
+    pub mission_recovery: MissionRecoverySettings,
     /// Settings written by other NEXUS versions, preserved on rewrite.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
@@ -131,6 +138,40 @@ impl Default for AutonomySettings {
             manual_for_destructive: true,
             manual_for_outside_workspace: true,
             manual_capabilities: vec![Capability::GithubAdmin],
+        }
+    }
+}
+
+/// Recovery behaviour after a crash or restart (Settings → Missions → Recovery).
+/// Every switch defaults to on; projects written before 0.5 read the defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MissionRecoverySettings {
+    /// After a crash or restart, run the recovery scan and resume running missions
+    /// without asking (the interrupted-mission dialog becomes a notice).
+    pub auto_resume_missions: bool,
+    /// Reconnect MCP servers Claude Code reports as failed, and check a server as
+    /// soon as one of its tools fails.
+    pub auto_reconnect_mcp: bool,
+    /// Restart crashed agent sessions that were working (with `--resume`, backoff and a cap).
+    pub auto_restart_agents: bool,
+    /// Restore the AI World (AI Town) state of the project after a restart.
+    pub restore_world: bool,
+    /// Restore pending permission requests that can survive a restart.
+    pub recover_permissions: bool,
+    /// Check the files completed tasks reported against the disk before resuming.
+    pub validate_files_before_resume: bool,
+}
+
+impl Default for MissionRecoverySettings {
+    fn default() -> Self {
+        Self {
+            auto_resume_missions: true,
+            auto_reconnect_mcp: true,
+            auto_restart_agents: true,
+            restore_world: true,
+            recover_permissions: true,
+            validate_files_before_resume: true,
         }
     }
 }
@@ -193,6 +234,9 @@ impl Default for ProjectSettings {
             sleep_after_minutes: 20,
             permission_timeout_minutes: 30,
             ai: crate::ai::AiEngineSettings::default(),
+            ui_language: "auto".into(),
+            ai_world_language: "auto".into(),
+            mission_recovery: MissionRecoverySettings::default(),
             extra: serde_json::Map::new(),
         }
     }

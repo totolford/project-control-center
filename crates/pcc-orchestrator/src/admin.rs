@@ -22,7 +22,14 @@ use crate::engine::{Engine, PendingKind};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AdminAction {
     CreateConnection(ConnectionInput),
-    Grant { agent: String, connection: String },
+    Grant {
+        agent: String,
+        connection: String,
+    },
+    /// A change of the AI World (NEXUS HQ) that needs the user's approval.
+    World {
+        op: pcc_world::hq::WorldOp,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -167,7 +174,8 @@ pub fn connection_from_args(args: &Value) -> Result<ConnectionInput> {
             json!({"host": s("host").unwrap_or_default(), "project": s("project").unwrap_or_default()})
         }
         ConnectionKind::Terminal => {
-            json!({"shell": s("shell").unwrap_or_else(|| "powershell".into()), "distro": s("distro").unwrap_or_default()})
+            let default_shell = if cfg!(windows) { "powershell" } else { "bash" };
+            json!({"shell": s("shell").unwrap_or_else(|| default_shell.into()), "distro": s("distro").unwrap_or_default()})
         }
         ConnectionKind::Github => json!({"repo": s("repo")}),
         _ => json!({}),
@@ -304,6 +312,7 @@ impl Engine {
                 }
                 Ok(format!("`{connection}` granted to {agent}; it applies at the agent's next session start."))
             }
+            AdminAction::World { op } => self.apply_world_op(pcc_core::CENTRAL_ID, &op),
         }
     }
 
@@ -363,7 +372,7 @@ impl Engine {
             ConnectionInput { name: c.name, kind: c.kind, config: c.config, secrets: Some(secrets), enabled: None },
         )?;
         self.refresh_secret_values();
-        self.finish_user_request(request_id, &format!("The user stored `{key}` for `{conn}` in Windows Credential Manager. It is available to sessions granted this connection (restart them to apply)."))
+        self.finish_user_request(request_id, &format!("The user stored `{key}` for `{conn}` in {}. It is available to sessions granted this connection (restart them to apply).", pcc_platform::credential_store_name()))
     }
 
     /// Marks a request done (or dismissed) and tells the requesting agent.

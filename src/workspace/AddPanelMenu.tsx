@@ -5,6 +5,7 @@ import { useLayoutContext } from "./hooks";
 import { addPanelToActive, getActiveTab, listPanels, openPanelTab, specKey, type PanelSpec, type PanelType } from "./layout";
 import { PANEL_ICON } from "./panelMeta";
 import { confirmResetLayout, useWorkspace } from "./store";
+import { t, useT } from "../i18n";
 
 /** Every panel that can be shown for the current project, grouped for the "+ Panel" menu. */
 function candidates(): { heading: string; items: { label: string; spec: PanelSpec }[] }[] {
@@ -15,16 +16,16 @@ function candidates(): { heading: string; items: { label: string; spec: PanelSpe
   const central = agents.find((a) => a.kind === "central");
   return [
     {
-      heading: "Agents",
+      heading: t("ws.group.agents"),
       items: [
-        ...(central ? [{ label: "Central agent", spec: { type: "CentralAgent" as const, agentId: central.id } }] : []),
-        ...workers.map((a) => ({ label: `${a.name} · terminal`, spec: { type: "AgentTerminal" as const, agentId: a.id } })),
-        ...workers.map((a) => ({ label: `${a.name} · activity`, spec: { type: "AgentActivity" as const, agentId: a.id } })),
-        ...workers.filter((a) => a.isolation === "worktree").map((a) => ({ label: `${a.name} · diff`, spec: { type: "Diff" as const, agentId: a.id } })),
+        ...(central ? [{ label: t("ws.title.CentralAgent"), spec: { type: "CentralAgent" as const, agentId: central.id } }] : []),
+        ...workers.map((a) => ({ label: t("ws.item.terminal", { name: a.name }), spec: { type: "AgentTerminal" as const, agentId: a.id } })),
+        ...workers.map((a) => ({ label: t("ws.item.activity", { name: a.name }), spec: { type: "AgentActivity" as const, agentId: a.id } })),
+        ...workers.filter((a) => a.isolation === "worktree").map((a) => ({ label: t("ws.item.diff", { name: a.name }), spec: { type: "Diff" as const, agentId: a.id } })),
       ],
     },
     {
-      heading: "Connections",
+      heading: t("ws.group.connections"),
       items: p.connections.map((c) =>
         c.kind === "roblox_studio"
           ? { label: `${c.name} · Roblox Studio`, spec: { type: "RobloxStudio" as const, connectionId: c.id } }
@@ -34,17 +35,17 @@ function candidates(): { heading: string; items: { label: string; spec: PanelSpe
       ),
     },
     {
-      heading: "Project",
+      heading: t("ws.group.project"),
       items: [
-        { label: "Swarm overview", spec: { type: "SwarmOverview" } },
-        { label: "Active mission", spec: { type: "Mission" } },
-        { label: "Task board", spec: { type: "TaskBoard" } },
-        { label: "Review queue", spec: { type: "Review" } },
-        { label: "Memory", spec: { type: "Memory" } },
-        { label: "Activity timeline", spec: { type: "Activity" } },
-        { label: "Raw terminal", spec: { type: "RawTerminal" } },
-        { label: "AI World", spec: { type: "AiWorld" } },
-        ...(p.connections.some((c) => c.kind === "roblox_studio") ? [] : [{ label: "Roblox Studio (not configured)", spec: { type: "RobloxStudio" as const } }]),
+        { label: t("ws.title.SwarmOverview"), spec: { type: "SwarmOverview" } },
+        { label: t("ws.title.activeMission"), spec: { type: "Mission" } },
+        { label: t("ws.title.TaskBoard"), spec: { type: "TaskBoard" } },
+        { label: t("ws.title.Review"), spec: { type: "Review" } },
+        { label: t("ws.title.Memory"), spec: { type: "Memory" } },
+        { label: t("ws.title.Activity"), spec: { type: "Activity" } },
+        { label: t("ws.title.RawTerminal"), spec: { type: "RawTerminal" } },
+        { label: t("ws.title.AiWorld"), spec: { type: "AiWorld" } },
+        ...(p.connections.some((c) => c.kind === "roblox_studio") ? [] : [{ label: t("ws.item.studioMissing"), spec: { type: "RobloxStudio" as const } }]),
       ],
     },
   ];
@@ -54,6 +55,7 @@ function candidates(): { heading: string; items: { label: string; spec: PanelSpe
 const WINDOW_PANELS: PanelType[] = ["RobloxStudio", "CentralAgent", "AgentTerminal", "Mission", "Diff", "GitHub", "RawTerminal"];
 
 export function AddPanelMenu() {
+  const tr = useT();
   const update = useWorkspace((s) => s.update);
   const ctx = useLayoutContext();
 
@@ -61,7 +63,7 @@ export function AddPanelMenu() {
     const ws = useWorkspace.getState().ws;
     if (!ws) return [];
     const inTab = new Set(listPanels(getActiveTab(ws).root).map((n) => specKey(n.panel)));
-    const allOpen = new Set(ws.tabs.flatMap((t) => listPanels(t.root)).map((n) => specKey(n.panel)));
+    const allOpen = new Set(ws.tabs.flatMap((tab) => listPanels(tab.root)).map((n) => specKey(n.panel)));
     const out: MenuEntry[] = [];
     for (const group of candidates()) {
       const available = group.items.filter((i) => !inTab.has(specKey(i.spec)));
@@ -72,7 +74,7 @@ export function AddPanelMenu() {
         out.push({
           label: item.label,
           icon: <Icon size={13} />,
-          detail: allOpen.has(specKey(item.spec)) ? "open in another tab" : undefined,
+          detail: allOpen.has(specKey(item.spec)) ? tr("ws.openElsewhere") : undefined,
           onSelect: () => update((w) => addPanelToActive(w, item.spec)),
         });
       }
@@ -81,13 +83,13 @@ export function AddPanelMenu() {
       .flatMap((g) => g.items)
       .filter((i) => WINDOW_PANELS.includes(i.spec.type));
     if (windows.length > 0) {
-      out.push({ heading: "Open in its own tab" });
+      out.push({ heading: tr("ws.group.ownTab") });
       for (const item of windows) {
         const Icon = PANEL_ICON[item.spec.type];
         out.push({ label: item.label, icon: <Icon size={13} />, onSelect: () => update((w) => openPanelTab(w, item.spec, item.label.slice(0, 40))) });
       }
     }
-    out.push("separator", { label: "Reset workspace layout", icon: <RotateCcw size={13} />, onSelect: () => void confirmResetLayout(ctx) });
+    out.push("separator", { label: tr("ws.resetLayout"), icon: <RotateCcw size={13} />, onSelect: () => void confirmResetLayout(ctx) });
     return out;
   };
 
@@ -95,13 +97,13 @@ export function AddPanelMenu() {
     <Menu
       trigger={
         <>
-          <Plus size={13} /> Panel
+          <Plus size={13} /> {tr("ws.panel")}
         </>
       }
       buttonClassName="btn btn-sm ghost"
       entries={entries}
       align="right"
-      label="Add panel"
+      label={tr("ws.addPanel")}
     />
   );
 }

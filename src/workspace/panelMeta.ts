@@ -18,6 +18,7 @@ import {
   Terminal,
   Waves,
 } from "lucide-react";
+import { useT, type MessageKey } from "../i18n";
 import { useStore } from "../store";
 import type { PanelSpec, PanelType } from "./layout";
 
@@ -39,37 +40,48 @@ export const PANEL_ICON: Record<PanelType, LucideIcon> = {
   AiWorld: Globe2,
 };
 
-const STATIC_TITLE: Partial<Record<PanelType, string>> = {
-  CentralAgent: "Central agent",
-  RobloxStudio: "Roblox Studio",
-  GitHub: "GitHub",
-  TaskBoard: "Tasks",
-  Memory: "Memory",
-  Review: "Review",
-  Activity: "Activity",
-  SwarmOverview: "Swarm overview",
-  RawTerminal: "Raw terminal",
-  AiWorld: "AI World",
+const STATIC_TITLE: Partial<Record<PanelType, MessageKey>> = {
+  CentralAgent: "ws.title.CentralAgent",
+  RobloxStudio: "ws.title.RobloxStudio",
+  GitHub: "ws.title.GitHub",
+  TaskBoard: "nav.tasks",
+  Memory: "nav.memory",
+  Review: "panel.col.review",
+  Activity: "nav.activity",
+  SwarmOverview: "ws.title.SwarmOverview",
+  RawTerminal: "ws.title.RawTerminal",
+  AiWorld: "ws.title.AiWorld",
 };
 
-/** Human title of a panel, resolved against current project data. */
+/** Human title of a panel, resolved against current project data, in the interface language. */
 export function usePanelTitle(spec: PanelSpec): string {
-  return useStore((s) => {
+  const t = useT();
+  const title = useStore((s) => {
     const p = s.project;
-    const agent = spec.agentId ? p?.agents.find((a) => a.id === spec.agentId)?.name ?? spec.agentId : "";
+    const agent = spec.agentId ? (p?.agents.find((a) => a.id === spec.agentId)?.name ?? spec.agentId) : "";
     switch (spec.type) {
       case "AgentTerminal":
         return agent;
       case "AgentActivity":
-        return `${agent} · activity`;
+        return `\u0000activity\u0000${agent}`;
       case "Diff":
-        return `${agent} · diff`;
+        return `\u0000diff\u0000${agent}`;
       case "Connection":
-        return p?.connections.find((c) => c.id === spec.connectionId)?.name ?? "Connection";
+        return p?.connections.find((c) => c.id === spec.connectionId)?.name ?? "\u0000Connection";
       case "Mission":
-        return spec.missionId ? (p?.missions.find((m) => m.id === spec.missionId)?.title ?? "Mission") : "Active mission";
+        return spec.missionId ? (p?.missions.find((m) => m.id === spec.missionId)?.title ?? "\u0000Mission") : "\u0000activeMission";
       default:
-        return STATIC_TITLE[spec.type] ?? spec.type;
+        return `\u0000${spec.type}`;
     }
   });
+  // Project data is selected above; fixed words are translated here (markers start with \0).
+  if (!title.startsWith("\u0000")) return title;
+  const [, kind, name] = title.split("\u0000");
+  if (kind === "activity") return t("ws.item.activity", { name });
+  if (kind === "diff") return t("ws.item.diff", { name });
+  if (kind === "Connection") return t("ws.title.Connection");
+  if (kind === "Mission") return t("ws.title.Mission");
+  if (kind === "activeMission") return t("ws.title.activeMission");
+  const key = STATIC_TITLE[kind as PanelType];
+  return key ? t(key) : kind;
 }

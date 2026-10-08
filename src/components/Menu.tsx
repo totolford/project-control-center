@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useT } from "../i18n";
 
 export interface MenuItem {
   label: string;
@@ -27,6 +28,7 @@ export function Menu({
   className?: string;
   buttonClassName?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<React.CSSProperties>({});
   const ref = useRef<HTMLDivElement>(null);
@@ -73,7 +75,7 @@ export function Menu({
       </button>
       {open && (
         <div className="menu" role="menu" style={pos}>
-          {list.length === 0 && <div className="menu-empty">Nothing to show</div>}
+          {list.length === 0 && <div className="menu-empty">{t("comp.menu.empty")}</div>}
           {list.map((entry, i) => {
             if (entry === "separator") return <div key={i} className="menu-sep" />;
             if ("heading" in entry) {

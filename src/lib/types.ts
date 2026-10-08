@@ -56,6 +56,12 @@ export interface ProjectSettings {
   permissionTimeoutMinutes: number;
   /** AI engines (Claude, local runtime, hybrid); missing on projects from before 0.4. */
   ai?: import("./aiTypes").AiEngineSettings;
+  /** Interface language override: "auto" (app setting) or a locale; missing before 0.5. */
+  uiLanguage?: string;
+  /** AI World language override: "auto" (app setting) or a locale; missing before 0.5. */
+  aiWorldLanguage?: string;
+  /** Settings → Missions → Recovery; missing before 0.5 (every switch defaults to on). */
+  missionRecovery?: import("./centralTypes").MissionRecoverySettings;
 }
 
 export type AgentKind = "central" | "worker";
@@ -592,6 +598,8 @@ export interface RecoveryInfo {
   missions?: InterruptedMission[];
   /** How the previous NEXUS run ended. */
   previousRun?: string | null;
+  /** The mission NEXUS resumed by itself at open (auto-resume): a notice, not a blocking dialog. */
+  autoResumed?: import("./centralTypes").AutoResumeNotice | null;
 }
 
 /** Everything the main window needs after opening a project. */
@@ -896,9 +904,14 @@ export interface ProjectInsights {
 export interface AppSettings {
   /** Explicit Claude Code executable; auto-detected when null/empty. */
   claudePath: string | null;
+  /** Interface language: "auto" (system) or a locale; missing before 0.5. */
+  uiLanguage?: string;
+  /** AI World language: "auto" (system) or a locale; missing before 0.5. */
+  aiWorldLanguage?: string;
 }
 
-export type TerminalProfile = "claude" | "claude-resume" | "powershell" | "pwsh" | "cmd" | "wsl";
+/** `shell` is the default shell of this OS; the others are shell ids from `platform_info`. */
+export type TerminalProfile = "claude" | "claude-resume" | "shell" | "powershell" | "pwsh" | "cmd" | "wsl" | "bash" | "zsh" | "fish" | "sh";
 
 export interface PtyInfo {
   id: string;
@@ -1335,27 +1348,25 @@ export interface UpstreamApplyResult {
   newBase: string | null;
 }
 
-/** Zone (building) of the NEXUS AI World, see ai-town/data/nexusZones.ts. */
-export type NexusZoneKind =
-  | "central_hq"
-  | "coding_office"
-  | "design_studio"
-  | "roblox_studio"
-  | "github_office"
-  | "server_room"
-  | "mcp_lab"
-  | "skill_shop"
-  | "testing_lab"
-  | "review_room"
-  | "archive";
+/** Camera modes of the embedded world (`mission`: Follow Mission). */
+export type AiTownCameraMode = "free" | "follow" | "cinematic" | "overview" | "mission";
+
+/** A repair made by the world validator (ai-town/src/nexus/validate.ts). */
+export interface AiWorldWarning {
+  code: string;
+  nexusId: string;
+  detail: string;
+  repair: string;
+}
 
 /** Messages from the embedded AI Town iframe to NEXUS (window.postMessage). */
 export type AiTownToNexus =
-  | { source: "ai-town"; type: "ready" }
+  | { source: "ai-town"; type: "ready"; safeMode: boolean }
   | { source: "ai-town"; type: "select"; nexusId: string | null }
   | { source: "ai-town"; type: "talk"; nexusId: string }
   | { source: "ai-town"; type: "viewWork"; nexusId: string }
-  | { source: "ai-town"; type: "openBuilding"; zone: NexusZoneKind }
+  /** A click on a room of NEXUS HQ. */
+  | { source: "ai-town"; type: "openRoom"; roomId: string }
   | {
       source: "ai-town";
       type: "action";
@@ -1380,15 +1391,120 @@ export type AiTownToNexus =
         | "viewTools";
     }
   /** The camera mode changed inside the world (e.g. a drag ends Follow). */
-  | { source: "ai-town"; type: "camera"; mode: "free" | "follow" | "cinematic" | "overview"; nexusId?: string };
+  | { source: "ai-town"; type: "camera"; mode: AiTownCameraMode; nexusId?: string }
+  | { source: "ai-town"; type: "warning"; warning: AiWorldWarning }
+  /** The world view crashed (context: ai-town/src/nexus/trace.ts CrashContext); the engine keeps running. */
+  | { source: "ai-town"; type: "crash"; context: Record<string, unknown> & { message: string } };
 
 /** Messages from NEXUS to the embedded AI Town iframe. */
 export type NexusToAiTown =
   | { source: "nexus"; type: "select"; nexusId: string | null }
   | { source: "nexus"; type: "focus"; nexusId: string }
-  | { source: "nexus"; type: "focusZone"; zone: NexusZoneKind }
-  | { source: "nexus"; type: "camera"; mode: "free" | "follow" | "cinematic" | "overview"; nexusId?: string }
-  | { source: "nexus"; type: "zoom"; delta: number };
+  | { source: "nexus"; type: "focusRoom"; roomId: string }
+  | { source: "nexus"; type: "camera"; mode: AiTownCameraMode; nexusId?: string }
+  | { source: "nexus"; type: "followMission"; missionId: string; label: string; nexusIds: string[] }
+  | { source: "nexus"; type: "zoom"; delta: number }
+  | { source: "nexus"; type: "strings"; strings: Record<string, string> };
+
+// ---------------------------------------------------------------- NEXUS HQ (0.5, workstream "worldhq")
+
+/** A room of `.agent-project/world/world.json` (crates/pcc-world/src/hq/config.rs `Room`). */
+export interface HqRoom {
+  id: string;
+  name: string;
+  /** Room type (ai-town/data/nexusRooms.json), `custom` for anything else. */
+  type: string;
+  position: { x: number; y: number };
+  size: { w: number; h: number };
+  purpose: string;
+  requiredConnections: string[];
+  agents: string[];
+  persistent: boolean;
+  temporary: boolean;
+  archived: boolean;
+  decor: string[];
+  customName: boolean;
+  createdBy: string;
+  createdAt: string;
+  unplaced: boolean;
+}
+
+export interface HqConfig {
+  version: number;
+  language: string;
+  locale: string;
+  layout: "auto" | "manual";
+  rooms: HqRoom[];
+  connections: { from: string; to: string }[];
+  theme: string;
+  rules: { askBeforeDeletingTemporary: boolean; maxRooms: number };
+  revision: number;
+  updatedAt: string;
+}
+
+/** A room as AI Town draws it (door, materials). */
+export interface HqLayoutRoom {
+  id: string;
+  name: string;
+  kind: string;
+  purpose: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  door: { x: number; y: number; side: "bottom" | "top" | "left" | "right" };
+  decor: string[];
+  floor: string;
+  wall: string;
+  temporary: boolean;
+  createdAt: string;
+}
+
+export interface HqIssue {
+  severity: "error" | "warning";
+  room: string | null;
+  message: string;
+}
+
+export interface HqSuggestion {
+  action: "create" | "archive";
+  kind: string;
+  room: string | null;
+  reason: string;
+}
+
+export interface HqSnapshot {
+  id: string;
+  at: string;
+  label: string;
+  revision: number;
+  rooms: number;
+}
+
+export interface HqView {
+  config: HqConfig;
+  layout: { version: number; revision: number; locale: string; width: number; height: number; rooms: HqLayoutRoom[]; connections: { from: string; to: string }[] };
+  issues: HqIssue[];
+  suggestions: { domains: { kind: string; evidence: string[] }[]; suggestions: HqSuggestion[] };
+  snapshots: HqSnapshot[];
+  occupancy: { agentId: string; roomId: string }[];
+}
+
+/** Operations on the building (crates/pcc-world/src/hq/ops.rs `WorldOp`). */
+export type HqOp =
+  | { op: "create_room"; type?: string; name?: string; purpose?: string; temporary?: boolean; agents?: string[]; requiredConnections?: string[] }
+  | { op: "delete_room"; room: string }
+  | { op: "restore_room"; room: string }
+  | { op: "rename_room"; room: string; name: string }
+  | { op: "move_room"; room: string; x: number; y: number }
+  | { op: "resize_room"; room: string; w: number; h: number }
+  | { op: "connect_rooms"; from: string; to: string }
+  | { op: "disconnect_rooms"; from: string; to: string }
+  | { op: "assign_room"; room: string; purpose?: string; agents?: string[]; addAgents?: string[]; removeAgents?: string[]; requiredConnections?: string[] }
+  | { op: "decorate_room"; room: string; decor: string[] }
+  | { op: "change_language"; language: string; locale?: string }
+  | { op: "set_layout"; mode: "auto" | "manual" }
+  | { op: "repair_world" };
 
 // ---------------------------------------------------------------- Missions (0.3, workstream "missions")
 

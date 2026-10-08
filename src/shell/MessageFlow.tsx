@@ -3,12 +3,14 @@ import { ArrowRight } from "lucide-react";
 import type { Message } from "../lib/types";
 import { useUi } from "../state/ui";
 import { useAgents, useLiveMessages } from "../store";
+import { useT } from "../i18n";
 
 const VISIBLE_MS = 7000;
 const MAX_CHIPS = 4;
 
 /** Transient chips for agent-to-agent messages as they arrive (live AgentMessage events). */
 export function MessageFlow() {
+  const t = useT();
   const live = useLiveMessages();
   const agents = useAgents();
   const openMessage = useUi((s) => s.openMessage);
@@ -39,7 +41,7 @@ export function MessageFlow() {
 
   useEffect(() => {
     const map = timers.current;
-    return () => map.forEach((t) => window.clearTimeout(t));
+    return () => map.forEach((timer) => window.clearTimeout(timer));
   }, []);
 
   if (chips.length === 0) return null;
@@ -50,7 +52,7 @@ export function MessageFlow() {
         <button key={m.id} className="flow-chip" onClick={() => openMessage(m)}>
           <span className="flow-route">
             <strong>{name(m.from)}</strong> <ArrowRight size={11} /> <strong>{name(m.to)}</strong>
-            <span className="chip tone-blue">{m.kind}</span>
+            <span className="chip tone-blue">{t.dynamic(`comp.msg.kind.${m.kind}`, undefined, m.kind)}</span>
           </span>
           <span className="flow-body">{(m.subject ?? m.body).split("\n")[0]}</span>
         </button>

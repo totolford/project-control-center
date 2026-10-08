@@ -307,6 +307,13 @@ export const api = {
   aiTownSay: (agentId: string, text: string) => invoke<void>("ai_town_say", { agentId, text }),
   aiTownUpstreamCheck: () => invoke<T.UpstreamReport>("ai_town_upstream_check"),
   aiTownUpstreamApply: () => invoke<T.UpstreamApplyResult>("ai_town_upstream_apply"),
+  /** NEXUS HQ: rooms, issues, suggestions, snapshots and who is in which room. */
+  aiWorldHq: () => invoke<T.HqView>("ai_world_hq"),
+  aiWorldHqApply: (op: T.HqOp) => invoke<T.HqView>("ai_world_hq_apply", { op }),
+  aiWorldHqRestore: (snapshot: string) => invoke<T.HqView>("ai_world_hq_restore", { snapshot }),
+  aiWorldHqWarning: (w: T.AiWorldWarning) =>
+    invoke<void>("ai_world_hq_warning", { code: w.code, agentId: w.nexusId, detail: w.detail, repair: w.repair }),
+  aiWorldHqCrash: (context: Record<string, unknown>) => invoke<string | null>("ai_world_hq_crash", { context }),
   setAgentAppearance: (agentId: string, appearance: T.AgentAppearance) =>
     invoke<T.Agent>("set_agent_appearance", { agentId, appearance }),
 

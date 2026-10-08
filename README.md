@@ -47,7 +47,7 @@ memory and a timeline. Use your usual editor alongside it.
 - **"Fais-moi ça"** — give Central an intent ("connect to my Pi, check Docker,
   update the server and test it"): it discovers its capabilities, reuses or creates
   connections (SSH, MCP from a `claude mcp add` line, GitHub...), asks you only for
-  approvals, secrets (stored in Windows Credential Manager) or sign-ins, and
+  approvals, secrets (stored in the OS credential store) or sign-ins, and
   journals every command.
 - **NEXUS MASTER CONTROL** — open domains (PC, GitHub, MCP, SSH, skills) to Central
   in one switch, with the real availability and effective permissions displayed.
@@ -80,8 +80,8 @@ memory and a timeline. Use your usual editor alongside it.
   task completion, conflict prediction, merge with automatic snapshot, restore.
   Works without git too.
 - **Connections** — local folder, Git, GitHub (through your `gh` login), SSH, any MCP
-  server, Roblox Studio (MCP), Docker; granted per agent. Secrets go to the Windows
-  Credential Manager, never into the project.
+  server, Roblox Studio (MCP), Docker; granted per agent. Secrets go to the OS
+  credential store (Windows Credential Manager, Secret Service on Linux), never into the project.
 - **Security** — per-agent capabilities (deny / ask / allow); destructive commands and
   paths outside the workspace always ask: *Reject / Allow once / Allow for this agent*.
 - **Timeline, recovery, auto-update** — every event on a timeline; after a crash the
@@ -89,7 +89,9 @@ memory and a timeline. Use your usual editor alongside it.
 
 ## Requirements
 
-- Windows 10/11 (x64). WebView2 is installed automatically if missing.
+- Windows 10/11 (x64) — WebView2 is installed automatically if missing — or
+  Ubuntu 24.04 LTS and later (x64; WebKitGTK 4.1, pulled in by the `.deb`).
+  See the Platform Capability Matrix in the Environment view for what each OS supports.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/setup), signed in
   (`claude auth login`). The app uses your existing login and never asks for credentials.
 - Optional: Git, GitHub CLI (`gh auth login`), OpenSSH client, Docker, Roblox Studio + its MCP server.
@@ -99,6 +101,10 @@ memory and a timeline. Use your usual editor alongside it.
 Download `ProjectControlCenter-vX.Y.Z-setup.exe` from the
 [Releases](https://github.com/totolford/project-control-center/releases) page and run it.
 The installer creates Start menu and desktop shortcuts and registers an uninstaller.
+
+On Ubuntu, download the `.AppImage` (make it executable and run it; it updates itself)
+or the `.deb` (`sudo apt install ./ProjectControlCenter_X.Y.Z_amd64.deb`). Secrets go to
+the Secret Service (GNOME Keyring / KWallet), which must be running in your session.
 
 ## Build from source
 

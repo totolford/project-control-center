@@ -2,6 +2,7 @@
 
 import type { Tone } from "../lib/labels";
 import type { Message, PccEvent, Task } from "../lib/types";
+import { t, type MessageKey } from "../i18n";
 
 export type NotificationTarget =
   | { type: "permission"; id: string }
@@ -21,10 +22,10 @@ export interface Notification {
   target: NotificationTarget | null;
 }
 
-const TASK_ATTENTION: Record<string, { tone: Tone; label: string }> = {
-  blocked: { tone: "orange", label: "Task blocked" },
-  failed: { tone: "red", label: "Task failed" },
-  review: { tone: "accent", label: "Task ready for review" },
+const TASK_ATTENTION: Record<string, { tone: Tone; label: MessageKey }> = {
+  blocked: { tone: "orange", label: "bar.notif.taskBlocked" },
+  failed: { tone: "red", label: "bar.notif.taskFailed" },
+  review: { tone: "accent", label: "bar.notif.taskReview" },
 };
 
 function firstLine(text: string, max = 140): string {
@@ -42,26 +43,26 @@ function fromEvent(e: PccEvent, name: (id: string) => string): Notification | nu
   switch (e.kind) {
     case "PermissionRequested":
       if (!isRecord(p) || typeof p.id !== "string") return null;
-      return { ...base, tone: "amber", title: `${name(String(p.agentId ?? e.agentId ?? ""))} needs permission`, body: String(p.summary ?? e.summary), target: { type: "permission", id: p.id } };
+      return { ...base, tone: "amber", title: t("bar.notif.needsPermission", { name: name(String(p.agentId ?? e.agentId ?? "")) }), body: String(p.summary ?? e.summary), target: { type: "permission", id: p.id } };
     case "UserRequested":
       if (!isRecord(p) || typeof p.id !== "string") return null;
-      return { ...base, tone: "amber", title: `${name(String(p.agentId ?? e.agentId ?? ""))} needs you`, body: String(p.title ?? e.summary), target: { type: "request", id: p.id } };
+      return { ...base, tone: "amber", title: t("bar.req.action", { agent: name(String(p.agentId ?? e.agentId ?? "")) }), body: String(p.title ?? e.summary), target: { type: "request", id: p.id } };
     case "AgentCrashed":
-      return { ...base, tone: "red", title: `${name(e.agentId ?? "")} crashed`, body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
+      return { ...base, tone: "red", title: t("bar.notif.crashed", { name: name(e.agentId ?? "") }), body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
     case "Error":
-      return { ...base, tone: "red", title: "Error", body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
+      return { ...base, tone: "red", title: t("common.error"), body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
     case "AgentCreated":
-      return { ...base, tone: "blue", title: "New agent", body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
+      return { ...base, tone: "blue", title: t("bar.notif.newAgent"), body: e.summary, target: e.agentId ? { type: "agent", id: e.agentId } : null };
     case "MissionCompleted":
-      return { ...base, tone: "green", title: "Mission finished", body: e.summary, target: e.missionId ? { type: "mission", id: e.missionId } : null };
+      return { ...base, tone: "green", title: t("bar.notif.missionDone"), body: e.summary, target: e.missionId ? { type: "mission", id: e.missionId } : null };
     case "ReviewRequested":
-      return { ...base, tone: "accent", title: "Review requested", body: e.summary, target: e.taskId ? { type: "task", id: e.taskId } : null };
+      return { ...base, tone: "accent", title: t("bar.notif.review"), body: e.summary, target: e.taskId ? { type: "task", id: e.taskId } : null };
     case "TaskFailed":
     case "TaskUpdated": {
       const task = isRecord(p) ? (p as unknown as Task) : null;
       const attention = task ? TASK_ATTENTION[task.status] : undefined;
       if (!task || !attention) return null;
-      return { ...base, tone: attention.tone, title: attention.label, body: task.title, target: { type: "task", id: task.id } };
+      return { ...base, tone: attention.tone, title: t(attention.label), body: task.title, target: { type: "task", id: task.id } };
     }
     case "AgentMessage": {
       if (!isRecord(p) || typeof p.id !== "string") return null;

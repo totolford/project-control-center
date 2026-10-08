@@ -776,15 +776,18 @@ mod tests {
 
     #[test]
     fn tool_paths_checked_against_workspace() {
-        let ws = vec![PathBuf::from(r"C:\Projects\AERIS")];
-        let inside = classify_tool("Write", &json!({"file_path": r"C:\Projects\AERIS\src\a.ts"}), &ws);
+        // Absolute paths of this OS: `C:\Projects\…` on Windows, `/home/ada/Projects/…` on Linux.
+        let p =
+            |s: &str| if cfg!(windows) { format!(r"C:\{}", s.replace('/', r"\")) } else { format!("/home/ada/{s}") };
+        let ws = vec![PathBuf::from(p("Projects/AERIS"))];
+        let inside = classify_tool("Write", &json!({"file_path": p("Projects/AERIS/src/a.ts")}), &ws);
         assert_eq!(inside.capability, Some(Capability::FsWrite));
         assert!(!inside.outside_workspace);
-        let outside = classify_tool("Edit", &json!({"file_path": r"C:\Windows\system.ini"}), &ws);
+        let outside = classify_tool("Edit", &json!({"file_path": p("Windows/system.ini")}), &ws);
         assert!(outside.outside_workspace);
-        let sneaky = classify_tool("Write", &json!({"file_path": r"C:\Projects\AERIS\..\other\x"}), &ws);
+        let sneaky = classify_tool("Write", &json!({"file_path": p("Projects/AERIS/../other/x")}), &ws);
         assert!(sneaky.outside_workspace);
-        let prefix = classify_tool("Write", &json!({"file_path": r"C:\Projects\AERIS2\x"}), &ws);
+        let prefix = classify_tool("Write", &json!({"file_path": p("Projects/AERIS2/x")}), &ws);
         assert!(prefix.outside_workspace);
         let rel = classify_tool("Read", &json!({"file_path": "src/a.ts"}), &ws);
         assert!(!rel.outside_workspace);

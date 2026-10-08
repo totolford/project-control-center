@@ -5,11 +5,14 @@
 import * as PIXI from 'pixi.js';
 import { Container, Graphics, Text } from '@pixi/react';
 import { useCallback, useMemo } from 'react';
-import { SIGN_FONT } from './Buildings';
+import { SAFE_MODE } from './embed';
+import { SIGN_FONT } from './Rooms.tsx';
 import { NexusAgentRow, STATE_COLOR, VisualState, rankPips, visualState } from './state';
 
+/** No animated effects with reduced motion, nor in AI World Safe Mode. */
 export const REDUCED_MOTION =
-  typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  SAFE_MODE ||
+  (typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
 const labelStyle = new PIXI.TextStyle({ fontFamily: SIGN_FONT, fontSize: 9, fill: 0xffffff });
 const bubbleStyle = new PIXI.TextStyle({

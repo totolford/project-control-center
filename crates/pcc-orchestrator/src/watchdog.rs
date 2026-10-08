@@ -150,17 +150,27 @@ impl Engine {
             ),
         );
         for c in &children {
-            let _ =
-                pcc_claude::process::std_command("taskkill").args(["/PID", &c.pid.to_string(), "/T", "/F"]).output();
+            pcc_platform::process::kill_tree(c.pid, true);
         }
         self.handle_output((id.to_string(), epoch), pcc_claude::SessionOutput::Exited(None))
     }
 
     /// Graceful restart of a live session that stays silent after a soft recovery.
     fn restart_stalled(&mut self, id: &str, reason: &str, now: Instant) -> Result<()> {
+        let row = self.sessions.get(id).map(|l| l.session_row).unwrap_or(0);
+        if !self.store.settings().mission_recovery.auto_restart_agents {
+            self.log(
+                id,
+                row,
+                LogKind::Error,
+                &format!(
+                    "Watchdog: {reason}; automatic restart is off (Settings → Missions → Recovery), the user decides"
+                ),
+            );
+            return Ok(());
+        }
         let recent: Vec<Duration> =
             self.rec.restarts.get(id).map(|v| v.iter().map(|t| ago(now, *t)).collect()).unwrap_or_default();
-        let row = self.sessions.get(id).map(|l| l.session_row).unwrap_or(0);
         match RestartPolicy::default().decide(&recent) {
             RestartDecision::Now => {}
             RestartDecision::Wait(_) => return Ok(()),
@@ -225,7 +235,7 @@ impl Engine {
     /// Crashed sessions that were doing something are restarted with
     /// `--resume`, with backoff and a cap.
     fn restart_crashed(&mut self, now: Instant) -> Result<()> {
-        if !self.autopilot || self.emergency {
+        if !self.autopilot || self.emergency || !self.store.settings().mission_recovery.auto_restart_agents {
             return Ok(());
         }
         let ids: Vec<String> = self.rec.crashed.iter().filter(|(_, c)| !c.capped).map(|(a, _)| a.clone()).collect();
@@ -506,6 +516,20 @@ impl Engine {
                 .named("mcp.recovered")
                 .with_source("watchdog"),
             );
+        }
+        if !self.store.settings().mission_recovery.auto_reconnect_mcp {
+            for server in failed {
+                if let Some(h) = self.rec.mcp.get_mut(&(agent.to_string(), server)) {
+                    if !h.restarts.last().is_some_and(|r| r.outcome.starts_with("skipped")) {
+                        h.restarts.push(pcc_recovery::RestartRecord {
+                            at: pcc_core::now(),
+                            reason: h.error.clone().unwrap_or_else(|| "reported failed by Claude Code".into()),
+                            outcome: "skipped: automatic MCP reconnect is off (Settings → Missions → Recovery)".into(),
+                        });
+                    }
+                }
+            }
+            return;
         }
         for server in failed {
             self.auto_reconnect_mcp(agent, &server);

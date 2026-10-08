@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { useT } from "../i18n";
 
 interface ModalProps {
   title: ReactNode;
@@ -13,6 +14,7 @@ interface ModalProps {
 }
 
 export function Modal({ title, onClose, children, footer, width = 520, locked, className }: ModalProps) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export function Modal({ title, onClose, children, footer, width = 520, locked, c
         <div className="modal-header">
           <h2>{title}</h2>
           {!locked && (
-            <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <button className="icon-btn" onClick={onClose} aria-label={t("common.close")}>
               <X size={16} />
             </button>
           )}

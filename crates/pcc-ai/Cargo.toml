@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 pcc-core.workspace = true
 pcc-claude.workspace = true
+pcc-platform.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

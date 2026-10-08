@@ -41,6 +41,7 @@ export type ViewName =
   | "market"
   | "diagnostics"
   | "ai"
+  | "usage"
   | "settings";
 
 export interface View {

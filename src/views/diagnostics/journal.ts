@@ -3,6 +3,7 @@
 // that lack them get values derived from their kind.
 
 import type { Mission, PccEvent } from "../../lib/types";
+import { t } from "../../i18n";
 
 export type Severity = "info" | "warning" | "error" | "critical";
 export const SEVERITIES: Severity[] = ["info", "warning", "error", "critical"];
@@ -100,7 +101,7 @@ export function groupByMission(entries: JournalEntry[], missions: Mission[]): Mi
       const mission = missions.find((m) => m.id === e.missionId) ?? null;
       g = {
         missionId: e.missionId,
-        title: e.missionId ? (mission?.title ?? `Mission ${e.missionId}`) : "Outside missions",
+        title: e.missionId ? (mission?.title ?? t("act.missionId", { id: e.missionId })) : t("act.outsideMissions"),
         mission,
         entries: [],
         first: e.ts,

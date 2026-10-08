@@ -98,13 +98,18 @@ pub async fn dismiss_user_request(state: State<'_, AppState>, id: String, reason
     state.orch().await?.lock().await.finish_user_request(&id, &note)
 }
 
+/// Runs `command` in a visible terminal that stays open afterwards:
+/// PowerShell on Windows, the user's shell on Linux (`command` must be
+/// written for that shell).
 fn spawn_terminal(app: &AppHandle, state: &AppState, title: &str, cwd: &Path, command: &str) -> CmdResult<PtyInfo> {
+    let (program, args) = pcc_platform::shells::run_and_stay(command)
+        .ok_or_else(|| Error::Process("no shell found to open a terminal".into()))?;
     let app2 = app.clone();
     let info = state.pty.spawn(
         PtySpec {
             title: title.into(),
-            program: "powershell.exe".into(),
-            args: vec!["-NoLogo".into(), "-NoExit".into(), "-Command".into(), command.into()],
+            program,
+            args,
             cwd: cwd.to_string_lossy().into_owned(),
             env: vec![],
             cols: 120,
@@ -145,10 +150,8 @@ pub async fn ssh_key_setup(
     let g = |k: &str| c.config.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let (host, user) = (g("host"), g("user"));
     let port = c.config.get("port").and_then(Value::as_u64).unwrap_or(22);
-    let home = std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .ok_or_else(|| Error::Process("no user profile folder".into()))?;
-    let ssh_dir = home.join(".ssh");
+    let home = pcc_platform::paths::home_dir();
+    let ssh_dir = pcc_platform::paths::ssh_dir();
     std::fs::create_dir_all(&ssh_dir)?;
     let key = ssh_dir.join(format!("nexus_{}", c.id.replace('-', "_")));
     let created_key = !key.is_file();
@@ -174,18 +177,28 @@ pub async fn ssh_key_setup(
         ConnectionInput { name: c.name.clone(), kind: c.kind, config, secrets: None, enabled: None },
     )?;
     let pubkey = key.with_extension("pub");
-    let command = format!(
-        "Write-Host 'Installing the NEXUS key on {user}@{host}. Type the remote password when asked.'; Get-Content '{}' | ssh -p {port} -o StrictHostKeyChecking=accept-new {user}@{host} \"mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo NEXUS-KEY-INSTALLED\"",
-        pubkey.to_string_lossy().replace('\'', "''")
-    );
+    let command = ssh_key_install_command(&user, &host, port, &pubkey.to_string_lossy(), cfg!(windows));
     let terminal = spawn_terminal(&app, &state, &format!("SSH key setup · {}", c.name), &home, &command)?;
     Ok(SshKeySetup { key_path: key.to_string_lossy().into_owned(), created_key, terminal })
+}
+
+/// The terminal line that appends a public key to the host's
+/// `authorized_keys` (PowerShell on Windows, POSIX shell elsewhere).
+fn ssh_key_install_command(user: &str, host: &str, port: u64, pubkey: &str, powershell: bool) -> String {
+    let remote = "\"mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo NEXUS-KEY-INSTALLED\"";
+    let ssh = format!("ssh -p {port} -o StrictHostKeyChecking=accept-new {user}@{host} {remote}");
+    let note = format!("Installing the NEXUS key on {user}@{host}. Type the remote password when asked.");
+    if powershell {
+        format!("Write-Host '{note}'; Get-Content '{}' | {ssh}", pubkey.replace('\'', "''"))
+    } else {
+        format!("echo '{note}'; cat {} | {ssh}", pcc_platform::install::sh_quote(pubkey))
+    }
 }
 
 /// Opens the official GitHub CLI sign-in (browser device flow) in a terminal.
 #[tauri::command]
 pub async fn github_login(app: AppHandle, state: State<'_, AppState>) -> CmdResult<PtyInfo> {
-    let home = std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let home = pcc_platform::paths::home_dir();
     spawn_terminal(
         &app,
         &state,
@@ -344,4 +357,22 @@ pub async fn master_status(state: State<'_, AppState>) -> CmdResult<MasterStatus
         },
     ];
     Ok(MasterStatus { active: m.active, domains, central_permissions: perms })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ssh_key_install_line_matches_the_shell() {
+        let ps = ssh_key_install_command("pi", "srv", 22, r"C:\Users\o'neil\.ssh\nexus_x.pub", true);
+        assert!(ps.starts_with("Write-Host 'Installing the NEXUS key on pi@srv."));
+        assert!(ps.contains(r"Get-Content 'C:\Users\o''neil\.ssh\nexus_x.pub' | ssh -p 22"));
+        let sh = ssh_key_install_command("pi", "srv", 2222, "/home/ada/.ssh/nexus x.pub", false);
+        assert!(sh.starts_with("echo 'Installing the NEXUS key on pi@srv."));
+        assert!(
+            sh.contains("cat '/home/ada/.ssh/nexus x.pub' | ssh -p 2222 -o StrictHostKeyChecking=accept-new pi@srv")
+        );
+        assert!(sh.ends_with("echo NEXUS-KEY-INSTALLED\""));
+    }
 }

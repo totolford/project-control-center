@@ -4,18 +4,18 @@
 // NEXUS project gets its own AI Town world. Each real NEXUS agent is an AI
 // Town "human" player (token `nexus:<agentId>`): it has no LLM behind it, it
 // only moves, works and talks when the real Claude Code agent does.
+import { NEXUS_BUILD } from './nexusBuild';
 import { v } from 'convex/values';
-import { mutation, query, MutationCtx } from './_generated/server';
+import { mutation, query, MutationCtx, QueryCtx } from './_generated/server';
 import { Id } from './_generated/dataModel';
 import { internal } from './_generated/api';
-import * as map from '../data/gentle';
-import { NEXUS_ZONES, zoneById } from '../data/nexusZones';
 import { NEXUS_SKIN_PRESETS } from '../data/nexusSkins';
+import { HqLayout, Point, generateHqMap, initialLayout } from '../data/nexusHq';
 import { insertInput } from './aiTown/insertInput';
 import { createEngine, startEngine } from './aiTown/main';
 import { CONVERSATION_DISTANCE, ENGINE_ACTION_DURATION } from './constants';
 import { NEXUS_TOKEN_PREFIX } from './aiTown/nexusInputs';
-import { nexusAgentFields } from './nexusSchema';
+import { hqLayoutFields, nexusAgentFields } from './nexusSchema';
 
 /** How long a speech bubble stays visible. */
 const SPEECH_VISIBLE_MS = 12_000;
@@ -51,17 +51,17 @@ async function createWorld(ctx: MutationCtx) {
     status: 'running',
     worldId,
   });
-  await ctx.db.insert('maps', {
+  // NEXUS HQ: the building (NEXUS sends the project's rooms right after).
+  const layout = initialLayout();
+  const plan = generateHqMap(layout);
+  await ctx.db.insert('maps', { worldId, ...plan.map });
+  await ctx.db.insert('nexusLayouts', {
     worldId,
-    width: map.mapwidth,
-    height: map.mapheight,
-    tileSetUrl: map.tilesetpath,
-    tileSetDimX: map.tilesetpxw,
-    tileSetDimY: map.tilesetpxh,
-    tileDim: map.tiledim,
-    bgTiles: map.bgtiles,
-    objectTiles: map.objmap,
-    animatedSprites: map.animatedsprites,
+    layout,
+    spots: plan.spots,
+    skipped: plan.skipped,
+    dropped: plan.dropped,
+    updatedAt: now,
   });
   await ctx.scheduler.runAfter(0, internal.aiTown.main.runStep, {
     worldId,
@@ -109,13 +109,28 @@ export const ensureWorld = mutation({
   },
 });
 
-/** Door tile of a zone, spread a little so characters don't stack. */
-function standingPoint(zone: string, index: number) {
-  const z = zoneById(zone) ?? zoneById('central_hq')!;
-  const offsets = [0, 1, -1, 2, -2, 3, -3];
-  const dx = offsets[index % offsets.length];
-  const dy = Math.floor(index / offsets.length);
-  return { x: z.door.x + dx, y: z.door.y + dy };
+type Building = { layout: HqLayout; spots: Record<string, Point[]> };
+
+async function building(ctx: MutationCtx, worldId: Id<'worlds'>): Promise<Building> {
+  const row = await ctx.db
+    .query('nexusLayouts')
+    .withIndex('worldId', (q) => q.eq('worldId', worldId))
+    .unique();
+  if (row) return { layout: row.layout as HqLayout, spots: row.spots as Record<string, Point[]> };
+  // Worlds created before NEXUS HQ: the initial building until NEXUS sends its rooms.
+  const layout = initialLayout();
+  return { layout, spots: generateHqMap(layout).spots };
+}
+
+/**
+ * Where the n-th agent of a room stands: a free interior tile of the room
+ * (never a wall, a piece of furniture or the doorway). An unknown room
+ * (archived since) falls back to NEXUS HQ.
+ */
+function standingPoint(b: Building, room: string, index: number): Point {
+  const spots = b.spots[room] ?? b.spots['central_hq'] ?? Object.values(b.spots)[0] ?? [];
+  if (spots.length === 0) return { x: 2, y: 2 };
+  return spots[index % spots.length];
 }
 
 export const syncAgents = mutation({
@@ -148,7 +163,8 @@ export const syncAgents = mutation({
       await ctx.db.delete(row._id);
     }
 
-    // Index among the agents sharing a zone, to spread them around the door.
+    // Index among the agents sharing a room, to give each its own spot.
+    const hq = await building(ctx, args.worldId);
     const perZone = new Map<string, number>();
     for (const agent of args.agents) {
       const token = NEXUS_TOKEN_PREFIX + agent.nexusId;
@@ -183,12 +199,12 @@ export const syncAgents = mutation({
       let sentTo = row?.sentTo;
       let movedAt = row?.movedAt ?? 0;
       if (!inConversation) {
-        const target = standingPoint(agent.zone, slot);
+        const target = standingPoint(hq, agent.zone, slot);
         const there =
           Math.abs(player.position.x - target.x) < 0.5 && Math.abs(player.position.y - target.y) < 0.5;
-        // New zone, or a path that failed / got interrupted: (re)send.
+        // New room, or a path that failed / got interrupted: (re)send.
         const retry = !player.pathfinding && now - movedAt > 15_000;
-        if (!there && (sentTo !== agent.zone || retry)) {
+        if (!there && (sentTo !== agent.zone || retry || row?.sentTo === undefined)) {
           await insertInput(ctx, args.worldId, 'moveTo', { playerId: player.id, destination: target });
           movedAt = now;
         }
@@ -339,7 +355,7 @@ export const worldStatus = query({
 /** Lets NEXUS know the NEXUS functions are deployed. */
 export const ping = query({
   args: {},
-  handler: async () => ({ nexus: 1 }),
+  handler: async () => ({ nexus: 1, build: NEXUS_BUILD }),
 });
 
 /** Everything the embedded AI Town frontend needs about NEXUS. */
@@ -370,10 +386,67 @@ export const state = query({
       agents: agents.map(({ _id, _creationTime, worldId, ...a }) => a),
       speech: speech.reverse().map(({ _id, _creationTime, worldId, ...s }) => ({ id: _id, ...s })),
       speechVisibleMs: SPEECH_VISIBLE_MS,
-      zones: NEXUS_ZONES,
+      ...(await hqState(ctx, args.worldId)),
       skinPresets: NEXUS_SKIN_PRESETS,
       skins,
     };
+  },
+});
+
+async function hqState(ctx: QueryCtx, worldId: Id<'worlds'>) {
+  const row = await ctx.db
+    .query('nexusLayouts')
+    .withIndex('worldId', (q) => q.eq('worldId', worldId))
+    .unique();
+  const layout = (row?.layout as HqLayout | undefined) ?? initialLayout();
+  return {
+    rooms: layout.rooms,
+    connections: layout.connections,
+    building: { width: layout.width, height: layout.height, revision: layout.revision, locale: layout.locale },
+    skipped: (row?.skipped as Record<string, string[]> | undefined) ?? {},
+    dropped: row?.dropped ?? [],
+  };
+}
+
+/**
+ * NEXUS HQ changed in NEXUS (world.json): stores the building, redraws the
+ * map for the frontend at once and swaps it in the engine (input
+ * `nexusSetLayout`). Characters are sent again to their rooms.
+ */
+export const applyLayout = mutation({
+  args: { worldId: v.id('worlds'), layout: v.object(hqLayoutFields) },
+  handler: async (ctx, args) => {
+    const world = await ctx.db.get(args.worldId);
+    if (!world) throw new Error(`Invalid world ${args.worldId}`);
+    const existing = await ctx.db
+      .query('nexusLayouts')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .unique();
+    const plan = generateHqMap(args.layout);
+    const doc = {
+      worldId: args.worldId,
+      layout: args.layout,
+      spots: plan.spots,
+      skipped: plan.skipped,
+      dropped: plan.dropped,
+      updatedAt: Date.now(),
+    };
+    if (existing) await ctx.db.replace(existing._id, doc);
+    else await ctx.db.insert('nexusLayouts', doc);
+    const mapDoc = await ctx.db
+      .query('maps')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .unique();
+    if (mapDoc) await ctx.db.replace(mapDoc._id, { worldId: args.worldId, ...plan.map });
+    else await ctx.db.insert('maps', { worldId: args.worldId, ...plan.map });
+    await insertInput(ctx, args.worldId, 'nexusSetLayout', { layout: args.layout });
+    // Routes were computed on the old walls: send every character again.
+    const rows = await ctx.db
+      .query('nexusAgents')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .collect();
+    for (const r of rows) await ctx.db.patch(r._id, { sentTo: undefined });
+    return { revision: args.layout.revision, skipped: plan.skipped, dropped: plan.dropped };
   },
 });
 

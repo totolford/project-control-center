@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { toast } from "../lib/toast";
 import { buildDefaultWorkspace, parseWorkspace, pruneWorkspace, type LayoutContext } from "./layoutPersist";
 import type { DockZone, Workspace } from "./layout";
+import { t } from "../i18n";
 
 export const SAVE_DELAY_MS = 500;
 
@@ -95,6 +96,6 @@ export const useDrag = create<DragState>((set, get) => ({
 
 /** Asks for confirmation, then rebuilds the default layout. */
 export async function confirmResetLayout(ctx: LayoutContext): Promise<void> {
-  const ok = await ask("Replace all workspace tabs with the default layout?", { title: "Reset workspace layout", kind: "warning" });
+  const ok = await ask(t("ws.resetConfirm"), { title: t("ws.resetLayout"), kind: "warning" });
   if (ok) useWorkspace.getState().reset(ctx);
 }

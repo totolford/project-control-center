@@ -5,22 +5,26 @@ import type { PtyInfo } from "../lib/types";
 import { useAgents } from "../store";
 import { Menu, type MenuEntry } from "../components/Menu";
 import { EmptyState } from "../components/Common";
-import { PROFILES, respawnRequest, resumableAgents } from "./profiles";
+import { terminalProfiles, usePlatform } from "../lib/platform";
+import { respawnRequest, resumableAgents } from "./profiles";
 import { usePty } from "./ptyStore";
 import { XtermView } from "./XtermView";
+import { useT } from "../i18n";
 
 function NewTerminalMenu() {
+  const t = useT();
   const agents = useAgents();
   const spawn = usePty((s) => s.spawn);
+  const platform = usePlatform();
   const entries = (): MenuEntry[] => {
     const resumable = resumableAgents(agents, isLive);
     return [
-      { heading: "New terminal" },
-      ...PROFILES.map((p) => ({ label: p.label, icon: <SquareTerminal size={13} />, onSelect: () => void spawn(p.profile) })),
+      { heading: t("term.new") },
+      ...terminalProfiles(platform).map((p) => ({ label: p.label, icon: <SquareTerminal size={13} />, onSelect: () => void spawn(p.profile) })),
       "separator",
-      { heading: "Resume agent session" },
+      { heading: t("term.resume") },
       ...(resumable.length === 0
-        ? [{ label: "No stopped agent with a Claude session", disabled: true }]
+        ? [{ label: t("term.noResumable"), disabled: true }]
         : resumable.map((a) => ({ label: a.name, detail: a.role, icon: <History size={13} />, onSelect: () => void spawn("claude-resume", a.id) }))),
     ];
   };
@@ -28,13 +32,13 @@ function NewTerminalMenu() {
     <Menu
       trigger={
         <>
-          <Plus size={13} /> New
+          <Plus size={13} /> {t("term.newShort")}
         </>
       }
       buttonClassName="btn btn-sm"
       entries={entries}
       align="right"
-      label="New terminal"
+      label={t("term.new")}
     />
   );
 }
@@ -55,6 +59,7 @@ function SessionView({ info, visible }: { info: PtyInfo; visible: boolean }) {
 
 /** Tabs of Raw Terminal sessions; several can run at once. */
 function TerminalManager() {
+  const t = useT();
   const sessions = usePty((s) => s.sessions);
   const active = usePty((s) => s.active);
   const loaded = usePty((s) => s.loaded);
@@ -75,7 +80,7 @@ function TerminalManager() {
               <span className={`dot tone-${s.running ? "green" : "grey"}`} />
               <span className="ellipsis">{s.title}</span>
             </button>
-            <button className="ws-tab-close" onClick={() => void close(s.id)} aria-label={`Close ${s.title}`} title={s.running ? "Kill and close" : "Close"}>
+            <button className="ws-tab-close" onClick={() => void close(s.id)} aria-label={t("term.closeAria", { title: s.title })} title={s.running ? t("term.killClose") : t("common.close")}>
               <X size={11} />
             </button>
           </div>
@@ -85,8 +90,8 @@ function TerminalManager() {
       </div>
       <div className="term-stack">
         {sessions.length === 0 ? (
-          <EmptyState icon={<SquareTerminal size={22} />} title={loaded ? "No terminal session" : "Loading sessions…"}>
-            Real ConPTY sessions on this machine: Claude Code (interactive), PowerShell, CMD or WSL. Use “New”.
+          <EmptyState icon={<SquareTerminal size={22} />} title={loaded ? t("term.noSession") : t("term.loading")}>
+            {t("term.emptyHint")}
           </EmptyState>
         ) : (
           sessions.map((s) => <SessionView key={s.id} info={s} visible={s.id === active} />)

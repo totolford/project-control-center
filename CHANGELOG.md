@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.5.0
+
+- Central acts instead of explaining: messages are classified (information / action /
+  mission / resume); "reprends" / "continue" triggers a verified resume (real tasks,
+  files, git, MCP, sessions) with a structured recovery report and continues from the
+  verified point; verify-after-action rules; a mission supervisor that keeps Central
+  going within the autonomy level (LOW / NORMAL / HIGH / MAXIMUM, never beyond granted
+  permissions); automatic MCP reconnection before involving the user; Missions ·
+  Recovery settings with auto-resume after a crash.
+- Local engines: real capability tests (chat, structured output, tool call,
+  multi-step, context, recovery) and "Limited Tool Mode" when tools don't work.
+- AI Usage: real tokens and cost per Claude Code turn, one-shot call, local model and
+  embedding ("N/A" when not exposed), by period, agent, mission, model and category;
+  "estimated tokens avoided" always labelled as an estimate.
+- AI World becomes NEXUS HQ: one building of rooms generated for the real AI Town
+  engine (walls block, doors connect), `.agent-project/world/world.json` with
+  snapshots, rollback and migrations; Central can create, rename, move, archive and
+  assign rooms (`manage_ai_world`, permission-gated); agents walk into the room of what
+  they really do; room panels with real activity; Focus room / Follow mission; world
+  validator and repair, per-character protection, world crash screen, Safe Mode,
+  crash context in reports. The world waits for the deployed functions of the current
+  version before opening (fixes a black world after an update).
+- Interface and AI World in French or English (Auto by default).
+- Ubuntu: platform layer (processes, paths, shells, terminals, credentials via Secret
+  Service, systemd --user, GPU detection), AppImage and .deb packages, Ubuntu CI job,
+  platform capability matrix in Environment.
+
 ## 0.4.2
 
 - Fix "AI World view crashed: Cannot read properties of undefined (reading

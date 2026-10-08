@@ -8,10 +8,12 @@ import { Spinner } from "../../components/Common";
 import { Chip } from "../../components/StatusBadge";
 import { CliRunOutput } from "../../views/mcp/CliRunOutput";
 import { useIntentRunner, type RunnerResult } from "./useIntentRunner";
+import { useT } from "../../i18n";
 
 function Result({ result, busy, test, onTest }: { result: RunnerResult; busy: boolean; test: ReturnType<typeof useIntentRunner>["test"]; onTest: () => void }) {
   const navigate = useStore((s) => s.navigate);
   const openFolder = useOpenFolder();
+  const t = useT();
   switch (result.type) {
     case "applied": {
       const c = result.applied.connection;
@@ -24,7 +26,7 @@ function Result({ result, busy, test, onTest }: { result: RunnerResult; busy: bo
               <>
                 {" · "}
                 <button className="link-btn" onClick={() => navigate({ name: mcp ? "mcp" : "connections" })}>
-                  {c.name} in {mcp ? "MCP" : "Connections"}
+                  {t("msg.cmd.inView", { name: c.name, view: mcp ? "MCP" : t("nav.connections") })}
                 </button>
               </>
             )}
@@ -32,7 +34,7 @@ function Result({ result, busy, test, onTest }: { result: RunnerResult; busy: bo
           </span>
           {c && (
             <button className="btn btn-sm" onClick={onTest} disabled={busy}>
-              {busy ? <Spinner size={11} /> : <Play size={11} />} Test
+              {busy ? <Spinner size={11} /> : <Play size={11} />} {t("msg.cmd.test")}
             </button>
           )}
         </div>
@@ -42,11 +44,11 @@ function Result({ result, busy, test, onTest }: { result: RunnerResult; busy: bo
       return (
         <div className="notice cmd-result">
           <span className="grow">
-            {result.viaTerminal ? "git clone runs in the Terminal view. When it has finished, open " : "Cloned into "}
+            {result.viaTerminal ? t("msg.cmd.cloneTerminal") : t("msg.cmd.clonedInto")}
             <code>{result.folder}</code>
           </span>
           <button className="btn btn-sm" disabled={!openFolder} onClick={() => openFolder && void run(() => openFolder(result.folder))}>
-            <FolderOpen size={11} /> Open as project
+            <FolderOpen size={11} /> {t("msg.cmd.openAsProject")}
           </button>
         </div>
       );
@@ -63,26 +65,27 @@ export function CommandCard({ interp, onClose }: { interp: Interpretation; onClo
   const { busy, result, test, act, runTest } = useIntentRunner(interp);
   const fields = intentFields(interp.intent);
   const conn = result?.type === "applied" ? result.applied.connection : null;
+  const t = useT();
 
   return (
-    <div className="cmd-card" aria-label="Interpreted command">
+    <div className="cmd-card" aria-label={t("msg.cmd.aria")}>
       <div className="cmd-card-head">
         <strong className="grow">{interp.summary}</strong>
         <code>{interp.program}</code>
         <Chip tone={interp.destructive ? "red" : "accent"}>{interp.capability}</Chip>
-        <button className="icon-btn" onClick={onClose} aria-label="Close interpretation">
+        <button className="icon-btn" onClick={onClose} aria-label={t("msg.cmd.close")}>
           <X size={13} />
         </button>
       </div>
       {interp.destructive && (
         <div className="notice notice-warn small">
-          <TriangleAlert size={13} /> This command may delete or overwrite data. Read it carefully before running it.
+          <TriangleAlert size={13} /> {t("msg.cmd.destructive")}
         </div>
       )}
       {rawIsDisplayable(interp.intent) ? (
         <pre className="cmd-raw mono">{interp.raw}</pre>
       ) : (
-        <div className="muted small">The line contains secret values; they are not shown and are stored in Windows Credential Manager when the connection is created.</div>
+        <div className="muted small">{t("msg.cmd.secret")}</div>
       )}
       {fields.length > 0 && (
         <dl className="kv kv-tight cmd-fields">
@@ -100,7 +103,7 @@ export function CommandCard({ interp, onClose }: { interp: Interpretation; onClo
             key={a.id}
             className={`btn btn-sm${a.primary ? " primary" : ""}`}
             disabled={busy !== null || (a.mutates && readOnly)}
-            title={a.mutates && readOnly ? "Compatibility mode: this project is read-only" : undefined}
+            title={a.mutates && readOnly ? t("common.readOnly") : undefined}
             onClick={() => void act(a.id)}
           >
             {busy === a.id && <Spinner size={11} />} {a.label}

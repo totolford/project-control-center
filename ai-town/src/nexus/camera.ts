@@ -1,8 +1,9 @@
 // NEXUS addition: the observer camera of the embedded world (pixi-viewport).
 // Modes: free (drag / wheel), follow one agent, cinematic (cycles through the
-// agents and buildings where something real is happening) and overview.
+// agents and rooms where something real is happening), overview, and mission
+// (keeps the agents really working on one mission in view).
 import type { Viewport } from 'pixi-viewport';
-import type { NexusZone } from '../../data/nexusZones';
+import type { HqRoom } from '../../data/nexusHq';
 import type { CameraMode } from './protocol';
 import { NexusAgentRow, visualState } from './state';
 
@@ -13,7 +14,7 @@ export const CINEMATIC_MS = 7_000;
 
 export type Shot =
   | { kind: 'agent'; nexusId: string; x: number; y: number }
-  | { kind: 'zone'; zone: string; x: number; y: number };
+  | { kind: 'room'; room: string; x: number; y: number };
 
 export type Size = { width: number; height: number; worldWidth: number; worldHeight: number };
 
@@ -30,8 +31,29 @@ export function clampScale(scale: number, s: Size) {
   return Math.max(minScale(s), Math.min(MAX_SCALE, scale));
 }
 
-export function zoneCenter(z: NexusZone) {
-  return { x: (z.x + z.w / 2) * T, y: (z.y + z.h / 2) * T };
+export function roomCenter(r: Pick<HqRoom, 'x' | 'y' | 'w' | 'h'>) {
+  return { x: (r.x + r.w / 2) * T, y: (r.y + r.h / 2) * T };
+}
+
+/**
+ * Center and zoom that keep every listed agent in view (Follow Mission).
+ * `null` when none of them is drawn.
+ */
+export function groupFrame(
+  ids: string[],
+  positions: Map<string, { x: number; y: number }>,
+  s: Size,
+): { x: number; y: number; scale: number } | null {
+  const pts = ids.map((id) => positions.get(id)).filter((p): p is { x: number; y: number } => !!p);
+  if (pts.length === 0) return null;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const pad = 4 * T;
+  const w = x1 - x0 + pad * 2;
+  const h = y1 - y0 + pad * 2;
+  const scale = clampScale(Math.min(2.2, s.width / w, s.height / h), s);
+  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, scale };
 }
 
 /** An agent is "active" when its row reports real work, a request or an error. */
@@ -42,23 +64,23 @@ export function isActive(a: Pick<NexusAgentRow, 'status' | 'emoji' | 'statusLabe
 
 /**
  * Subjects of the cinematic camera: active agents (where they are drawn),
- * then the buildings they work in. Empty when nothing real is happening.
+ * then the rooms they work in. Empty when nothing real is happening.
  */
 export function cinematicShots(
   agents: NexusAgentRow[],
   positions: Map<string, { x: number; y: number }>,
-  zones: NexusZone[],
+  rooms: HqRoom[],
 ): Shot[] {
   const shots: Shot[] = [];
-  const busyZones = new Set<string>();
+  const busy = new Set<string>();
   for (const a of agents) {
     if (!isActive(a)) continue;
-    busyZones.add(a.zone);
+    busy.add(a.zone);
     const p = positions.get(a.nexusId);
     if (p) shots.push({ kind: 'agent', nexusId: a.nexusId, x: p.x, y: p.y });
   }
-  for (const z of zones) {
-    if (busyZones.has(z.id)) shots.push({ kind: 'zone', zone: z.id, ...zoneCenter(z) });
+  for (const r of rooms) {
+    if (busy.has(r.id)) shots.push({ kind: 'room', room: r.id, ...roomCenter(r) });
   }
   return shots;
 }
@@ -99,4 +121,5 @@ export const CAMERA_LABEL: Record<CameraMode, string> = {
   follow: 'FOLLOWING',
   cinematic: 'CINEMATIC',
   overview: 'OVERVIEW',
+  mission: 'FOLLOWING MISSION',
 };

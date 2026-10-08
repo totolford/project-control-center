@@ -8,6 +8,7 @@ import { subscribePty } from "../lib/ptyBus";
 import { toast } from "../lib/toast";
 import type { PtyInfo } from "../lib/types";
 import { XTERM_FONT, XTERM_THEME, useTerminalPrefs } from "./terminalPrefs";
+import { useT } from "../i18n";
 
 interface Handles {
   term: Terminal;
@@ -130,13 +131,14 @@ function useXterm(info: PtyInfo, visible: boolean, paused: boolean, onSearch: ()
 }
 
 function SearchBox({ search, onClose }: { search: SearchAddon; onClose: () => void }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   return (
     <div className="term-search">
       <input
         autoFocus
         value={query}
-        placeholder="Find"
+        placeholder={t("term.find")}
         onChange={(e) => {
           setQuery(e.target.value);
           search.findNext(e.target.value, { incremental: true });
@@ -145,12 +147,12 @@ function SearchBox({ search, onClose }: { search: SearchAddon; onClose: () => vo
           if (e.key === "Enter") (e.shiftKey ? search.findPrevious(query) : search.findNext(query));
           if (e.key === "Escape") onClose();
         }}
-        aria-label="Find in terminal"
+        aria-label={t("term.findIn")}
       />
-      <button className="icon-btn" onClick={() => search.findPrevious(query)} aria-label="Previous match">
+      <button className="icon-btn" onClick={() => search.findPrevious(query)} aria-label={t("term.prev")}>
         <ArrowUp size={12} />
       </button>
-      <button className="icon-btn" onClick={() => search.findNext(query)} aria-label="Next match">
+      <button className="icon-btn" onClick={() => search.findNext(query)} aria-label={t("term.next")}>
         <ArrowDown size={12} />
       </button>
       <button
@@ -159,7 +161,7 @@ function SearchBox({ search, onClose }: { search: SearchAddon; onClose: () => vo
           search.clearDecorations();
           onClose();
         }}
-        aria-label="Close search"
+        aria-label={t("term.closeSearch")}
       >
         <X size={12} />
       </button>
@@ -179,6 +181,7 @@ export const XtermView = memo(function XtermView({
   onRestart: (() => void) | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const [paused, setPaused] = useState(false);
   const [searching, setSearching] = useState(false);
   const { hostRef, handles } = useXterm(info, visible, paused, () => setSearching(true));
@@ -193,28 +196,28 @@ export const XtermView = memo(function XtermView({
         </span>
         <span className="spacer" />
         {searching && handles && <SearchBox search={handles.search} onClose={() => setSearching(false)} />}
-        <button className="icon-btn" onClick={() => term && void copySelection(term)} title="Copy selection (Ctrl+Shift+C)" aria-label="Copy">
+        <button className="icon-btn" onClick={() => term && void copySelection(term)} title={t("term.copyTitle")} aria-label={t("common.copy")}>
           <Copy size={13} />
         </button>
-        <button className="icon-btn" onClick={() => term && void pasteClipboard(term)} title="Paste (Ctrl+Shift+V)" aria-label="Paste" disabled={!info.running}>
+        <button className="icon-btn" onClick={() => term && void pasteClipboard(term)} title={t("term.pasteTitle")} aria-label={t("term.paste")} disabled={!info.running}>
           <ClipboardPaste size={13} />
         </button>
-        <button className="icon-btn" onClick={() => setSearching(true)} title="Find (Ctrl+F)" aria-label="Find">
+        <button className="icon-btn" onClick={() => setSearching(true)} title={t("term.findTitle")} aria-label={t("term.find")}>
           <Search size={13} />
         </button>
-        <button className="icon-btn" onClick={() => term?.clear()} title="Clear the display" aria-label="Clear">
+        <button className="icon-btn" onClick={() => term?.clear()} title={t("term.clearTitle")} aria-label={t("term.clear")}>
           <Eraser size={13} />
         </button>
         <button
           className={`icon-btn${paused ? " active" : ""}`}
           onClick={() => setPaused((p) => !p)}
-          title={paused ? "Resume display (buffered output is shown)" : "Pause display (the process keeps running; output is buffered)"}
-          aria-label={paused ? "Resume display" : "Pause display"}
+          title={paused ? t("term.resumeTitle") : t("term.pauseTitle")}
+          aria-label={paused ? t("term.resumeAria") : t("term.pauseAria")}
         >
           {paused ? <Play size={13} /> : <Pause size={13} />}
         </button>
       </div>
-      {paused && <div className="term-paused">Display paused — output is buffered and shown on resume.</div>}
+      {paused && <div className="term-paused">{t("term.paused")}</div>}
       <div
         className="term-host"
         ref={hostRef}
@@ -227,15 +230,15 @@ export const XtermView = memo(function XtermView({
       />
       {!info.running && (
         <div className="term-exit">
-          <span>Process exited with code {info.exitCode ?? "unknown"}</span>
+          <span>{t("term.exited", { code: info.exitCode ?? t("term.unknown") })}</span>
           <span className="spacer" />
           {onRestart && (
             <button className="btn btn-sm" onClick={onRestart}>
-              <RotateCw size={12} /> Restart
+              <RotateCw size={12} /> {t("panel.act.restart")}
             </button>
           )}
           <button className="btn btn-sm" onClick={onClose}>
-            <X size={12} /> Close
+            <X size={12} /> {t("common.close")}
           </button>
         </div>
       )}

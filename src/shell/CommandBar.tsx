@@ -36,6 +36,7 @@ import { useHealth } from "./health/health";
 import { focusCommandBar } from "./UniversalBar";
 import { availableProviderId, useLayoutContext, useProviders } from "../workspace/hooks";
 import { confirmResetLayout } from "../workspace/store";
+import { t } from "../i18n";
 
 interface Command {
   id: string;
@@ -57,76 +58,77 @@ function buildCommands(ctx: ReturnType<typeof useLayoutContext>): Command[] {
   const p = s.project;
   const provider = availableProviderId();
   if (!p) return [];
+  const CMD = t("cmd.group.command");
   return [
-    { id: "cmd:mission", label: "New mission…", group: "Command", icon: Sparkles, run: newMission },
-    { id: "cmd:ask", label: "Ask Central…", group: "Command", icon: MessageSquare, run: () => focusCommandBar("") },
-    { id: "cmd:interpret", label: "Interpret a command line…", group: "Command", icon: SquareTerminal, run: () => focusCommandBar("/run ") },
+    { id: "cmd:mission", label: t("cmd.mission"), group: CMD, icon: Sparkles, run: newMission },
+    { id: "cmd:ask", label: t("cmd.ask"), group: CMD, icon: MessageSquare, run: () => focusCommandBar("") },
+    { id: "cmd:interpret", label: t("cmd.interpret"), group: CMD, icon: SquareTerminal, run: () => focusCommandBar("/run ") },
     {
       id: "cmd:right",
-      label: "Toggle right panel (Central chat)",
-      group: "Command",
+      label: t("cmd.right"),
+      group: CMD,
       icon: PanelRight,
       run: () => {
         const r = useRightContext.getState();
         r.setRightOpen(!r.rightOpen);
       },
     },
-    { id: "cmd:journal", label: "Command journal", group: "Command", icon: ScrollText, run: () => s.navigate({ name: "commands", section: "journal" }) },
-    { id: "cmd:world", label: "Open AI World", group: "Command", icon: Globe2, run: () => s.navigate({ name: "world" }) },
+    { id: "cmd:journal", label: t("cmd.journal"), group: CMD, icon: ScrollText, run: () => s.navigate({ name: "commands", section: "journal" }) },
+    { id: "cmd:world", label: t("cmd.world"), group: CMD, icon: Globe2, run: () => s.navigate({ name: "world" }) },
     {
       id: "cmd:ai-town",
-      label: "Make this project an AI Town",
-      group: "Command",
+      label: t("cmd.aiTown"),
+      group: CMD,
       icon: Globe2,
       run: () => {
         ui.setAiWorldWizard(true);
         s.navigate({ name: "world" });
       },
     },
-    { id: "cmd:gh-login", label: "Connect GitHub (gh auth login)", group: "Command", icon: LogIn, run: () => void githubSignIn() },
+    { id: "cmd:gh-login", label: t("cmd.ghLogin"), group: CMD, icon: LogIn, run: () => void githubSignIn() },
     ...(p.userRequests.length > 0
-      ? [{ id: "cmd:requests", label: `Show requests from agents (${p.userRequests.length})`, group: "Command", icon: Hand, run: () => ui.setRequestsCollapsed(false) }]
+      ? [{ id: "cmd:requests", label: t("cmd.requests", { count: p.userRequests.length }), group: CMD, icon: Hand, run: () => ui.setRequestsCollapsed(false) }]
       : []),
-    ...(provider ? [{ id: "cmd:agent", label: "Add agent…", group: "Command", icon: Plus, run: () => ui.openDialog({ type: "newAgent", provider }) }] : []),
-    { id: "cmd:conn", label: "Add connection…", group: "Command", icon: Cable, run: () => ui.openDialog({ type: "addConnection" }) },
-    { id: "cmd:stop", label: "Stop all agents", group: "Command", icon: OctagonX, run: () => void run(() => api.stopAll(), "Stop requested for all agents") },
+    ...(provider ? [{ id: "cmd:agent", label: t("cmd.agent"), group: CMD, icon: Plus, run: () => ui.openDialog({ type: "newAgent", provider }) }] : []),
+    { id: "cmd:conn", label: t("cmd.conn"), group: CMD, icon: Cable, run: () => ui.openDialog({ type: "addConnection" }) },
+    { id: "cmd:stop", label: t("cmd.stop"), group: CMD, icon: OctagonX, run: () => void run(() => api.stopAll(), t("cmd.stopDone")) },
     ...(p.emergency
-      ? [{ id: "cmd:release", label: "Release emergency stop", group: "Safety", icon: Siren, run: () => void run(() => api.releaseEmergency(), "Emergency stop released") }]
+      ? [{ id: "cmd:release", label: t("cmd.release"), group: t("cmd.group.safety"), icon: Siren, run: () => void run(() => api.releaseEmergency(), t("cmd.releaseDone")) }]
       : []),
-    { id: "cmd:improve", label: "Run an improvement cycle now", group: "Command", icon: FlaskConical, run: () => void run(() => api.startImprovementCycle(), "Improvement cycle started") },
-    { id: "cmd:claude-refresh", label: "Refresh Claude Code environment", group: "Command", icon: RefreshCw, run: () => void useClaude.getState().load(true) },
-    { id: "cmd:rail", label: "Toggle CONTROL rail", group: "Command", icon: PanelRightOpen, run: () => ui.toggleRail() },
+    { id: "cmd:improve", label: t("cmd.improve"), group: CMD, icon: FlaskConical, run: () => void run(() => api.startImprovementCycle(), t("cmd.improveDone")) },
+    { id: "cmd:claude-refresh", label: t("cmd.claudeRefresh"), group: CMD, icon: RefreshCw, run: () => void useClaude.getState().load(true) },
+    { id: "cmd:rail", label: t("cmd.rail"), group: CMD, icon: PanelRightOpen, run: () => ui.toggleRail() },
     {
       id: "cmd:reload-ui",
-      label: "Reload interface (agents and missions keep running)",
-      group: "Command",
+      label: t("cmd.reloadUi"),
+      group: CMD,
       icon: MonitorUp,
-      run: () => useHealth.getState().openOverlay({ reason: "Reload requested from the command palette", auto: false, forced: true, immediate: true }),
+      run: () => useHealth.getState().openOverlay({ reason: t("cmd.reloadReason"), auto: false, forced: true, immediate: true }),
     },
-    { id: "cmd:reset", label: "Reset workspace layout", group: "Command", icon: RotateCcw, run: () => void confirmResetLayout(ctx) },
-    ...ALL_NAV_ITEMS.map((item) => ({ id: `view:${item.name}`, label: `Go to ${item.label}`, group: "View", icon: item.icon, run: () => s.navigate({ name: item.name }) })),
-    ...p.agents.map((a) => ({ id: `agent:${a.id}`, label: `${a.name} — ${a.role}`, group: "Agent", icon: Bot, run: () => s.openAgent(a.id) })),
+    { id: "cmd:reset", label: t("cmd.reset"), group: CMD, icon: RotateCcw, run: () => void confirmResetLayout(ctx) },
+    ...ALL_NAV_ITEMS.map((item) => ({ id: `view:${item.name}`, label: t("cmd.goTo", { name: item.label }), group: t("cmd.group.view"), icon: item.icon, run: () => s.navigate({ name: item.name }) })),
+    ...p.agents.map((a) => ({ id: `agent:${a.id}`, label: `${a.name} — ${a.role}`, group: t("cmd.group.agent"), icon: Bot, run: () => s.openAgent(a.id) })),
     ...p.agents
       .filter((a) => a.status !== "retired")
       .map((a) => ({
         id: `talk:${a.id}`,
-        label: `Talk to ${a.name}`,
-        group: "Chat",
+        label: t("cmd.talkTo", { name: a.name }),
+        group: t("cmd.group.chat"),
         icon: MessageSquare,
         run: () => useRightContext.getState().openContext(a.id === "central" ? { kind: "central" } : { kind: "agent", agentId: a.id, tab: "chat" }),
       })),
     ...p.missions.map((m) => ({
       id: `mission:${m.id}`,
       label: m.title,
-      group: "Mission",
+      group: t("cmd.group.mission"),
       icon: Target,
       run: () => {
         s.navigate({ name: "missions" });
         useRightContext.getState().openContext({ kind: "mission", missionId: m.id });
       },
     })),
-    ...p.tasks.map((t) => ({ id: `task:${t.id}`, label: t.title, group: "Task", icon: ListChecks, run: () => s.openTask(t.id) })),
-    ...p.connections.map((c) => ({ id: `conn:${c.id}`, label: `${c.name} (${c.kind})`, group: "Connection", icon: Cable, run: () => s.navigate({ name: "connections" }) })),
+    ...p.tasks.map((task) => ({ id: `task:${task.id}`, label: task.title, group: t("cmd.group.task"), icon: ListChecks, run: () => s.openTask(task.id) })),
+    ...p.connections.map((c) => ({ id: `conn:${c.id}`, label: `${c.name} (${c.kind})`, group: t("cmd.group.connection"), icon: Cable, run: () => s.navigate({ name: "connections" }) })),
   ];
 }
 
@@ -171,12 +173,12 @@ function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: (
 
   return (
     <div className="modal-backdrop cmd-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="cmd" role="dialog" aria-label="Command bar">
+      <div className="cmd" role="dialog" aria-label={t("shell.commandBar")}>
         <input
           autoFocus
           className="cmd-input"
           value={query}
-          placeholder="Search agents, tasks, missions, connections, commands…"
+          placeholder={t("cmd.placeholder")}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
@@ -193,10 +195,10 @@ function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: (
               onClose();
             }
           }}
-          aria-label="Search"
+          aria-label={t("common.search")}
         />
         <div className="cmd-list" ref={listRef} role="listbox">
-          {results.length === 0 && <div className="muted small pad">No match.</div>}
+          {results.length === 0 && <div className="muted small pad">{t("cmd.noMatch")}</div>}
           {results.map((c, i) => {
             const Icon = c.icon;
             return (

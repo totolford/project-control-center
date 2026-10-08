@@ -11,6 +11,7 @@
 pub mod aitown;
 pub mod characters;
 pub mod engine;
+pub mod hq;
 pub mod model;
 pub mod providers;
 

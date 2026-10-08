@@ -200,10 +200,41 @@ budget, most recent content kept) and each task carries only the summaries of th
 tasks it depends on. Workers add durable notes with `remember`; Central
 consolidates the files (`write_memory`, or "Consolidate memory" in the UI).
 
+## Platforms (0.5)
+
+Windows and Ubuntu 24.04 LTS+ are both first-class. Everything that differs goes
+through `crates/pcc-platform` (`PlatformManager`, `WindowsPlatform` / `LinuxPlatform`):
+
+- **Processes** — Windows: no console window, the app job object kills children on
+  exit, trees stop with `taskkill /T`. Linux: children start in their own process
+  group; long-lived ones (Claude sessions, AI Town, local AI runtimes) get
+  `PR_SET_PDEATHSIG(SIGKILL)` (forked from a thread that lives as long as NEXUS),
+  trees stop through `killpg` plus the descendants found in `/proc`.
+  `pid_alive`, the process table, start time and CPU time come from `/proc`.
+- **Paths** — `%LOCALAPPDATA%` / `$XDG_DATA_HOME`, `%APPDATA%` / `$XDG_CONFIG_HOME`,
+  PATH lookup with PATHEXT (`npm` → `npm.cmd`) without spawning `where`/`which`.
+- **Shells and terminals** — PowerShell, PowerShell 7, CMD, WSL / bash, zsh, fish,
+  sh; Windows Terminal / x-terminal-emulator, Ptyxis, GNOME Terminal, Konsole…
+  The Raw Terminal offers the shells found on the machine (`shell` = default shell).
+- **Credentials** — `keyring`: Windows Credential Manager / Secret Service (D-Bus,
+  libdbus vendored). A missing Secret Service is reported with what to start.
+- **Services** — optional components as `systemd --user` units in
+  `~/.config/systemd/user` (`nexus-*`), never as root.
+- **Installers** — local AI runtimes: winget on Windows; on Ubuntu the official
+  Ollama script or apt, run through `pkexec` after the user confirmed the exact
+  command (`InstallPlan`), recomputed by the backend (the UI never sends a command line).
+- **GPU** — nvidia-smi on both; WMI on Windows; rocm-smi, `/sys/class/drm` and
+  `lspci` on Linux; CPU-only otherwise.
+- **Capability Matrix** — `platform_capabilities`: Windows / Ubuntu / WSL / Docker
+  support per component plus its live status here (Environment view).
+- **Packaging** — NSIS on Windows; AppImage and .deb on Linux
+  (`src-tauri/tauri.linux.conf.json`); CI runs on `windows-latest` and `ubuntu-24.04`.
+
 ## Secrets
 
-Connection secrets (SSH passphrases, MCP API keys) are stored in the Windows
-Credential Manager under the service `ProjectControlCenter`; the project stores
+Connection secrets (SSH passphrases, MCP API keys) are stored in the OS
+credential store (Windows Credential Manager; Secret Service — GNOME Keyring,
+KWallet — on Linux) under the service `ProjectControlCenter`; the project stores
 only a `credentialRef`. MCP secrets reach the server through `${VAR}` references
 in the generated MCP config and environment variables of the session process, so
 they are never written to disk.

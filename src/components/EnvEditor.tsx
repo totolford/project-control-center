@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Save, TriangleAlert, X } from "lucide-react";
 import { Spinner } from "./Common";
+import { useT } from "../i18n";
 
 type Row = { key: string; value: string };
 
@@ -19,13 +20,14 @@ export function EnvEditor({
   value,
   onSave,
   disabled,
-  saveLabel = "Save variables",
+  saveLabel,
 }: {
   value: Record<string, string>;
   onSave: (env: Record<string, string>) => Promise<unknown> | void;
   disabled?: boolean;
   saveLabel?: string;
 }) {
+  const t = useT();
   const savedKey = JSON.stringify(value);
   const [rows, setRows] = useState<Row[]>(() => toRows(value));
   const [saving, setSaving] = useState(false);
@@ -36,20 +38,20 @@ export function EnvEditor({
   return (
     <div className="env-editor">
       <div className="notice notice-warn small">
-        <TriangleAlert size={13} /> Values are stored in the project in plain text. Never put secrets here — store them in a connection (Windows Credential Manager).
+        <TriangleAlert size={13} /> {t("comp.env.warning")}
       </div>
       {rows.map((r, i) => (
         <div key={i} className="env-row">
-          <input className="mono" value={r.key} placeholder="NAME" onChange={(e) => setRow(i, { key: e.target.value })} aria-label="Variable name" disabled={disabled || saving} />
-          <input className="mono grow" value={r.value} placeholder="value" onChange={(e) => setRow(i, { value: e.target.value })} aria-label={`Value of ${r.key || "variable"}`} disabled={disabled || saving} />
-          <button className="icon-btn" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} aria-label="Remove variable" disabled={disabled || saving}>
+          <input className="mono" value={r.key} placeholder="NAME" onChange={(e) => setRow(i, { key: e.target.value })} aria-label={t("comp.env.name")} disabled={disabled || saving} />
+          <input className="mono grow" value={r.value} placeholder={t("comp.env.value")} onChange={(e) => setRow(i, { value: e.target.value })} aria-label={t("comp.env.valueOf", { name: r.key || t("comp.env.variable") })} disabled={disabled || saving} />
+          <button className="icon-btn" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} aria-label={t("comp.env.remove")} disabled={disabled || saving}>
             <X size={13} />
           </button>
         </div>
       ))}
       <div className="row">
         <button className="btn btn-sm" onClick={() => setRows((rs) => [...rs, { key: "", value: "" }])} disabled={disabled || saving}>
-          <Plus size={12} /> Variable
+          <Plus size={12} /> {t("comp.env.add")}
         </button>
         <span className="spacer" />
         <button
@@ -61,7 +63,7 @@ export function EnvEditor({
             setSaving(false);
           }}
         >
-          {saving ? <Spinner size={11} /> : <Save size={12} />} {saveLabel}
+          {saving ? <Spinner size={11} /> : <Save size={12} />} {saveLabel ?? t("comp.env.save")}
         </button>
       </div>
     </div>

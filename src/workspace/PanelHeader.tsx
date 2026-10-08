@@ -3,6 +3,7 @@ import { Menu, type MenuEntry } from "../components/Menu";
 import type { PanelSpec } from "./layout";
 import type { PanelChrome } from "./PanelFrame";
 import { PANEL_ICON, usePanelTitle } from "./panelMeta";
+import { useT } from "../i18n";
 
 export interface PanelHeaderProps {
   spec: PanelSpec;
@@ -11,10 +12,11 @@ export interface PanelHeaderProps {
 
 /** Right side shared by every header: ⋯ menu + panel controls. */
 export function HeaderActions({ chrome, extra }: { chrome: PanelChrome; extra?: MenuEntry[] }) {
+  const t = useT();
   const entries = extra && extra.length > 0 ? [...extra, "separator" as const, ...chrome.menu] : chrome.menu;
   return (
     <div className="panel-head-actions">
-      <Menu trigger={<MoreHorizontal size={14} />} entries={entries} align="right" label="Panel menu" />
+      <Menu trigger={<MoreHorizontal size={14} />} entries={entries} align="right" label={t("ws.panelMenu")} />
       {chrome.controls}
     </div>
   );

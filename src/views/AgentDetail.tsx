@@ -16,12 +16,14 @@ import { Terminal } from "./agent/Terminal";
 import { AgentMessages } from "./agent/AgentMessages";
 import { AgentPermissions } from "./agent/AgentPermissions";
 import { AgentSessions } from "./agent/AgentSessions";
+import { UsageBlock } from "./usage/UsageBlock";
+import { t } from "../i18n";
 import { CustomizeCharacter } from "./world/CustomizeCharacter";
 import { useAiTown } from "./world/aiTownStore";
 import { buildTree, canDemote, canPromote, clampDepth, findNode, rankOf } from "./agents/hierarchy";
 import { DemoteDialog } from "./agents/HierarchyView";
 
-type TabKey = "terminal" | "messages" | "permissions" | "memory" | "sessions";
+type TabKey = "terminal" | "messages" | "permissions" | "memory" | "sessions" | "usage";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "terminal", label: "Terminal" },
@@ -29,6 +31,12 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "permissions", label: "Permissions / Tools" },
   { key: "memory", label: "Memory" },
   { key: "sessions", label: "Sessions" },
+  {
+    key: "usage",
+    get label() {
+      return t("usage.block.title");
+    },
+  },
 ];
 
 function AgentMemory({ agent }: { agent: Agent }) {
@@ -245,6 +253,7 @@ export function AgentDetail({ agentId }: { agentId: string }) {
         {tab === "permissions" && <AgentPermissions agent={agent} />}
         {tab === "memory" && <AgentMemory agent={agent} />}
         {tab === "sessions" && <AgentSessions agent={agent} />}
+        {tab === "usage" && <UsageBlock agentId={agent.id} />}
       </div>
     </div>
   );

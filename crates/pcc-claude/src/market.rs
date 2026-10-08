@@ -1097,9 +1097,7 @@ pub fn read_provenance(skills: &[Skill]) -> HashMap<String, Provenance> {
 
 /// `~/.claude/plugins` (Claude Code's plugin folder).
 pub fn plugins_dir() -> Option<PathBuf> {
-    std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(|h| PathBuf::from(h).join(".claude").join("plugins"))
+    pcc_platform::platform().home_dir().map(|h| h.join(".claude").join("plugins"))
 }
 
 /// Parses `claude plugin marketplace list --json`, adding `lastUpdated` from `known_marketplaces.json`.

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-react";
+import { useT } from "../i18n";
 
 export function EmptyState({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
@@ -12,19 +13,22 @@ export function EmptyState({ icon, title, children }: { icon?: ReactNode; title:
 }
 
 export function Spinner({ size = 14 }: { size?: number }) {
-  return <LoaderCircle size={size} className="spin" aria-label="Loading" />;
+  const t = useT();
+  return <LoaderCircle size={size} className="spin" aria-label={t("comp.loading")} />;
 }
 
-export function Loading({ text = "Loading…" }: { text?: string }) {
+export function Loading({ text }: { text?: string }) {
+  const t = useT();
   return (
     <div className="loading">
-      <Spinner /> {text}
+      <Spinner /> {text ?? t("common.loading")}
     </div>
   );
 }
 
 /** Pretty-printed JSON, optionally collapsible. */
-export function JsonView({ value, collapsible, label = "Input" }: { value: unknown; collapsible?: boolean; label?: string }) {
+export function JsonView({ value, collapsible, label }: { value: unknown; collapsible?: boolean; label?: string }) {
+  const t = useT();
   const [open, setOpen] = useState(!collapsible);
   let text: string;
   try {
@@ -36,7 +40,7 @@ export function JsonView({ value, collapsible, label = "Input" }: { value: unkno
   return (
     <div className="json-wrap">
       <button type="button" className="link-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />} {label}
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />} {label ?? t("comp.json.input")}
       </button>
       {open && <pre className="json">{text}</pre>}
     </div>

@@ -227,43 +227,36 @@ mod imp {
     }
 }
 
+/// Linux (and other Unix): `/proc` through `pcc_platform::process`.
 #[cfg(not(windows))]
 mod imp {
     use super::*;
+    use pcc_platform::process as platform;
 
     pub fn alive(pid: u32) -> bool {
-        std::path::Path::new(&format!("/proc/{pid}")).exists()
+        platform::pid_alive(pid)
     }
 
     pub fn info(pid: u32) -> Option<ProcInfo> {
-        alive(pid).then_some(ProcInfo { pid, created_ms: None, cpu_ms: None })
+        if !alive(pid) {
+            return None;
+        }
+        let (created_ms, cpu_ms) = platform::times(pid).unwrap_or((None, None));
+        Some(ProcInfo { pid, created_ms, cpu_ms })
     }
 
     pub fn list() -> Vec<ProcEntry> {
-        let mut out = Vec::new();
-        let Ok(rd) = std::fs::read_dir("/proc") else { return out };
-        for e in rd.flatten() {
-            let Ok(pid) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
-            let stat = std::fs::read_to_string(e.path().join("stat")).unwrap_or_default();
-            let name = stat.split('(').nth(1).and_then(|r| r.split(')').next()).unwrap_or("").to_string();
-            let ppid = stat.rsplit(')').next().and_then(|r| r.split_whitespace().nth(1)).and_then(|p| p.parse().ok());
-            out.push(ProcEntry { pid, ppid: ppid.unwrap_or(0), name });
-        }
-        out
+        platform::list().into_iter().map(|p| ProcEntry { pid: p.pid, ppid: p.ppid, name: p.name }).collect()
     }
 
+    /// Image names are compared without `.exe`; `/proc/<pid>/stat` truncates
+    /// names to 15 bytes, so a longer name matches on its first 15.
     pub fn command_lines(names: &[&str], _timeout: Duration) -> Result<Vec<CmdProc>, String> {
+        let wanted: Vec<String> = names.iter().map(|n| n.trim_end_matches(".exe").chars().take(15).collect()).collect();
         Ok(list()
             .into_iter()
-            .filter(|p| names.iter().any(|n| n.trim_end_matches(".exe") == p.name))
-            .map(|p| CmdProc {
-                pid: p.pid,
-                ppid: p.ppid,
-                command_line: std::fs::read(format!("/proc/{}/cmdline", p.pid))
-                    .ok()
-                    .map(|b| String::from_utf8_lossy(&b).replace('\0', " ")),
-                name: p.name,
-            })
+            .filter(|p| wanted.contains(&p.name))
+            .map(|p| CmdProc { pid: p.pid, ppid: p.ppid, command_line: platform::command_line(p.pid), name: p.name })
             .collect())
     }
 }
@@ -277,7 +270,7 @@ mod tests {
         let me = current_pid();
         assert!(pid_alive(me));
         let info = process_info(me).expect("own process");
-        if cfg!(windows) {
+        if cfg!(any(windows, target_os = "linux")) {
             let created = info.created_ms.unwrap();
             let now = chrono::Utc::now().timestamp_millis() as u64;
             assert!(created <= now && now - created < 24 * 3600 * 1000);

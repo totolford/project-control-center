@@ -366,7 +366,7 @@ fn ts_ms(ts: &str) -> u64 {
     chrono::DateTime::parse_from_rfc3339(ts).map(|d| d.timestamp_millis().max(0) as u64).unwrap_or(0)
 }
 
-fn clock(ts: &str) -> String {
+pub(crate) fn clock(ts: &str) -> String {
     chrono::DateTime::parse_from_rfc3339(ts)
         .map(|d| d.with_timezone(&chrono::Local).format("%H:%M:%S").to_string())
         .unwrap_or_else(|_| ts.to_string())
@@ -377,7 +377,7 @@ fn status_str<T: Serialize>(v: &T) -> String {
 }
 
 /// Human list of files, shortened.
-fn file_list(files: &[String], max: usize) -> String {
+pub(crate) fn file_list(files: &[String], max: usize) -> String {
     let mut s = files.iter().take(max).cloned().collect::<Vec<_>>().join(", ");
     if files.len() > max {
         s.push_str(&format!(" and {} more", files.len() - max));
@@ -925,7 +925,11 @@ impl Engine {
             _ => format!("{previous} while {} mission(s) were running.", found.len()),
         };
         r.possible_cause = if unexpected {
-            "The application crashed, was killed (Task Manager, taskkill) or Windows restarted or lost power. The exact cause is not recorded by NEXUS; see the application log of the previous run.".into()
+            format!(
+                "The application crashed, was killed ({}) or {} or lost power. The exact cause is not recorded by NEXUS; see the application log of the previous run.",
+                pcc_platform::external_kill_examples(),
+                pcc_platform::os_restart_phrase()
+            )
         } else {
             "NEXUS was closed by the user while agents were working.".into()
         };
@@ -1035,35 +1039,9 @@ impl Engine {
         if !self.rec.interrupted.iter().any(|m| m.mission_id == id) {
             return Err(pcc_core::Error::invalid(format!("{id} is not waiting for a recovery decision")));
         }
-        let has_agents = self.recovery.as_ref().is_some_and(|r| !r.agents.is_empty());
-        if has_agents {
-            return self.recover();
-        }
-        // No session to resume: hand the brief to Central.
-        self.ensure_not_emergency()?;
-        self.autopilot = true;
-        let im = self.rec.interrupted.iter().find(|m| m.mission_id == id).cloned().unwrap_or_default();
-        self.rec.interrupted.retain(|m| m.mission_id != id);
-        if let Some(info) = self.recovery.as_mut() {
-            info.missions.retain(|m| m.mission_id != id);
-        }
-        if self.recovery.as_ref().is_some_and(|r| r.agents.is_empty() && r.missions.is_empty()) {
-            self.recovery = None;
-        }
-        self.wake(CENTRAL_ID)?;
-        self.post_message(
-            pcc_core::SYSTEM_ID,
-            CENTRAL_ID,
-            pcc_core::MessageKind::System,
-            &format!("{}\n\nVerify the files listed above, then continue coordinating this mission.", im.brief),
-            None,
-            Some(id.to_string()),
-        )?;
-        self.checkpoint_mission(id, "resumed after interruption", true);
-        let report = self.rec.startup_report.clone();
-        let mid = id.to_string();
-        self.amend_report(report.as_deref(), |r| r.restarted.push(format!("{mid}: resumed, Central briefed")));
-        self.schedule()
+        // The resume service: sessions brought back, Central briefed with a
+        // verified report (same flow as "reprends" and the automatic resume).
+        self.resume_mission_flow(id, "user", None).map(|_| ())
     }
 
     /// "Abandon" on an interrupted mission: the mission is cancelled.
@@ -1303,7 +1281,10 @@ fn crash_cause(code: Option<i32>, stderr: &[String]) -> String {
     };
     match (hint, code) {
         (Some(h), _) => h.to_string(),
-        (None, None) => "The process was terminated from outside (Task Manager, taskkill, antivirus) or crashed without an exit code.".into(),
+        (None, None) => format!(
+            "The process was terminated from outside ({}) or crashed without an exit code.",
+            pcc_platform::external_kill_examples()
+        ),
         (None, Some(c)) => format!("Claude Code exited with code {c} without an error message NEXUS recognises; see the last stderr lines below."),
     }
 }
@@ -1473,7 +1454,7 @@ pub fn cleanup_orphan(orphan: &Orphan, workdir: Option<&Path>, session_id: Optio
         step(&mut steps, "Modified files", "no workspace associated with this process".into());
     }
     // 5. Soft attempt: ask the process tree to close.
-    let _ = pcc_claude::process::std_command("taskkill").args(["/PID", &orphan.pid.to_string(), "/T"]).output();
+    pcc_platform::process::kill_tree(orphan.pid, false);
     let deadline = Instant::now() + std::time::Duration::from_secs(4);
     while Instant::now() < deadline && sys::pid_alive(orphan.pid) {
         std::thread::sleep(std::time::Duration::from_millis(200));
@@ -1487,10 +1468,14 @@ pub fn cleanup_orphan(orphan: &Orphan, workdir: Option<&Path>, session_id: Optio
     step(
         &mut steps,
         "Soft stop",
-        "no reaction within 4 s (console processes without a window ignore close requests)".into(),
+        if cfg!(windows) {
+            "no reaction within 4 s (console processes without a window ignore close requests)".into()
+        } else {
+            "no reaction to SIGTERM within 4 s".into()
+        },
     );
     // 6. Termination of the process tree.
-    let r = pcc_claude::process::std_command("taskkill").args(["/PID", &orphan.pid.to_string(), "/T", "/F"]).output();
+    let r = pcc_platform::process::kill_tree(orphan.pid, true);
     std::thread::sleep(std::time::Duration::from_millis(300));
     out.terminated = !sys::pid_alive(orphan.pid);
     step(
@@ -1498,8 +1483,8 @@ pub fn cleanup_orphan(orphan: &Orphan, workdir: Option<&Path>, session_id: Optio
         "Terminate",
         match (out.terminated, r) {
             (true, _) => "process tree terminated".into(),
-            (false, Ok(o)) => format!("could not terminate: {}", String::from_utf8_lossy(&o.stderr).trim()),
-            (false, Err(e)) => format!("could not terminate: {e}"),
+            (false, true) => "could not terminate: the process is still running after the kill request".into(),
+            (false, false) => "could not terminate: the kill request was refused (access denied?)".into(),
         },
     );
     out.steps = steps;

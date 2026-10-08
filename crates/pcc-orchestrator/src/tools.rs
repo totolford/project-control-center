@@ -104,6 +104,22 @@ fn central_tools() -> Vec<Value> {
             &["mission_id", "summary"],
         ),
         tool("fail_mission", "Close a mission that cannot be achieved.", json!({"mission_id": {"type": "string"}, "reason": {"type": "string"}}), &["mission_id", "reason"]),
+        tool(
+            "resume_report",
+            "Verified state of the mission to continue (the interrupted or running one, or mission_id): tasks done vs remaining, files of completed tasks checked on disk, repository, Claude sessions, MCP servers, agents, last action and the next action. Read-only. Use it when the user asks to continue/resume and no NEXUS RESUME REPORT was given.",
+            json!({"mission_id": {"type": "string"}}),
+            &[],
+        ),
+        tool(
+            "report_mission_blocked",
+            "Declare that the running mission cannot continue without the user (a decision, a permission, a sign-in, an external action) or hit a fatal error. NEXUS then stops reminding you to continue until the user answers. Say in your text what you need.",
+            json!({
+                "mission_id": {"type": "string", "description": "Defaults to the running mission"},
+                "reason": {"type": "string", "description": "What is missing, precisely"},
+                "needs": {"type": "string", "enum": ["user_decision", "permission", "external", "fatal"]}
+            }),
+            &["reason"],
+        ),
     ]
 }
 
@@ -270,6 +286,7 @@ pub fn handle_rpc(engine: &mut Engine, agent: &str, request_id: &str, msg: &Valu
         "tools/list" => Ok(json!({"tools": if is_central {
             let mut t = central_tools();
             t.extend(crate::env_tools::definitions());
+            t.push(crate::world_tools::definition());
             t
         } else if is_lieutenant {
             let mut t = worker_tools();
@@ -287,7 +304,9 @@ pub fn handle_rpc(engine: &mut Engine, agent: &str, request_id: &str, msg: &Valu
                     return reply;
                 }
             }
-            let out = if is_central {
+            let out = if is_central && name == crate::world_tools::TOOL {
+                crate::world_tools::call(engine, agent, &args)
+            } else if is_central {
                 call_central(engine, agent, name, &args)
             } else if is_lieutenant {
                 call_lieutenant(engine, agent, name, &args).unwrap_or_else(|| call_worker(engine, agent, name, &args))
@@ -402,6 +421,21 @@ fn call_central(e: &mut Engine, me: &str, name: &str, args: &Value) -> Result<St
         "fail_mission" => {
             let m = e.finish_mission(req(args, "mission_id")?, MissionStatus::Failed, req(args, "reason")?)?;
             Ok(format!("Mission {} marked as failed.", m.id))
+        }
+        "resume_report" => {
+            let mid = match s(args, "mission_id") {
+                Some(m) => m.to_string(),
+                None => e.resume_candidate()?.ok_or_else(|| Error::invalid("no running or interrupted mission"))?,
+            };
+            Ok(e.resume_report(&mid, "central")?.render())
+        }
+        "report_mission_blocked" => {
+            let b =
+                e.report_mission_blocked(s(args, "mission_id"), req(args, "reason")?, s(args, "needs").unwrap_or(""))?;
+            Ok(format!(
+                "Mission {} marked as waiting for the user ({}). NEXUS will not push you to continue until the user answers; end your turn with a clear question or request.",
+                b.mission_id, b.needs
+            ))
         }
         other => Err(Error::invalid(format!("unknown tool `{other}`"))),
     }

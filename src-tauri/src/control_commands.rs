@@ -38,7 +38,7 @@ fn claude() -> CmdResult<PathBuf> {
 async fn workdir(state: &AppState) -> PathBuf {
     match state.orch().await {
         Ok(o) => o.store.root().to_path_buf(),
-        Err(_) => std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(std::env::temp_dir),
+        Err(_) => pcc_platform::paths::home_dir(),
     }
 }
 
@@ -143,7 +143,8 @@ pub async fn claude_mcp_add(
                 o.iter().find(|(_, v)| !v.as_str().is_some_and(|s| s.starts_with("${") && s.ends_with('}')))
             {
                 return Err(Error::invalid(format!(
-                    "`{k}` must be a ${{VAR}} reference: secrets are not written to Claude Code's config files. Add the server to NEXUS instead to keep the value in Windows Credential Manager."
+                    "`{k}` must be a ${{VAR}} reference: secrets are not written to Claude Code's config files. Add the server to NEXUS instead to keep the value in {}.",
+                    pcc_platform::credential_store_name()
                 )));
             }
         }
@@ -532,7 +533,8 @@ pub async fn project_insights(state: State<'_, AppState>) -> CmdResult<ProjectIn
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalRequest {
-    /// `claude`, `claude-resume`, `powershell`, `pwsh`, `cmd`, `wsl`.
+    /// `claude`, `claude-resume`, `shell` (the default shell) or a shell id
+    /// from `platform_info` (`powershell`, `pwsh`, `cmd`, `wsl`, `bash`, `zsh`…).
     pub profile: String,
     /// For `claude-resume`: the agent whose Claude session to open.
     pub agent_id: Option<String>,
@@ -567,11 +569,16 @@ pub async fn pty_spawn(app: AppHandle, state: State<'_, AppState>, request: Term
                 PathBuf::from(a.workdir),
             )
         }
-        "powershell" => ("PowerShell".into(), "powershell.exe".into(), vec!["-NoLogo".into()], cwd),
-        "pwsh" => ("PowerShell 7".into(), "pwsh.exe".into(), vec!["-NoLogo".into()], cwd),
-        "cmd" => ("Command Prompt".into(), "cmd.exe".into(), vec![], cwd),
-        "wsl" => ("WSL".into(), "wsl.exe".into(), vec![], cwd),
-        other => return Err(Error::invalid(format!("unknown terminal profile `{other}`"))),
+        // Shells found on this machine (pcc_platform::shells): PowerShell, CMD,
+        // WSL on Windows; bash, zsh, fish, sh on Linux. `shell` is the default one.
+        id => {
+            let shell =
+                if id == "shell" { pcc_platform::shells::default_shell() } else { pcc_platform::shells::shell(id) };
+            let s = shell
+                .ok_or_else(|| Error::invalid(format!("terminal profile `{id}` is not available on this machine")))?;
+            let program = s.program.ok_or_else(|| Error::not_found(s.name.clone()))?;
+            (s.name, program, s.args, cwd)
+        }
     };
     let app2 = app.clone();
     let info = state.pty.spawn(

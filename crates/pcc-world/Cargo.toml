@@ -10,6 +10,7 @@ pcc-core.workspace = true
 pcc-claude.workspace = true
 pcc-ai.workspace = true
 pcc-recovery.workspace = true
+pcc-platform.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

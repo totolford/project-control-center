@@ -132,12 +132,7 @@ async fn probe_stdio(
 }
 
 fn kill_tree(pid: u32) {
-    #[cfg(windows)]
-    {
-        let _ = pcc_claude::process::std_command("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).output();
-    }
-    #[cfg(not(windows))]
-    let _ = pid;
+    pcc_platform::process::kill_tree(pid, true);
 }
 
 async fn talk_stdio(child: &mut tokio::process::Child) -> Result<McpProbe, String> {

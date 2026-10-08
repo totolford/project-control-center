@@ -202,6 +202,30 @@ span.cap-cell {
 .dep-chips {
   padding: 6px 0;
 }
+.cap-matrix th[scope="row"] {
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cap-matrix td {
+  vertical-align: top;
+  min-width: 120px;
+}
+.cap-matrix .cap-current {
+  background: var(--accent-soft);
+}
+.cap-matrix .cap-here {
+  margin-left: 6px;
+}
+.cap-note {
+  margin-top: 3px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 
 /* ------------------------------------------------------------------ live activity */
 .event-kind {

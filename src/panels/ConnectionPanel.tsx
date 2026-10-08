@@ -9,9 +9,11 @@ import { Chip } from "../components/StatusBadge";
 import { Spinner } from "../components/Common";
 import type { PanelBodyProps } from "../workspace/registry";
 import { useAgents, useConnections, useStore } from "../store";
+import { useT } from "../i18n";
 
 /** Status block shared by connection panels: status, detail, last check, Test button, granted agents. */
 export function ConnectionStatusBlock({ conn }: { conn: Connection }) {
+  const t = useT();
   const upsertConnection = useStore((s) => s.upsertConnection);
   const openAgent = useStore((s) => s.openAgent);
   const agents = useAgents();
@@ -32,16 +34,16 @@ export function ConnectionStatusBlock({ conn }: { conn: Connection }) {
         <strong className="grow ellipsis">{conn.name}</strong>
         <Chip tone={status.tone}>{status.label}</Chip>
         <button className="btn btn-sm" onClick={() => void test()} disabled={testing}>
-          {testing ? <Spinner size={12} /> : <Zap size={12} />} Test
+          {testing ? <Spinner size={12} /> : <Zap size={12} />} {t("panel.test")}
         </button>
       </div>
       {conn.statusDetail && <div className={`small ${conn.status === "error" ? "tone-red-fg" : "muted"}`}>{conn.statusDetail}</div>}
       <div className="muted small">
-        {conn.kind} · checked {formatRelative(conn.lastChecked)}
+        {conn.kind} · {t("panel.checked", { when: formatRelative(conn.lastChecked) })}
       </div>
-      <div className="section-label">Agents with access ({granted.length})</div>
+      <div className="section-label">{t("panel.agentsWithAccess", { count: granted.length })}</div>
       {granted.length === 0 ? (
-        <div className="muted small">No agent is granted this connection.</div>
+        <div className="muted small">{t("panel.noGrant")}</div>
       ) : (
         <div className="chips-row">
           {granted.map((a) => (
@@ -56,8 +58,9 @@ export function ConnectionStatusBlock({ conn }: { conn: Connection }) {
 }
 
 export const ConnectionPanel = memo(function ConnectionPanel({ spec }: PanelBodyProps) {
+  const t = useT();
   const conn = useConnections().find((c) => c.id === spec.connectionId);
-  if (!conn) return <div className="muted pad">This connection was removed.</div>;
+  if (!conn) return <div className="muted pad">{t("panel.connRemoved")}</div>;
   return (
     <div className="panel-scroll pad-sm">
       <ConnectionStatusBlock conn={conn} />

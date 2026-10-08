@@ -10,6 +10,7 @@ import { useUi } from "../state/ui";
 import { showTerminal } from "../terminal/openInTerminal";
 import { useAgents, useConnections, useStore, useUserRequests } from "../store";
 import { Spinner } from "../components/Common";
+import { t } from "../i18n";
 
 const SHOWN = 3;
 
@@ -23,8 +24,8 @@ function useResolve(req: UserRequest) {
     if (ok && resolves) remove(req.id);
     return ok;
   };
-  const complete = (note?: string) => step("done", () => api.completeUserRequest(req.id, note), "Request completed", true);
-  const decline = () => step("decline", () => api.dismissUserRequest(req.id, "Declined by the user"), "Request declined", true);
+  const complete = (note?: string) => step("done", () => api.completeUserRequest(req.id, note), t("bar.req.completed"), true);
+  const decline = () => step("decline", () => api.dismissUserRequest(req.id, "Declined by the user"), t("bar.req.declined"), true);
   return { busy, setBusy, step, complete, decline };
 }
 
@@ -35,7 +36,7 @@ function SecretForm({ req }: { req: UserRequest }) {
     const secret = value;
     // The value only lives in this input; it is cleared before the call resolves.
     setValue("");
-    await step("provide", () => api.provideSecret(req.id, secret), "Stored in Windows Credential Manager", true);
+    await step("provide", () => api.provideSecret(req.id, secret), t("bar.req.stored"), true);
   };
   return (
     <form
@@ -45,12 +46,12 @@ function SecretForm({ req }: { req: UserRequest }) {
         if (value) void submit();
       }}
     >
-      <input type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} placeholder={req.key ?? "secret"} aria-label={`Value of ${req.key ?? "secret"}`} />
+      <input type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} placeholder={req.key ?? "secret"} aria-label={t("bar.req.valueOf", { key: req.key ?? "secret" })} />
       <button type="submit" className="btn btn-sm primary" disabled={!value || busy !== null}>
-        {busy === "provide" ? <Spinner size={11} /> : <KeyRound size={11} />} Provide
+        {busy === "provide" ? <Spinner size={11} /> : <KeyRound size={11} />} {t("bar.req.provide")}
       </button>
       <button type="button" className="btn btn-sm ghost" onClick={() => void decline()} disabled={busy !== null}>
-        Decline
+        {t("bar.req.decline")}
       </button>
     </form>
   );
@@ -67,7 +68,7 @@ function SshKeyActions({ req }: { req: UserRequest }) {
     const result = await attempt(() => api.sshKeySetup(connectionId));
     setBusy(null);
     if (!result) return;
-    setKeyPath(`${result.keyPath}${result.createdKey ? " (new key)" : " (existing key)"}`);
+    setKeyPath(t(result.createdKey ? "bar.req.newKey" : "bar.req.existingKey", { path: result.keyPath }));
     showTerminal(result.terminal);
   };
   const test = async () => {
@@ -82,23 +83,23 @@ function SshKeyActions({ req }: { req: UserRequest }) {
   return (
     <>
       <p className="small muted">
-        NEXUS creates a dedicated key for this connection and opens a terminal where you type the remote password once to install it. Agents never see the password.
+        {t("bar.req.sshExplain")}
       </p>
-      {!connectionId && <p className="small tone-red-fg">This request names no connection; it cannot be set up from here.</p>}
+      {!connectionId && <p className="small tone-red-fg">{t("bar.req.noConnection")}</p>}
       {keyPath && <p className="small mono">{keyPath}</p>}
-      {status && <p className="small">Connection: {status}</p>}
+      {status && <p className="small">{t("bar.req.connection", { status })}</p>}
       <div className="req-actions">
         <button className="btn btn-sm primary" onClick={() => void setup()} disabled={!connectionId || busy !== null}>
-          {busy === "setup" && <Spinner size={11} />} Set up key
+          {busy === "setup" && <Spinner size={11} />} {t("bar.req.setupKey")}
         </button>
         <button className="btn btn-sm" onClick={() => void test()} disabled={!connectionId || busy !== null}>
-          {busy === "test" && <Spinner size={11} />} Test connection
+          {busy === "test" && <Spinner size={11} />} {t("bar.req.testConnection")}
         </button>
         <button className="btn btn-sm" onClick={() => void complete("SSH key installed")} disabled={busy !== null}>
-          Done
+          {t("common.done")}
         </button>
         <button className="btn btn-sm ghost" onClick={() => void decline()} disabled={busy !== null}>
-          Decline
+          {t("bar.req.decline")}
         </button>
       </div>
     </>
@@ -116,14 +117,14 @@ function SimpleActions({ req }: { req: UserRequest }) {
     <div className="req-actions">
       {req.kind === "github_login" && (
         <button className="btn btn-sm primary" onClick={() => void signIn()} disabled={busy !== null}>
-          {busy === "signin" && <Spinner size={11} />} Sign in to GitHub
+          {busy === "signin" && <Spinner size={11} />} {t("bar.req.signIn")}
         </button>
       )}
       <button className="btn btn-sm" onClick={() => void complete(req.kind === "github_login" ? "Signed in to GitHub" : undefined)} disabled={busy !== null}>
-        {req.kind === "github_login" ? "I'm signed in" : "Done"}
+        {req.kind === "github_login" ? t("bar.req.signedIn") : t("common.done")}
       </button>
       <button className="btn btn-sm ghost" onClick={() => void decline()} disabled={busy !== null}>
-        Decline
+        {t("bar.req.decline")}
       </button>
     </div>
   );
@@ -163,25 +164,25 @@ export function UserRequests() {
   if (collapsed) {
     return (
       <button className="req-pill" onClick={() => setCollapsed(false)}>
-        <Hand size={12} /> {ordered.length} {ordered.length === 1 ? "agent needs" : "agents need"} you
+        <Hand size={12} /> {t("bar.req.pill", { count: ordered.length })}
       </button>
     );
   }
   const name = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
   const conn = (id: string | null) => (id ? (connections.find((c) => c.id === id)?.name ?? null) : null);
   return (
-    <div className="req-stack" aria-label="Requests from agents">
+    <div className="req-stack" aria-label={t("bar.req.stackAria")}>
       <div className="req-stack-head">
-        <span className="rail-title">AGENTS NEED YOU · {ordered.length}</span>
+        <span className="rail-title">{t("bar.req.stackTitle", { count: ordered.length })}</span>
         <span className="spacer" />
-        <button className="icon-btn" onClick={() => setCollapsed(true)} aria-label="Fold requests" title="Fold (they stay in the notification center)">
+        <button className="icon-btn" onClick={() => setCollapsed(true)} aria-label={t("bar.req.fold")} title={t("bar.req.foldTitle")}>
           <ChevronDown size={13} />
         </button>
       </div>
       {ordered.slice(0, SHOWN).map((r) => (
         <RequestCard key={r.id} req={r} agent={name(r.agentId)} connection={conn(r.connectionId)} />
       ))}
-      {ordered.length > SHOWN && <div className="muted small center">+{ordered.length - SHOWN} more after these</div>}
+      {ordered.length > SHOWN && <div className="muted small center">{t("bar.req.more", { count: ordered.length - SHOWN })}</div>}
     </div>
   );
 }

@@ -37,9 +37,10 @@ export const Player = ({
   if (!playerCharacter) {
     throw new Error(`Player ${player.id} has no character`);
   }
-  // NEXUS: also resolves skins imported in NEXUS (`nexus-skin:<name>`).
+  // NEXUS: also resolves skins imported in NEXUS (`nexus-skin:<name>`) and
+  // the validated appearance of NEXUS agents (default sprite when broken).
   const character = nexus
-    ? nexus.resolve(playerCharacter)
+    ? nexus.resolve(playerCharacter, player.id)
     : characters.find((c) => c.name === playerCharacter);
 
   const locationBuffer = game.world.historicalLocations?.get(player.id);
@@ -59,6 +60,10 @@ export const Player = ({
   }
 
   if (!historicalLocation) {
+    return null;
+  }
+  // NEXUS: agents refused by the world validator are not drawn.
+  if (nexus?.hidden(player.id)) {
     return null;
   }
 

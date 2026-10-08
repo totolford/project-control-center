@@ -13,19 +13,66 @@ use serde_json::{json, Value};
 
 use pcc_core::{Error, Result};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    /// Assistant turn that called tools, in the runtime's wire format.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Value>,
+    /// Tool result (OpenAI-compatible servers): the call it answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Tool result (Ollama): the tool that produced it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
 }
 
 impl ChatMessage {
     pub fn system(c: impl Into<String>) -> Self {
-        Self { role: "system".into(), content: c.into() }
+        Self { role: "system".into(), content: c.into(), ..Default::default() }
     }
     pub fn user(c: impl Into<String>) -> Self {
-        Self { role: "user".into(), content: c.into() }
+        Self { role: "user".into(), content: c.into(), ..Default::default() }
     }
+
+    /// The assistant turn that made `calls`, to send back with their results
+    /// (`kind` is the provider's `kind()`).
+    pub fn assistant_calls(kind: &str, content: &str, calls: &[ToolCall]) -> Self {
+        let wire: Vec<Value> = calls
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                if kind == "ollama" {
+                    json!({"function": {"name": c.name, "arguments": c.arguments}})
+                } else {
+                    json!({"id": call_id(c, i), "type": "function",
+                        "function": {"name": c.name, "arguments": c.arguments.to_string()}})
+                }
+            })
+            .collect();
+        Self {
+            role: "assistant".into(),
+            content: content.into(),
+            tool_calls: Some(Value::Array(wire)),
+            ..Default::default()
+        }
+    }
+
+    /// Result of the `index`-th call of the previous assistant turn.
+    pub fn tool_result(kind: &str, call: &ToolCall, index: usize, content: impl Into<String>) -> Self {
+        let mut m = Self { role: "tool".into(), content: content.into(), ..Default::default() };
+        if kind == "ollama" {
+            m.tool_name = Some(call.name.clone());
+        } else {
+            m.tool_call_id = Some(call_id(call, index));
+        }
+        m
+    }
+}
+
+fn call_id(c: &ToolCall, index: usize) -> String {
+    c.id.clone().unwrap_or_else(|| format!("call_{index}"))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -52,6 +99,9 @@ pub struct ChatRequest {
 pub struct ToolCall {
     pub name: String,
     pub arguments: Value,
+    /// Call id given by OpenAI-compatible servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -217,7 +267,11 @@ pub fn parse_ollama_chat(v: &Value) -> Result<ChatResponse> {
                 .iter()
                 .filter_map(|c| {
                     let f = &c["function"];
-                    Some(ToolCall { name: f["name"].as_str()?.to_string(), arguments: f["arguments"].clone() })
+                    Some(ToolCall {
+                        name: f["name"].as_str()?.to_string(),
+                        arguments: f["arguments"].clone(),
+                        id: None,
+                    })
                 })
                 .collect()
         })
@@ -505,7 +559,11 @@ fn openai_tool_calls(msg: &Value) -> Vec<ToolCall> {
                         Value::String(s) => serde_json::from_str(s).unwrap_or(Value::String(s.clone())),
                         other => other.clone(),
                     };
-                    Some(ToolCall { name: f["name"].as_str()?.to_string(), arguments: args })
+                    Some(ToolCall {
+                        name: f["name"].as_str()?.to_string(),
+                        arguments: args,
+                        id: c["id"].as_str().map(str::to_string),
+                    })
                 })
                 .collect()
         })
@@ -720,6 +778,28 @@ mod tests {
         assert_eq!(parse_openai_sse("data: [DONE]"), None);
         assert_eq!(parse_openai_sse(": keep-alive"), None);
         assert_eq!(parse_openai_sse("data: {\"x\":1}").unwrap()["x"], 1);
+    }
+
+    #[test]
+    fn sends_tool_results_back_in_each_wire_format() {
+        let c = ToolCall { name: "find_order".into(), arguments: json!({"customer": "Alice"}), id: None };
+        let o = ChatMessage::assistant_calls("ollama", "", std::slice::from_ref(&c));
+        assert_eq!(o.tool_calls.as_ref().unwrap()[0]["function"]["arguments"]["customer"], "Alice");
+        let r = ChatMessage::tool_result("ollama", &c, 0, "ORD-1");
+        assert_eq!(
+            (r.role.as_str(), r.tool_name.as_deref(), r.tool_call_id.as_deref()),
+            ("tool", Some("find_order"), None)
+        );
+        let oc = ToolCall { id: Some("call_abc".into()), ..c.clone() };
+        let a = ChatMessage::assistant_calls("lmstudio", "", std::slice::from_ref(&oc));
+        let wire = &a.tool_calls.as_ref().unwrap()[0];
+        assert_eq!(
+            (wire["id"].as_str(), wire["function"]["arguments"].as_str()),
+            (Some("call_abc"), Some(r#"{"customer":"Alice"}"#))
+        );
+        assert_eq!(ChatMessage::tool_result("lmstudio", &oc, 0, "x").tool_call_id.as_deref(), Some("call_abc"));
+        // Plain messages serialise as before.
+        assert_eq!(serde_json::to_value(ChatMessage::user("hi")).unwrap(), json!({"role": "user", "content": "hi"}));
     }
 
     #[test]

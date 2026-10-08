@@ -6,6 +6,8 @@ import { isLive } from "./lib/labels";
 import { run } from "./lib/toast";
 import { useStore } from "./store";
 import { useBackendSync } from "./state/backendSync";
+import { useLanguageSync } from "./i18n/prefs";
+import { t, useLocale } from "./i18n";
 import { Toasts } from "./components/Toasts";
 import { PermissionModal } from "./components/PermissionModal";
 import { RecoveryDialog } from "./components/RecoveryDialog";
@@ -61,7 +63,7 @@ function useResync(): boolean {
 function RootCrash({ error }: { error: Error }) {
   return (
     <div className="sro-backdrop">
-      <SafeRecoveryPanel overlay={{ reason: `The interface crashed: ${error.message}`, auto: true, forced: true }} />
+      <SafeRecoveryPanel overlay={{ reason: t("health.crashed", { message: error.message }), auto: true, forced: true }} />
     </div>
   );
 }
@@ -69,7 +71,7 @@ function RootCrash({ error }: { error: Error }) {
 export function App() {
   useRendererHealth();
   return (
-    <ErrorBoundary label="Interface" fallback={(error) => <RootCrash error={error} />}>
+    <ErrorBoundary label={t("health.interface")} fallback={(error) => <RootCrash error={error} />}>
       <AppContent />
       <SafeRecoveryOverlay />
     </ErrorBoundary>
@@ -81,6 +83,9 @@ function AppContent() {
   const loadSnapshot = useStore((s) => s.loadSnapshot);
   const [setup, setSetup] = useState<FolderInspection | null>(null);
   useBackendSync();
+  useLanguageSync();
+  // Re-render the whole tree on a language change, so text computed outside hooks (labels) follows.
+  useLocale();
   useWindowTitle();
   const resyncing = useResync();
 
@@ -97,9 +102,11 @@ function AppContent() {
   const closeProject = async () => {
     const live = (useStore.getState().project?.agents ?? []).filter((a) => isLive(a.status)).length;
     if (live > 0) {
-      const ok = await ask(`${live} ${live === 1 ? "agent is" : "agents are"} still running. Closing the project stops their sessions; they can be recovered next time.`, {
-        title: "Close project",
+      const ok = await ask(t("health.closeRunning", { count: live }), {
+        title: t("cmd.project.close"),
         kind: "warning",
+        okLabel: t("cmd.project.close"),
+        cancelLabel: t("common.cancel"),
       });
       if (!ok) return;
     }
@@ -107,7 +114,7 @@ function AppContent() {
   };
 
   let content;
-  if (resyncing && !hasProject) content = <Loading text="Connecting to the engine…" />;
+  if (resyncing && !hasProject) content = <Loading text={t("health.connectingEngine")} />;
   else if (setup)
     content = (
       <Setup

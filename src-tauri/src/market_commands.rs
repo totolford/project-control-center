@@ -51,7 +51,7 @@ fn gh() -> CmdResult<GhCli> {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from)
+    Some(pcc_platform::paths::home_dir())
 }
 
 async fn project_root(state: &AppState) -> Option<PathBuf> {

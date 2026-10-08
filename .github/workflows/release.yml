@@ -1,6 +1,8 @@
 name: Release
 
-# Push a tag like `v1.0.0` to build, test and publish the Windows installer.
+# Push a tag like `v1.0.0` to build, test and publish the Windows installer,
+# then the Linux AppImage and .deb (Ubuntu 24.04). tauri-action merges each
+# platform into the release's updater latest.json (windows-x86_64, linux-x86_64).
 on:
   push:
     tags: ["v*"]
@@ -57,12 +59,13 @@ jobs:
           releaseName: NEXUS ${{ github.ref_name }}
           releaseBody: |
             Windows installer: download `ProjectControlCenter-${{ github.ref_name }}-setup.exe` below.
+            Ubuntu 24.04 LTS and later: the `.AppImage` (updates itself) or the `.deb` (`sudo apt install ./<file>.deb`), added by the Linux build a few minutes after the Windows one.
             Requires Claude Code (https://docs.anthropic.com/en/docs/claude-code/setup), signed in with `claude auth login`.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          args: --config src-tauri/tauri.release.conf.json
+          args: --config src-tauri/tauri.release.conf.json --bundles nsis
 
       - name: Upload installer with a stable name
         shell: bash
@@ -73,3 +76,53 @@ jobs:
           dst="ProjectControlCenter-${GITHUB_REF_NAME}-setup.exe"
           cp "$src" "$dst"
           gh release upload "$GITHUB_REF_NAME" "$dst" --clobber
+
+  # Runs after the Windows job so both upload to the same release and the
+  # updater latest.json gains the linux-x86_64 (AppImage) entry.
+  release-linux:
+    needs: release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies (Tauri, WebKitGTK, D-Bus)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl wget file patchelf \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev libxdo-dev libdbus-1-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm run install:ai-town
+
+      - name: Tests
+        run: |
+          npm run typecheck
+          npm test
+          cargo test --workspace
+
+      - name: Build AppImage and .deb and add them to the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: NEXUS ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config src-tauri/tauri.release.conf.json --bundles appimage,deb

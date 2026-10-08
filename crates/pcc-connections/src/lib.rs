@@ -1,7 +1,7 @@
 //! Project connections: resources an agent can be granted.
 //!
 //! * `environment` – what the project folder contains and which tools exist.
-//! * `secrets`     – Windows Credential Manager storage (only references on disk).
+//! * `secrets`     – OS credential store (Windows Credential Manager, Secret Service on Linux; only references on disk).
 //! * `kinds`       – typed configuration and health checks for each kind.
 //! * `mcp`         – MCP stdio handshake used to verify MCP servers.
 //! * `github`      – read-only GitHub overview through the user's `gh` login.

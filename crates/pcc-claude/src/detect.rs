@@ -37,17 +37,18 @@ pub fn find_claude() -> Option<PathBuf> {
             }
         }
     }
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
+    // A desktop launcher does not read ~/.bashrc: look where the installers put it.
+    let home = pcc_platform::platform().home_dir();
     if let Some(h) = &home {
-        for rel in [".local/bin", ".claude/local", ".claude/bin"] {
+        for rel in [".local/bin", ".claude/local", ".claude/bin", ".npm-global/bin"] {
             let cand = h.join(rel).join(exe);
             if cand.is_file() {
                 return Some(cand);
             }
         }
     }
-    if let Some(appdata) = std::env::var_os("APPDATA") {
-        if let Some(p) = npm_binary(&PathBuf::from(appdata).join("npm")) {
+    if cfg!(windows) {
+        if let Some(p) = pcc_platform::paths::config_dir().and_then(|appdata| npm_binary(&appdata.join("npm"))) {
             return Some(p);
         }
     }

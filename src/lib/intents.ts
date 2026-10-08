@@ -2,7 +2,9 @@
 // Secret values (MCP env / header values) are never part of what is displayed.
 
 import { quotePs } from "./cliArgs";
+import { quotePosix } from "./platform";
 import type { Intent, Interpretation } from "./types";
+import { t } from "../i18n";
 
 export const MASK = "••••";
 
@@ -17,34 +19,34 @@ export function intentFields(intent: Intent): IntentField[] {
   switch (intent.type) {
     case "add_mcp": {
       const out: IntentField[] = [
-        { label: "Name", value: intent.name, mono: true },
-        { label: "Transport", value: intent.transport },
+        { label: t("msg.field.name"), value: intent.name, mono: true },
+        { label: t("msg.field.transport"), value: intent.transport },
       ];
-      if (intent.scope) out.push({ label: "Scope", value: intent.scope });
-      if (intent.command) out.push({ label: "Command", value: intent.command, mono: true });
-      if (intent.args.length > 0) out.push({ label: "Arguments", value: intent.args.join(" "), mono: true });
+      if (intent.scope) out.push({ label: t("msg.field.scope"), value: intent.scope });
+      if (intent.command) out.push({ label: t("msg.field.command"), value: intent.command, mono: true });
+      if (intent.args.length > 0) out.push({ label: t("msg.field.arguments"), value: intent.args.join(" "), mono: true });
       if (intent.url) out.push({ label: "URL", value: intent.url, mono: true });
-      for (const [name] of intent.env) out.push({ label: "Env", value: `${name}=${MASK}`, mono: true });
-      for (const [name] of intent.headers) out.push({ label: "Header", value: `${name}: ${MASK}`, mono: true });
+      for (const [name] of intent.env) out.push({ label: t("msg.field.env"), value: `${name}=${MASK}`, mono: true });
+      for (const [name] of intent.headers) out.push({ label: t("msg.field.header"), value: `${name}: ${MASK}`, mono: true });
       return out;
     }
     case "ssh": {
       const out: IntentField[] = [
-        { label: "User", value: intent.user ?? "(default)" },
-        { label: "Host", value: intent.host, mono: true },
-        { label: "Port", value: intent.port === null ? "22 (default)" : String(intent.port), mono: true },
-        { label: "Key", value: intent.keyPath ?? "(none given)", mono: intent.keyPath !== null },
+        { label: t("msg.field.user"), value: intent.user ?? t("msg.field.default") },
+        { label: t("msg.field.host"), value: intent.host, mono: true },
+        { label: t("msg.field.port"), value: intent.port === null ? t("msg.field.portDefault") : String(intent.port), mono: true },
+        { label: t("msg.field.key"), value: intent.keyPath ?? t("msg.field.noneGiven"), mono: intent.keyPath !== null },
       ];
-      if (intent.remoteCommand) out.push({ label: "Remote command", value: intent.remoteCommand, mono: true });
+      if (intent.remoteCommand) out.push({ label: t("msg.field.remoteCommand"), value: intent.remoteCommand, mono: true });
       return out;
     }
     case "clone":
       return [
         { label: "URL", value: intent.url, mono: true },
-        { label: "Directory", value: intent.directory ?? cloneFolderName(intent.url, null), mono: true },
+        { label: t("msg.field.directory"), value: intent.directory ?? cloneFolderName(intent.url, null), mono: true },
       ];
     case "claude_cli":
-      return [{ label: "Arguments", value: intent.args.length > 0 ? intent.args.join(" ") : "(interactive session)", mono: true }];
+      return [{ label: t("msg.field.arguments"), value: intent.args.length > 0 ? intent.args.join(" ") : t("msg.field.interactive"), mono: true }];
     case "github_login":
     case "shell":
       return [];
@@ -79,25 +81,25 @@ export function intentActions(interp: Pick<Interpretation, "intent">): IntentAct
   const intent = interp.intent;
   switch (intent.type) {
     case "add_mcp":
-      return [{ id: "create_connection", label: "Create connection", primary: true, mutates: true }];
+      return [{ id: "create_connection", label: t("msg.action.createConnection"), primary: true, mutates: true }];
     case "ssh":
       return [
-        { id: "create_connection", label: "Create connection", primary: true, mutates: true },
-        ...(intent.remoteCommand ? [{ id: "ask_central_ssh" as const, label: "Ask Central to run it", mutates: true }] : []),
+        { id: "create_connection", label: t("msg.action.createConnection"), primary: true, mutates: true },
+        ...(intent.remoteCommand ? [{ id: "ask_central_ssh" as const, label: t("msg.action.askCentral"), mutates: true }] : []),
       ];
     case "clone":
-      return [{ id: "clone", label: "Clone…", primary: true, mutates: false }];
+      return [{ id: "clone", label: t("msg.action.clone"), primary: true, mutates: false }];
     case "github_login":
-      return [{ id: "github_login", label: "Sign in to GitHub", primary: true, mutates: false }];
+      return [{ id: "github_login", label: t("bar.req.signIn"), primary: true, mutates: false }];
     case "claude_cli":
       return [
-        { id: "claude_run", label: "Run", primary: true, mutates: false },
-        { id: "claude_terminal", label: "Open in Raw Terminal", mutates: false },
+        { id: "claude_run", label: t("msg.action.run"), primary: true, mutates: false },
+        { id: "claude_terminal", label: t("msg.action.openTerminal"), mutates: false },
       ];
     case "shell":
       return [
-        { id: "give_central", label: "Give to Central", primary: true, mutates: true },
-        { id: "run_terminal", label: "Run in Raw Terminal", mutates: false },
+        { id: "give_central", label: t("msg.action.giveCentral"), primary: true, mutates: true },
+        { id: "run_terminal", label: t("msg.action.runTerminal"), mutates: false },
       ];
   }
 }
@@ -134,14 +136,25 @@ export function cloneFolderName(url: string, directory: string | null): string {
   return last.replace(/\.git$/i, "") || "repository";
 }
 
-/** Joins a Windows parent folder and a child name. */
-export function joinPath(parent: string, child: string): string {
-  if (/^[a-zA-Z]:[\\/]|^\\\\|^\//.test(child)) return child;
-  return `${parent.replace(/[\\/]+$/, "")}\\${child}`;
+/** A POSIX path (`/home/…`): Linux conventions apply. */
+function isPosixPath(p: string): boolean {
+  return p.startsWith("/");
 }
 
-/** PowerShell line cloning `url` inside `parent` (typed into a Raw Terminal). */
+/** Joins a parent folder and a child name with the parent's separator (`\` on Windows, `/` on Linux). */
+export function joinPath(parent: string, child: string): string {
+  if (/^[a-zA-Z]:[\\/]|^\\\\|^\//.test(child)) return child;
+  const sep = isPosixPath(parent) ? "/" : "\\";
+  return `${parent.replace(/[\\/]+$/, "")}${sep}${child}`;
+}
+
+/** Line cloning `url` inside `parent`, typed into a Raw Terminal: PowerShell for a Windows
+ * folder, POSIX shell for a Linux one. */
 export function gitCloneLine(url: string, directory: string | null, parent: string): string {
+  if (isPosixPath(parent)) {
+    const target = directory ? ` ${quotePosix(directory)}` : "";
+    return `cd -- ${quotePosix(parent)} && git clone ${quotePosix(url)}${target}`;
+  }
   const target = directory ? ` ${quotePs(directory)}` : "";
   return `Set-Location -LiteralPath ${quotePs(parent)}; git clone ${quotePs(url)}${target}`;
 }

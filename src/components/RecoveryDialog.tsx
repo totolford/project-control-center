@@ -6,7 +6,9 @@ import { run } from "../lib/toast";
 import type { CheckpointSummary, InterruptedMission, RecoveryInfo } from "../lib/types";
 import { useStore } from "../store";
 import { Modal } from "./Modal";
+import { AutoResumeNotice } from "./AutoResumeNotice";
 import { Chip } from "./StatusBadge";
+import { rich, t, useT } from "../i18n";
 
 /** With settings.autoRecover, resumes the previous sessions without asking. Returns true while it handles them. */
 function useAutoRecover(): boolean {
@@ -16,7 +18,7 @@ function useAutoRecover(): boolean {
   useEffect(() => {
     if (!pending || !auto || started.current) return;
     started.current = true;
-    void run(() => api.recover(), "Previous sessions resumed automatically").then(() => {
+    void run(() => api.recover(), t("comp.rec.autoResumed")).then(() => {
       useStore.getState().clearRecovery();
       void useStore.getState().refresh().catch(() => undefined);
     });
@@ -34,12 +36,26 @@ export function RecoveryDialog() {
   const automatic = useAutoRecover();
   if (!recovery) return null;
   const missions = recovery.missions ?? [];
-  if (missions.length > 0) return <InterruptedMissionsDialog recovery={recovery} missions={missions} />;
-  if (recovery.agents.length === 0 || automatic) return null;
-  return <SessionsDialog recovery={recovery} />;
+  // Auto-resume (Settings → Missions → Recovery): what NEXUS already resumed is a notice, not a blocker.
+  const notice = recovery.autoResumed ? <AutoResumeNotice notice={recovery.autoResumed} recovery={recovery} /> : null;
+  if (missions.length > 0)
+    return (
+      <>
+        {notice}
+        <InterruptedMissionsDialog recovery={recovery} missions={missions} />
+      </>
+    );
+  if (recovery.agents.length === 0 || automatic) return notice;
+  return (
+    <>
+      {notice}
+      <SessionsDialog recovery={recovery} />
+    </>
+  );
 }
 
 function SessionsDialog({ recovery }: { recovery: RecoveryInfo }) {
+  const t = useT();
   const tasks = useStore((s) => s.project?.tasks);
   const clearRecovery = useStore((s) => s.clearRecovery);
   const refresh = useStore((s) => s.refresh);
@@ -62,32 +78,29 @@ function SessionsDialog({ recovery }: { recovery: RecoveryInfo }) {
       onClose={clearRecovery}
       title={
         <span className="perm-title">
-          <History size={18} /> Recover previous project state?
+          <History size={18} /> {t("comp.rec.title")}
         </span>
       }
       footer={
         <>
-          <button className="btn" onClick={() => void act(() => api.discardRecovery(), "Previous sessions discarded")} disabled={busy}>
-            Discard sessions
+          <button className="btn" onClick={() => void act(() => api.discardRecovery(), t("comp.rec.discarded"))} disabled={busy}>
+            {t("comp.rec.discard")}
           </button>
-          <button className="btn primary" onClick={() => void act(() => api.recover(), "Resuming sessions")} disabled={busy}>
-            Recover
+          <button className="btn primary" onClick={() => void act(() => api.recover(), t("comp.rec.resuming"))} disabled={busy}>
+            {t("comp.rec.recover")}
           </button>
         </>
       }
     >
-      <p>
-        {n} {n === 1 ? "agent was" : "agents were"} running when {recovery.previousRun ?? "the app last closed"}. Recovering
-        resumes their Claude Code sessions.
-      </p>
+      <p>{t("comp.rec.agentsRunning", { count: n, when: recovery.previousRun ?? t("comp.rec.lastClosed") })}</p>
       <ul className="plain-list">
         {recovery.agents.map((a) => {
-          const task = a.taskId ? tasks?.find((t) => t.id === a.taskId) : undefined;
+          const task = a.taskId ? tasks?.find((x) => x.id === a.taskId) : undefined;
           return (
             <li key={a.agentId}>
               <strong>{a.name}</strong>
               {task && <span className="muted"> · {task.title}</span>}
-              {!a.claudeSessionId && <span className="muted small"> (no session id — will start fresh)</span>}
+              {!a.claudeSessionId && <span className="muted small"> {t("comp.rec.noSession")}</span>}
             </li>
           );
         })}
@@ -98,6 +111,7 @@ function SessionsDialog({ recovery }: { recovery: RecoveryInfo }) {
 
 /** "MISSION X was interrupted. Restore? [Resume] [Inspect] [Abandon]" with the facts NEXUS recorded. */
 function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryInfo; missions: InterruptedMission[] }) {
+  const t = useT();
   const refresh = useStore((s) => s.refresh);
   const [busy, setBusy] = useState(false);
   const [inspecting, setInspecting] = useState<string | null>(null);
@@ -105,7 +119,7 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
 
   const resume = async (m: InterruptedMission) => {
     setBusy(true);
-    const ok = await run(() => api.resumeInterruptedMission(m.missionId), `Resuming ${m.missionId}`);
+    const ok = await run(() => api.resumeInterruptedMission(m.missionId), t("comp.rec.resumingMission", { id: m.missionId }));
     setBusy(false);
     if (!ok) return;
     // Resuming restarts the previous sessions (all of them) with a precise brief.
@@ -116,7 +130,7 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
 
   const abandon = async (m: InterruptedMission) => {
     setBusy(true);
-    const ok = await run(() => api.abandonInterruptedMission(m.missionId), `${m.missionId} abandoned`);
+    const ok = await run(() => api.abandonInterruptedMission(m.missionId), t("comp.rec.abandoned", { id: m.missionId }));
     setBusy(false);
     setConfirmAbandon(null);
     if (!ok) return;
@@ -132,11 +146,11 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
       onClose={() => undefined}
       title={
         <span className="perm-title">
-          <TriangleAlert size={18} /> {missions.length === 1 ? `Mission ${missions[0].title} was interrupted` : `${missions.length} missions were interrupted`}
+          <TriangleAlert size={18} /> {missions.length === 1 ? t("comp.rec.missionInterrupted", { title: missions[0].title }) : t("comp.rec.missionsInterrupted", { count: missions.length })}
         </span>
       }
     >
-      <p className="muted small rec-cause">{recovery.previousRun ?? missions[0].previousRun}. Restore?</p>
+      <p className="muted small rec-cause">{t("comp.rec.restore", { cause: recovery.previousRun ?? missions[0].previousRun })}</p>
       {missions.map((m) => (
         <div key={m.missionId} className="rec-mission">
           <div className="rec-mission-head">
@@ -145,28 +159,28 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
             <span className="muted small">{m.status}</span>
           </div>
           <dl className="kv rec-facts">
-            <dt>Interrupted during</dt>
+            <dt>{t("comp.rec.during")}</dt>
             <dd>{m.interruptedDuring}</dd>
-            <dt>Last action</dt>
+            <dt>{t("comp.rec.lastAction")}</dt>
             <dd>
               {m.lastAction ? (
                 <>
                   <strong>{m.lastAction.agentId}</strong> · {m.lastAction.description} <span className="muted small">({formatClock(m.lastAction.at)})</span>
                 </>
               ) : (
-                <span className="muted">No tool call recorded for this mission</span>
+                <span className="muted">{t("comp.rec.noToolCall")}</span>
               )}
             </dd>
-            <dt>Files</dt>
+            <dt>{t("comp.rec.files")}</dt>
             <dd>{m.filesNote}</dd>
-            <dt>Checkpoint</dt>
+            <dt>{t("comp.rec.checkpoint")}</dt>
             <dd>
               {m.lastCheckpoint ? (
                 <>
                   {m.lastCheckpoint.name} · {m.lastCheckpoint.reason} <span className="muted small">({formatDateTime(m.lastCheckpoint.at)})</span>
                 </>
               ) : (
-                <span className="muted">None recorded</span>
+                <span className="muted">{t("comp.rec.noneRecorded")}</span>
               )}
             </dd>
           </dl>
@@ -174,24 +188,24 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
           <div className="rec-actions">
             {confirmAbandon === m.missionId ? (
               <>
-                <span className="small">Cancel {m.missionId}? Files on disk are kept.</span>
+                <span className="small">{t("comp.rec.confirmAbandon", { id: m.missionId })}</span>
                 <button className="btn" onClick={() => setConfirmAbandon(null)} disabled={busy}>
-                  Keep
+                  {t("comp.rec.keep")}
                 </button>
                 <button className="btn danger" onClick={() => void abandon(m)} disabled={busy}>
-                  Abandon mission
+                  {t("comp.rec.abandonMission")}
                 </button>
               </>
             ) : (
               <>
                 <button className="btn" onClick={() => setConfirmAbandon(m.missionId)} disabled={busy}>
-                  Abandon
+                  {t("comp.rec.abandon")}
                 </button>
                 <button className="btn" onClick={() => setInspecting(inspecting === m.missionId ? null : m.missionId)} disabled={busy} aria-expanded={inspecting === m.missionId}>
-                  {inspecting === m.missionId ? "Hide details" : "Inspect"}
+                  {inspecting === m.missionId ? t("comp.hideDetails") : t("comp.rec.inspect")}
                 </button>
                 <button className="btn primary" onClick={() => void resume(m)} disabled={busy}>
-                  Resume
+                  {t("comp.rec.resume")}
                 </button>
               </>
             )}
@@ -200,7 +214,7 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
       ))}
       {recovery.agents.length > 0 && (
         <p className="muted small">
-          Resuming restarts the Claude Code sessions of {recovery.agents.map((a) => a.name).join(", ")} with <code>--resume</code>; Central receives the facts above.
+          {rich(t("comp.rec.resumeNote", { names: recovery.agents.map((a) => a.name).join(", ") }), { flag: <code>--resume</code> })}
         </p>
       )}
     </Modal>
@@ -208,6 +222,7 @@ function InterruptedMissionsDialog({ recovery, missions }: { recovery: RecoveryI
 }
 
 function MissionInspection({ mission: m }: { mission: InterruptedMission }) {
+  const t = useT();
   const [checkpoints, setCheckpoints] = useState<CheckpointSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -215,19 +230,19 @@ function MissionInspection({ mission: m }: { mission: InterruptedMission }) {
   }, [m.missionId]);
   return (
     <div className="rec-inspect">
-      <div className="section-label">Tasks in progress ({m.tasksInProgress.length})</div>
+      <div className="section-label">{t("comp.rec.tasksInProgress", { count: m.tasksInProgress.length })}</div>
       {m.tasksInProgress.length === 0 ? (
-        <div className="muted small">None.</div>
+        <div className="muted small">{t("comp.rec.noneDot")}</div>
       ) : (
         <ul className="plain-list">
-          {m.tasksInProgress.map((t) => (
-            <li key={t.id}>
-              <code>{t.id}</code> {t.title} <span className="muted small">· {t.status}{t.agent ? ` · ${t.agent}` : ""}</span>
+          {m.tasksInProgress.map((task) => (
+            <li key={task.id}>
+              <code>{task.id}</code> {task.title} <span className="muted small">· {task.status}{task.agent ? ` · ${task.agent}` : ""}</span>
             </li>
           ))}
         </ul>
       )}
-      <div className="section-label">Agents</div>
+      <div className="section-label">{t("comp.rec.agents")}</div>
       <ul className="plain-list">
         {m.agents.map((a) => (
           <li key={a.agentId}>
@@ -241,9 +256,9 @@ function MissionInspection({ mission: m }: { mission: InterruptedMission }) {
           </li>
         ))}
       </ul>
-      <div className="section-label">Files written since the last checkpoint ({m.filesSinceCheckpoint.length})</div>
+      <div className="section-label">{t("comp.rec.filesSince", { count: m.filesSinceCheckpoint.length })}</div>
       {m.filesSinceCheckpoint.length === 0 ? (
-        <div className="muted small">None.</div>
+        <div className="muted small">{t("comp.rec.noneDot")}</div>
       ) : (
         <ul className="plain-list rec-files">
           {m.filesSinceCheckpoint.map((f) => (
@@ -253,23 +268,23 @@ function MissionInspection({ mission: m }: { mission: InterruptedMission }) {
           ))}
         </ul>
       )}
-      <div className="section-label">Checkpoints</div>
+      <div className="section-label">{t("comp.rec.checkpoints")}</div>
       {error ? (
-        <div className="muted small">Unavailable: {error}</div>
+        <div className="muted small">{t("comp.rec.unavailable", { error })}</div>
       ) : !checkpoints ? (
-        <div className="muted small">Loading…</div>
+        <div className="muted small">{t("common.loading")}</div>
       ) : checkpoints.length === 0 ? (
-        <div className="muted small">No checkpoint recorded.</div>
+        <div className="muted small">{t("comp.rec.noCheckpoint")}</div>
       ) : (
         <ul className="plain-list">
           {checkpoints.slice(0, 8).map((c) => (
             <li key={c.seq} className="small">
-              <code>{c.name}</code> {c.reason} <span className="muted">· {formatDateTime(c.at)} · {c.files} file(s)</span>
+              <code>{c.name}</code> {c.reason} <span className="muted">· {formatDateTime(c.at)} · {t("comp.rec.fileCount", { count: c.files })}</span>
             </li>
           ))}
         </ul>
       )}
-      <div className="section-label">Brief given to Central on resume</div>
+      <div className="section-label">{t("comp.rec.brief")}</div>
       <pre className="json rec-brief">{m.brief}</pre>
     </div>
   );

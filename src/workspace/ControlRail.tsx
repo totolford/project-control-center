@@ -10,6 +10,7 @@ import { PowerControl } from "../components/PowerControl";
 import { ContextBar, RateLimitBars } from "../components/UsageBars";
 import { UnlockedToggle } from "../components/UnlockedToggle";
 import { DomainBar, MasterToggle, useMasterStatus } from "../views/master/MasterParts";
+import { useT } from "../i18n";
 
 function RailSection({ title, children, onClick }: { title: string; children: ReactNode; onClick?: () => void }) {
   return (
@@ -21,15 +22,16 @@ function RailSection({ title, children, onClick }: { title: string; children: Re
 }
 
 function AgentPower() {
+  const t = useT();
   const agents = useStore((s) => s.project?.agents);
   const unlocked = useStore((s) => s.project?.settings.autonomy.unlocked ?? false);
   const [picked, setPicked] = useState("");
   const active = (agents ?? []).filter((a) => a.status !== "retired");
   const agent = active.find((a) => a.id === picked) ?? active.find((a) => a.kind === "central") ?? active[0];
-  if (!agent) return <div className="muted small">No agent</div>;
+  if (!agent) return <div className="muted small">{t("ws.noAgent")}</div>;
   return (
     <>
-      <select value={agent.id} onChange={(e) => setPicked(e.target.value)} aria-label="Agent">
+      <select value={agent.id} onChange={(e) => setPicked(e.target.value)} aria-label={t("ws.agent")}>
         {active.map((a) => (
           <option key={a.id} value={a.id}>
             {a.name}
@@ -37,18 +39,19 @@ function AgentPower() {
         ))}
       </select>
       <PowerControl permissions={agent.permissions} onApply={(l) => void applyPower(agent, l)} compact />
-      {unlocked && <div className="tiny tone-amber-fg">UNLOCKED: the unlocked rules apply to every agent</div>}
+      {unlocked && <div className="tiny tone-amber-fg">{t("ws.unlockedNote")}</div>}
     </>
   );
 }
 
 function MasterCard() {
+  const t = useT();
   const { data, error } = useMasterStatus();
   const enabled = data?.domains.filter((d) => d.enabled) ?? [];
   return (
     <>
       <MasterToggle />
-      {error && <div className="tiny tone-red-fg">Status unavailable</div>}
+      {error && <div className="tiny tone-red-fg">{t("ws.statusUnavailable")}</div>}
       {enabled.map((d) => (
         <DomainBar key={d.key} domain={d} compact />
       ))}
@@ -58,6 +61,7 @@ function MasterCard() {
 
 /** Right CONTROL rail of the Swarm view: models, power, MCP/skills, limits, CLAUDE UNLOCKED, MASTER CONTROL. */
 export const ControlRail = memo(function ControlRail() {
+  const t = useT();
   const { env, loading, error, refresh } = useClaudeEnv();
   const { skills } = useSkills();
   const connections = useConnections();
@@ -67,56 +71,56 @@ export const ControlRail = memo(function ControlRail() {
   const enabledSkills = skills?.filter((s) => s.enabled).length;
 
   return (
-    <aside className="control-rail" aria-label="Control">
+    <aside className="control-rail" aria-label={t("ws.rail.aria")}>
       <div className="rail-head">
-        <span className="rail-title">CONTROL</span>
+        <span className="rail-title">{t("ws.rail.title")}</span>
         <span className="spacer" />
         {env && <span className="muted tiny" title={env.capturedAt}>{formatRelative(env.capturedAt)}</span>}
-        <button className="icon-btn" onClick={refresh} disabled={loading} title="Refresh what Claude Code reports (takes a few seconds)" aria-label="Refresh">
+        <button className="icon-btn" onClick={refresh} disabled={loading} title={t("ws.rail.refreshTitle")} aria-label={t("common.refresh")}>
           {loading ? <Spinner size={12} /> : <RefreshCw size={12} />}
         </button>
       </div>
       {error && <div className="notice notice-error small">{error}</div>}
 
-      <RailSection title="Default model" onClick={() => navigate({ name: "models" })}>
+      <RailSection title={t("ws.rail.defaultModel")} onClick={() => navigate({ name: "models" })}>
         <dl className="kv kv-tight">
-          <dt>Central</dt>
-          <dd className="mono">{settings?.centralModel ?? "default"}</dd>
-          <dt>Workers</dt>
-          <dd className="mono">{settings?.workerModel ?? "default"}</dd>
+          <dt>{t("ws.rail.central")}</dt>
+          <dd className="mono">{settings?.centralModel ?? t("comp.model.default")}</dd>
+          <dt>{t("ws.rail.workers")}</dt>
+          <dd className="mono">{settings?.workerModel ?? t("comp.model.default")}</dd>
         </dl>
       </RailSection>
 
-      <RailSection title="Power" onClick={() => navigate({ name: "capabilities" })}>
+      <RailSection title={t("ws.rail.power")} onClick={() => navigate({ name: "capabilities" })}>
         <AgentPower />
       </RailSection>
 
-      <RailSection title="MCP & skills" onClick={() => navigate({ name: "mcp" })}>
+      <RailSection title={t("ws.rail.mcpSkills")} onClick={() => navigate({ name: "mcp" })}>
         <dl className="kv kv-tight">
-          <dt>Claude Code MCP</dt>
-          <dd>{mcp.claude === null ? (env ? "Unavailable" : "—") : `${mcp.claude}/${env?.mcpServers.length ?? 0} connected`}</dd>
-          <dt>NEXUS MCP</dt>
-          <dd>{mcp.nexus} connected</dd>
-          <dt>Commands & skills</dt>
+          <dt>{t("ws.rail.claudeMcp")}</dt>
+          <dd>{mcp.claude === null ? (env ? t("common.unavailable") : "—") : t("ws.rail.connected", { count: mcp.claude, total: env?.mcpServers.length ?? 0 })}</dd>
+          <dt>{t("ws.rail.nexusMcp")}</dt>
+          <dd>{t("ws.rail.nConnected", { count: mcp.nexus })}</dd>
+          <dt>{t("ws.rail.commands")}</dt>
           <dd>{env ? env.commands.length : "—"}</dd>
-          <dt>Skills enabled</dt>
+          <dt>{t("ws.rail.skillsEnabled")}</dt>
           <dd>{enabledSkills ?? "—"}</dd>
         </dl>
       </RailSection>
 
-      <RailSection title="Rate limits" onClick={() => navigate({ name: "claude" })}>
+      <RailSection title={t("ws.rail.rateLimits")} onClick={() => navigate({ name: "claude" })}>
         <RateLimitBars env={env} />
       </RailSection>
 
-      <RailSection title="Context">
+      <RailSection title={t("ws.rail.context")}>
         <ContextBar env={env} />
       </RailSection>
 
-      <RailSection title="Autonomy" onClick={() => navigate({ name: "autonomy" })}>
+      <RailSection title={t("ws.rail.autonomy")} onClick={() => navigate({ name: "autonomy" })}>
         <UnlockedToggle />
       </RailSection>
 
-      <RailSection title="Master control" onClick={() => navigate({ name: "master" })}>
+      <RailSection title={t("ws.rail.master")} onClick={() => navigate({ name: "master" })}>
         <MasterCard />
       </RailSection>
     </aside>

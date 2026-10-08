@@ -1,14 +1,8 @@
-// Raw Terminal profiles (pure, tested). Titles mirror pty_spawn in src-tauri/src/control_commands.rs.
+// Raw Terminal profiles (pure, tested). Titles mirror the shell names of
+// crates/pcc-platform/src/shells.rs used by pty_spawn; the list of shells on this
+// machine comes from `terminalProfiles` in src/lib/platform.ts.
 
 import type { Agent, PtyInfo, TerminalProfile } from "../lib/types";
-
-export const PROFILES: { profile: Exclude<TerminalProfile, "claude-resume">; label: string }[] = [
-  { profile: "claude", label: "Claude Code (interactive)" },
-  { profile: "powershell", label: "PowerShell" },
-  { profile: "pwsh", label: "PowerShell 7" },
-  { profile: "cmd", label: "Command Prompt" },
-  { profile: "wsl", label: "WSL" },
-];
 
 const BY_TITLE: Record<string, TerminalProfile> = {
   "Claude Code": "claude",
@@ -16,6 +10,10 @@ const BY_TITLE: Record<string, TerminalProfile> = {
   "PowerShell 7": "pwsh",
   "Command Prompt": "cmd",
   WSL: "wsl",
+  Bash: "bash",
+  Zsh: "zsh",
+  Fish: "fish",
+  "POSIX sh": "sh",
 };
 
 export interface SpawnRequest {

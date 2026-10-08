@@ -1,0 +1,627 @@
+{
+  "comment": "NEXUS addition: the room types of NEXUS HQ. Read by NEXUS (Rust: crates/pcc-world/src/hq/catalog.rs, TS: src/views/world/hq.ts) and by the AI Town map generator (data/nexusHq.ts). size = [w, h] in tiles including the walls. actions = words of a real tool call that send a working agent to this room. roles = words of an agent's role/name that make this its home room.",
+  "kinds": {
+    "central_hq": {
+      "names": {
+        "en": "NEXUS HQ",
+        "fr": "QG NEXUS"
+      },
+      "purpose": {
+        "en": "Central plans and orchestrates missions",
+        "fr": "Central planifie et orchestre les missions"
+      },
+      "size": [
+        12,
+        8
+      ],
+      "floor": "carpet",
+      "wall": "stone",
+      "decor": [
+        "command_chair",
+        "table",
+        "mission_board"
+      ],
+      "actions": [],
+      "roles": [
+        "central",
+        "commander",
+        "orchestrat"
+      ],
+      "persistent": true
+    },
+    "coding_office": {
+      "names": {
+        "en": "Coding Office",
+        "fr": "Bureau de code"
+      },
+      "purpose": {
+        "en": "Agents writing and editing code",
+        "fr": "Agents qui écrivent et modifient du code"
+      },
+      "size": [
+        10,
+        7
+      ],
+      "floor": "wood",
+      "wall": "plaster",
+      "decor": [
+        "workstation",
+        "workstation",
+        "workstation",
+        "bookshelf"
+      ],
+      "actions": [
+        "edit ",
+        "write ",
+        "multiedit",
+        "notebookedit",
+        "cargo build",
+        "npm run build",
+        "tsc"
+      ],
+      "roles": [
+        "code",
+        "coder",
+        "developer",
+        "engineer",
+        "backend",
+        "frontend",
+        "fullstack",
+        "programm"
+      ],
+      "persistent": true
+    },
+    "github_office": {
+      "names": {
+        "en": "GitHub Office",
+        "fr": "Bureau GitHub"
+      },
+      "purpose": {
+        "en": "Git and GitHub operations: commits, branches, pull requests",
+        "fr": "Git et GitHub : commits, branches, pull requests"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "wood",
+      "wall": "brick",
+      "decor": [
+        "bookshelf",
+        "workstation",
+        "bookshelf"
+      ],
+      "actions": [
+        "git ",
+        "gh ",
+        "github"
+      ],
+      "roles": [
+        "git",
+        "release",
+        "github"
+      ],
+      "persistent": true
+    },
+    "server_room": {
+      "names": {
+        "en": "Server Room",
+        "fr": "Salle des serveurs"
+      },
+      "purpose": {
+        "en": "SSH sessions, remote machines, Docker",
+        "fr": "Sessions SSH, machines distantes, Docker"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "grate",
+      "wall": "dark",
+      "decor": [
+        "server_rack",
+        "server_rack",
+        "server_rack",
+        "server_rack"
+      ],
+      "actions": [
+        "ssh ",
+        "scp ",
+        "sftp",
+        "docker",
+        "kubectl",
+        "rsync"
+      ],
+      "roles": [
+        "devops",
+        "server",
+        "ssh",
+        "infra",
+        "ops",
+        "sysadmin"
+      ],
+      "persistent": true
+    },
+    "skill_shop": {
+      "names": {
+        "en": "Skill Shop",
+        "fr": "Boutique de skills"
+      },
+      "purpose": {
+        "en": "Skill Market: Claude Code skills",
+        "fr": "Skill Market : skills Claude Code"
+      },
+      "size": [
+        8,
+        6
+      ],
+      "floor": "wood",
+      "wall": "plaster",
+      "decor": [
+        "shop_counter",
+        "shelf"
+      ],
+      "actions": [
+        "skill"
+      ],
+      "roles": [
+        "skill"
+      ],
+      "persistent": true
+    },
+    "review_room": {
+      "names": {
+        "en": "Review Room",
+        "fr": "Salle de revue"
+      },
+      "purpose": {
+        "en": "Reviews and work waiting for your approval",
+        "fr": "Revues et travail en attente de votre approbation"
+      },
+      "size": [
+        8,
+        6
+      ],
+      "floor": "stone",
+      "wall": "brick",
+      "decor": [
+        "table"
+      ],
+      "actions": [],
+      "roles": [
+        "review",
+        "auditor"
+      ],
+      "persistent": false
+    },
+    "archive": {
+      "names": {
+        "en": "Archive",
+        "fr": "Archives"
+      },
+      "purpose": {
+        "en": "Retired agents and archived work",
+        "fr": "Agents retirés et travail archivé"
+      },
+      "size": [
+        8,
+        6
+      ],
+      "floor": "stone",
+      "wall": "dark",
+      "decor": [
+        "bookshelf",
+        "bookshelf",
+        "chest"
+      ],
+      "actions": [],
+      "roles": [],
+      "persistent": false
+    },
+    "mcp_lab": {
+      "names": {
+        "en": "MCP Lab",
+        "fr": "Labo MCP"
+      },
+      "purpose": {
+        "en": "MCP servers and their tools",
+        "fr": "Serveurs MCP et leurs outils"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "grate",
+      "wall": "stone",
+      "decor": [
+        "workstation",
+        "server_rack",
+        "workstation"
+      ],
+      "actions": [
+        "mcp__",
+        "mcp "
+      ],
+      "roles": [
+        "mcp",
+        "integration"
+      ],
+      "persistent": false
+    },
+    "testing_lab": {
+      "names": {
+        "en": "Testing Lab",
+        "fr": "Labo de tests"
+      },
+      "purpose": {
+        "en": "Running tests, linters and checks",
+        "fr": "Tests, linters et vérifications"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "stone",
+      "wall": "plaster",
+      "decor": [
+        "workstation",
+        "server_rack",
+        "workstation"
+      ],
+      "actions": [
+        "test",
+        "vitest",
+        "jest",
+        "pytest",
+        "cargo check",
+        "clippy",
+        "lint",
+        "playwright"
+      ],
+      "roles": [
+        "test",
+        "qa",
+        "quality"
+      ],
+      "persistent": false
+    },
+    "design_studio": {
+      "names": {
+        "en": "Design Studio",
+        "fr": "Studio de design"
+      },
+      "purpose": {
+        "en": "UI / UX and design work",
+        "fr": "UI / UX et travail de design"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "wood",
+      "wall": "plaster",
+      "decor": [
+        "table",
+        "workstation",
+        "shelf"
+      ],
+      "actions": [
+        "figma",
+        ".css",
+        ".scss",
+        "tailwind"
+      ],
+      "roles": [
+        "design",
+        "ui",
+        "ux",
+        "style",
+        "brand"
+      ],
+      "persistent": false
+    },
+    "roblox_studio": {
+      "names": {
+        "en": "Roblox Studio",
+        "fr": "Studio Roblox"
+      },
+      "purpose": {
+        "en": "Roblox Studio work through its MCP server",
+        "fr": "Travail dans Roblox Studio via son serveur MCP"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "wood",
+      "wall": "brick",
+      "decor": [
+        "workstation",
+        "workstation",
+        "table"
+      ],
+      "actions": [
+        "roblox",
+        "luau",
+        "rojo"
+      ],
+      "roles": [
+        "roblox",
+        "luau"
+      ],
+      "persistent": false
+    },
+    "web_dev": {
+      "names": {
+        "en": "Web Development",
+        "fr": "Développement web"
+      },
+      "purpose": {
+        "en": "The website: pages, components, front-end build",
+        "fr": "Le site web : pages, composants, build front-end"
+      },
+      "size": [
+        10,
+        6
+      ],
+      "floor": "wood",
+      "wall": "plaster",
+      "decor": [
+        "workstation",
+        "workstation",
+        "workstation"
+      ],
+      "actions": [
+        ".tsx",
+        ".jsx",
+        ".html",
+        ".vue",
+        ".svelte",
+        "vite",
+        "next "
+      ],
+      "roles": [
+        "web",
+        "website",
+        "frontend"
+      ],
+      "persistent": false
+    },
+    "api_lab": {
+      "names": {
+        "en": "API Lab",
+        "fr": "Labo API"
+      },
+      "purpose": {
+        "en": "The API: routes, handlers, HTTP calls",
+        "fr": "L’API : routes, handlers, appels HTTP"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "stone",
+      "wall": "stone",
+      "decor": [
+        "workstation",
+        "server_rack",
+        "workstation"
+      ],
+      "actions": [
+        "curl ",
+        "http",
+        "/api/",
+        "openapi",
+        "routes"
+      ],
+      "roles": [
+        "api",
+        "backend"
+      ],
+      "persistent": false
+    },
+    "database_room": {
+      "names": {
+        "en": "Database Room",
+        "fr": "Salle base de données"
+      },
+      "purpose": {
+        "en": "Databases: schemas, migrations, queries",
+        "fr": "Bases de données : schémas, migrations, requêtes"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "stone",
+      "wall": "dark",
+      "decor": [
+        "server_rack",
+        "shelf",
+        "server_rack",
+        "chest"
+      ],
+      "actions": [
+        "sql",
+        "psql",
+        "mysql",
+        "sqlite",
+        "prisma",
+        "migration",
+        "mongo",
+        "redis"
+      ],
+      "roles": [
+        "database",
+        "data",
+        "dba",
+        "sql"
+      ],
+      "persistent": false
+    },
+    "cicd_room": {
+      "names": {
+        "en": "CI/CD Room",
+        "fr": "Salle CI/CD"
+      },
+      "purpose": {
+        "en": "Pipelines, builds and deployments",
+        "fr": "Pipelines, builds et déploiements"
+      },
+      "size": [
+        9,
+        6
+      ],
+      "floor": "grate",
+      "wall": "stone",
+      "decor": [
+        "server_rack",
+        "workstation",
+        "server_rack"
+      ],
+      "actions": [
+        "workflow",
+        "deploy",
+        "pipeline",
+        "gh run",
+        "act "
+      ],
+      "roles": [
+        "ci",
+        "cd",
+        "deploy",
+        "pipeline",
+        "release"
+      ],
+      "persistent": false
+    },
+    "docs_room": {
+      "names": {
+        "en": "Documentation Room",
+        "fr": "Salle de documentation"
+      },
+      "purpose": {
+        "en": "Documentation: README, guides, references",
+        "fr": "Documentation : README, guides, références"
+      },
+      "size": [
+        8,
+        6
+      ],
+      "floor": "wood",
+      "wall": "plaster",
+      "decor": [
+        "bookshelf",
+        "table",
+        "bookshelf"
+      ],
+      "actions": [
+        ".md",
+        "docs/"
+      ],
+      "roles": [
+        "doc",
+        "writer",
+        "technical writ"
+      ],
+      "persistent": false
+    },
+    "custom": {
+      "names": {
+        "en": "Room",
+        "fr": "Salle"
+      },
+      "purpose": {
+        "en": "A room created for the project",
+        "fr": "Une salle créée pour le projet"
+      },
+      "size": [
+        8,
+        6
+      ],
+      "floor": "wood",
+      "wall": "plaster",
+      "decor": [
+        "workstation",
+        "table"
+      ],
+      "actions": [],
+      "roles": [],
+      "persistent": false
+    }
+  },
+  "decor": {
+    "workstation": {
+      "w": 1,
+      "h": 1,
+      "names": {
+        "en": "Workstation",
+        "fr": "Poste de travail"
+      }
+    },
+    "server_rack": {
+      "w": 1,
+      "h": 2,
+      "names": {
+        "en": "Server rack",
+        "fr": "Baie serveur"
+      }
+    },
+    "bookshelf": {
+      "w": 1,
+      "h": 2,
+      "names": {
+        "en": "Bookshelf",
+        "fr": "Bibliothèque"
+      }
+    },
+    "shelf": {
+      "w": 1,
+      "h": 2,
+      "names": {
+        "en": "Storage shelf",
+        "fr": "Étagère"
+      }
+    },
+    "table": {
+      "w": 2,
+      "h": 2,
+      "names": {
+        "en": "Meeting table",
+        "fr": "Table de réunion"
+      }
+    },
+    "shop_counter": {
+      "w": 3,
+      "h": 2,
+      "names": {
+        "en": "Shop counter",
+        "fr": "Comptoir"
+      }
+    },
+    "chest": {
+      "w": 1,
+      "h": 1,
+      "names": {
+        "en": "Storage chest",
+        "fr": "Coffre"
+      }
+    },
+    "command_chair": {
+      "w": 1,
+      "h": 2,
+      "names": {
+        "en": "Command chair",
+        "fr": "Siège de commandement"
+      }
+    },
+    "mission_board": {
+      "w": 1,
+      "h": 1,
+      "names": {
+        "en": "Mission board",
+        "fr": "Tableau des missions"
+      }
+    }
+  }
+}

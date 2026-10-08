@@ -4,28 +4,24 @@ import type { CoreStatus } from "../../lib/types";
 import { autoReloadHistory, pushAutoReload } from "./checkpoint";
 import { fetchCoreStatus, reloadInterface, useHealth, type OverlayState } from "./health";
 import { canAutoReload } from "./monitor";
+import { useT } from "../../i18n";
 
 /** Seconds before the overlay reloads the interface by itself. */
 export const AUTO_RELOAD_SECONDS = 8;
 
 function Preserved({ core }: { core: CoreStatus | null }) {
-  if (!core)
-    return (
-      <p className="sro-unknown">
-        The engine is not answering the interface right now, so what it runs cannot be listed. Agents, missions and MCP run in the engine, not
-        in this window; reloading the interface reconnects to it.
-      </p>
-    );
-  const town = core.aiTownRunning === null ? "Unknown" : core.aiTownRunning ? "Running" : "Not running";
+  const t = useT();
+  if (!core) return <p className="sro-unknown">{t("health.engineSilent")}</p>;
+  const town = core.aiTownRunning === null ? t("health.unknown") : core.aiTownRunning ? t("health.running") : t("health.notRunning");
   const rows = [
-    { icon: Bot, label: "Agents", value: core.projectOpen ? `${core.runningAgents} running · ${core.workingAgents} working` : "No project open" },
-    { icon: Sparkles, label: "Mission", value: core.activeMission ? `${core.activeMission}${core.activeMissions > 1 ? ` (+${core.activeMissions - 1})` : ""}` : "None active" },
-    { icon: Plug, label: "MCP", value: core.mcpTotal > 0 ? `${core.mcpConnected} of ${core.mcpTotal} connected` : "No MCP connection" },
+    { icon: Bot, label: t("health.agents"), value: core.projectOpen ? t("health.agentsValue", { running: core.runningAgents, working: core.workingAgents }) : t("health.noProject") },
+    { icon: Sparkles, label: t("health.mission"), value: core.activeMission ? `${core.activeMission}${core.activeMissions > 1 ? ` (+${core.activeMissions - 1})` : ""}` : t("health.noneActive") },
+    { icon: Plug, label: "MCP", value: core.mcpTotal > 0 ? t("health.mcpValue", { connected: core.mcpConnected, total: core.mcpTotal }) : t("health.noMcp") },
     { icon: Globe2, label: "AI Town", value: town },
-    { icon: SquareTerminal, label: "Terminals", value: String(core.terminals) },
+    { icon: SquareTerminal, label: t("health.terminals"), value: String(core.terminals) },
   ];
   return (
-    <dl className="sro-preserved" aria-label="Still running in the engine">
+    <dl className="sro-preserved" aria-label={t("health.stillRunning")}>
       {rows.map((r) => (
         <div key={r.label} className="sro-row">
           <dt>
@@ -45,15 +41,16 @@ export function SafeRecoveryPanel({ overlay, onDismiss }: { overlay: OverlayStat
   const [left, setLeft] = useState(AUTO_RELOAD_SECONDS);
   const [reloading, setReloading] = useState(false);
   const primary = useRef<HTMLButtonElement>(null);
+  const t = useT();
 
   useEffect(() => {
     primary.current?.focus();
     void fetchCoreStatus();
-    const t = window.setInterval(() => void fetchCoreStatus(), 2000);
+    const timer = window.setInterval(() => void fetchCoreStatus(), 2000);
     // Leave a moment to read what is preserved before the page goes away.
     const now = overlay.immediate ? window.setTimeout(() => reloadRef.current(false), 1200) : undefined;
     return () => {
-      window.clearInterval(t);
+      window.clearInterval(timer);
       window.clearTimeout(now);
     };
   }, [overlay.immediate]);
@@ -73,8 +70,8 @@ export function SafeRecoveryPanel({ overlay, onDismiss }: { overlay: OverlayStat
       reload(true);
       return;
     }
-    const t = window.setTimeout(() => setLeft((n) => n - 1), 1000);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setLeft((n) => n - 1), 1000);
+    return () => window.clearTimeout(timer);
   });
 
   const fresh = core !== null && coreAt !== null && Date.now() - coreAt < 10_000;
@@ -83,34 +80,34 @@ export function SafeRecoveryPanel({ overlay, onDismiss }: { overlay: OverlayStat
       <div className="sro-badge">
         <ShieldCheck size={18} aria-hidden="true" />
       </div>
-      <h2 id="sro-title">NEXUS is not stopped.</h2>
+      <h2 id="sro-title">{t("health.notStopped")}</h2>
       <p id="sro-desc" className="sro-lead">
-        {fresh ? "The application engine is still running. Recovering the interface…" : "Recovering the interface…"}
+        {fresh ? t("health.engineRunning") : t("health.recovering")}
       </p>
       <p className="sro-reason">
-        <span className="muted">Reason:</span> {overlay.reason}
+        <span className="muted">{t("health.reason")}</span> {overlay.reason}
       </p>
-      <div className="section-label">Still running in the engine</div>
+      <div className="section-label">{t("health.stillRunning")}</div>
       <Preserved core={fresh ? core : null} />
       <p className="sro-note muted small">
-        Open views, the right panel and the command-bar draft are restored after the reload. Workspace tabs are saved by the engine.
+        {t("health.restoredNote")}
       </p>
       <div className="sro-status" aria-live="polite">
         {reloading
-          ? "Reloading the interface…"
+          ? t("health.reloading")
           : allowed
-            ? `Reloading the interface in ${left} s`
+            ? t("health.reloadingIn", { seconds: left })
             : overlay.auto
-              ? "Automatic reload paused: the interface was already reloaded twice in the last 5 minutes."
+              ? t("health.autoPaused")
               : null}
       </div>
       <div className="sro-actions">
         <button ref={primary} className="btn primary" onClick={() => reload(false)} disabled={reloading}>
-          <RefreshCw size={13} className={reloading ? "spin" : undefined} /> Reload interface now
+          <RefreshCw size={13} className={reloading ? "spin" : undefined} /> {t("health.reloadNow")}
         </button>
         {onDismiss && !reloading && (
           <button className="btn" onClick={onDismiss}>
-            Keep working
+            {t("health.keepWorking")}
           </button>
         )}
       </div>

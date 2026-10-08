@@ -6,6 +6,7 @@ import { formatBytes, formatRelative } from "../lib/format";
 import type { MemoryFile } from "../lib/types";
 import { useStore } from "../store";
 import { Spinner } from "./Common";
+import { useT } from "../i18n";
 
 /** Memory files, reloaded whenever a MemoryUpdated event arrives. */
 export function useMemoryFiles() {
@@ -23,6 +24,7 @@ export function useMemoryFiles() {
 }
 
 export function MemoryEditor({ memKey, file, onSaved }: { memKey: string; file: MemoryFile | undefined; onSaved: (f: MemoryFile) => void }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(file?.content ?? "");
   const [base, setBase] = useState(file?.content ?? "");
@@ -38,7 +40,7 @@ export function MemoryEditor({ memKey, file, onSaved }: { memKey: string; file: 
 
   const save = async () => {
     setSaving(true);
-    const saved = await attempt(() => api.saveMemory(memKey, draft), "Memory saved");
+    const saved = await attempt(() => api.saveMemory(memKey, draft), t("comp.mem.saved"));
     setSaving(false);
     if (saved) {
       onSaved(saved);
@@ -54,27 +56,27 @@ export function MemoryEditor({ memKey, file, onSaved }: { memKey: string; file: 
         <code className="grow">{file?.path ?? memKey}</code>
         {file && (
           <span className="muted small">
-            {formatBytes(file.bytes)} · modified {formatRelative(file.modified)}
+            {formatBytes(file.bytes)} · {t("comp.mem.modified", { time: formatRelative(file.modified) })}
           </span>
         )}
         {editing ? (
           <>
             <button className="btn" onClick={() => setEditing(false)} disabled={saving}>
-              Cancel
+              {t("common.cancel")}
             </button>
             <button className="btn primary" onClick={() => void save()} disabled={saving || draft === content}>
-              {saving ? <Spinner size={12} /> : <Save size={13} />} Save
+              {saving ? <Spinner size={12} /> : <Save size={13} />} {t("common.save")}
             </button>
           </>
         ) : (
           <button className="btn" onClick={() => setEditing(true)}>
-            <Pencil size={13} /> {file ? "Edit" : "Create"}
+            <Pencil size={13} /> {file ? t("common.edit") : t("common.create")}
           </button>
         )}
       </div>
       {changedOnDisk && (
         <div className="notice notice-warn">
-          <TriangleAlert size={14} /> This file was updated by an agent while you were editing. Saving will overwrite that change.
+          <TriangleAlert size={14} /> {t("comp.mem.changedOnDisk")}
         </div>
       )}
       {editing ? (
@@ -89,12 +91,12 @@ export function MemoryEditor({ memKey, file, onSaved }: { memKey: string; file: 
               void save();
             }
           }}
-          aria-label={`Edit ${memKey}`}
+          aria-label={t("comp.mem.editAria", { name: memKey })}
         />
       ) : content ? (
         <div className="memory-read prewrap">{content}</div>
       ) : (
-        <div className="muted pad">{file ? "This memory file is empty." : "This memory file does not exist yet."}</div>
+        <div className="muted pad">{file ? t("comp.mem.empty") : t("comp.mem.missing")}</div>
       )}
     </div>
   );

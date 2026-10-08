@@ -1,21 +1,34 @@
 // Universal command bar language. Plain text is a quick ask to Central; a pasted command line is
 // explained by the interpreter before anything runs; "/" starts a command. Pure: the bar executes.
 
+import { t } from "../../i18n";
+
 export interface SlashCommand {
   name: string;
   args: string;
-  description: string;
+  /** In the current interface language. */
+  readonly description: string;
+}
+
+function slash(name: string, args: string): SlashCommand {
+  return {
+    name,
+    args,
+    get description() {
+      return t.dynamic(`bar.slash.${name}`);
+    },
+  };
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: "mission", args: "<objective>", description: "Open New Mission with this objective" },
-  { name: "agent", args: "<name> [message]", description: "Open an agent, or talk to it" },
-  { name: "mcp", args: "[server]", description: "MCP servers" },
-  { name: "skill", args: "[name]", description: "Installed skills, or find one in the Skill Market" },
-  { name: "github", args: "[owner/repo]", description: "GitHub account and repositories" },
-  { name: "ssh", args: "<user@host>", description: "Explain an SSH command before anything runs" },
-  { name: "run", args: "<command line>", description: "Explain any command line before anything runs" },
-  { name: "model", args: "<agent> <model>", description: "Set an agent's model" },
+  slash("mission", "<objective>"),
+  slash("agent", "<name> [message]"),
+  slash("mcp", "[server]"),
+  slash("skill", "[name]"),
+  slash("github", "[owner/repo]"),
+  slash("ssh", "<user@host>"),
+  slash("run", "<command line>"),
+  slash("model", "<agent> <model>"),
 ];
 
 export interface NamedRef {
@@ -158,18 +171,18 @@ export function suggest(input: string, ctx: SuggestContext, max = 8): Suggestion
       return ctx.models
         .filter((model) => startsWithCi(model, m.rest))
         .slice(0, max)
-        .map((model) => ({ insert: `${head}${model}`, label: model, detail: `Model for ${m.agent.name}` }));
+        .map((model) => ({ insert: `${head}${model}`, label: model, detail: t("bar.suggest.modelFor", { name: m.agent.name }) }));
     }
     case "skill":
       return ctx.skills
         .filter((s) => startsWithCi(s, rest) && s !== rest)
         .slice(0, max)
-        .map((s) => ({ insert: `/skill ${s}`, label: s, detail: "Installed skill" }));
+        .map((s) => ({ insert: `/skill ${s}`, label: s, detail: t("bar.suggest.skill") }));
     case "mcp":
       return ctx.mcp
         .filter((s) => startsWithCi(s, rest) && s !== rest)
         .slice(0, max)
-        .map((s) => ({ insert: `/mcp ${s}`, label: s, detail: "MCP server" }));
+        .map((s) => ({ insert: `/mcp ${s}`, label: s, detail: t("bar.suggest.mcp") }));
     default:
       return [];
   }

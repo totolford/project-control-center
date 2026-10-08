@@ -7,12 +7,14 @@ import type { MenuEntry } from "../components/Menu";
 import { Menu } from "../components/Menu";
 import type { RecentProject } from "../lib/types";
 import { useStore } from "../store";
+import { useT } from "../i18n";
 
 /** "Projects › <name ▾>" with the project menu (switch, create/open, reveal, close). */
 export function ProjectBreadcrumb({ onCloseProject, onFolder }: { onCloseProject: () => void; onFolder: (path: string) => Promise<void> }) {
   const info = useStore((s) => s.project?.info);
   const loadSnapshot = useStore((s) => s.loadSnapshot);
   const [recent, setRecent] = useState<RecentProject[] | null>(null);
+  const t = useT();
   const root = info?.root;
   useEffect(() => {
     if (root) void attempt(() => api.recentProjects()).then((r) => setRecent(r ?? []));
@@ -32,31 +34,31 @@ export function ProjectBreadcrumb({ onCloseProject, onFolder }: { onCloseProject
   const entries = (): MenuEntry[] => {
     const others = (recent ?? []).filter((p) => p.root !== info.root);
     return [
-      { heading: "Switch project" },
+      { heading: t("cmd.project.switch") },
       ...(recent === null
-        ? [{ label: "Loading recent projects…", disabled: true }]
+        ? [{ label: t("cmd.project.loadingRecent"), disabled: true }]
         : others.length === 0
-          ? [{ label: "No other recent project", disabled: true }]
+          ? [{ label: t("cmd.project.noRecent"), disabled: true }]
           : others.map((p) => ({
               label: p.name,
-              detail: p.available ? p.root : `${p.root} (unavailable)`,
+              detail: p.available ? p.root : t("cmd.project.unavailable", { path: p.root }),
               icon: <History size={13} />,
               disabled: !p.available,
               onSelect: () => void switchTo(p.root),
             }))),
       "separator",
-      { label: "Create project…", icon: <FolderPlus size={13} />, onSelect: () => void pickFolder("Choose a folder for the new project") },
-      { label: "Open project folder…", icon: <FolderOpen size={13} />, onSelect: () => void pickFolder("Open an existing project") },
+      { label: t("cmd.project.create"), icon: <FolderPlus size={13} />, onSelect: () => void pickFolder(t("cmd.project.createTitle")) },
+      { label: t("cmd.project.open"), icon: <FolderOpen size={13} />, onSelect: () => void pickFolder(t("cmd.project.openTitle")) },
       "separator",
-      { label: "Open folder", detail: info.root, icon: <FolderOpen size={13} />, onSelect: () => void run(() => api.openPath(info.root)) },
-      { label: "Show in Explorer", icon: <FolderSearch size={13} />, onSelect: () => void run(() => api.revealPath(info.root)) },
+      { label: t("cmd.project.openFolder"), detail: info.root, icon: <FolderOpen size={13} />, onSelect: () => void run(() => api.openPath(info.root)) },
+      { label: t("cmd.project.reveal"), icon: <FolderSearch size={13} />, onSelect: () => void run(() => api.revealPath(info.root)) },
       "separator",
-      { label: "Close project", icon: <X size={13} />, danger: true, onSelect: onCloseProject },
+      { label: t("cmd.project.close"), icon: <X size={13} />, danger: true, onSelect: onCloseProject },
     ];
   };
 
   return (
-    <nav className="breadcrumb" aria-label="Project">
+    <nav className="breadcrumb" aria-label={t("cmd.project.aria")}>
       <span className="muted breadcrumb-sep" aria-hidden="true">/</span>
       <Menu
         trigger={
@@ -67,7 +69,7 @@ export function ProjectBreadcrumb({ onCloseProject, onFolder }: { onCloseProject
         }
         buttonClassName="breadcrumb-btn"
         entries={entries}
-        label={`Project menu (${info.root})`}
+        label={t("cmd.project.menu", { path: info.root })}
       />
     </nav>
   );

@@ -1,0 +1,38 @@
+import { defineMessages } from "../define";
+
+// Words reused across many views. View-specific text lives in that view's namespace.
+// Columns: en, fr.
+export default defineMessages({
+  "common.save": ["Save", "Enregistrer"],
+  "common.cancel": ["Cancel", "Annuler"],
+  "common.close": ["Close", "Fermer"],
+  "common.reset": ["Reset", "Réinitialiser"],
+  "common.delete": ["Delete", "Supprimer"],
+  "common.remove": ["Remove", "Retirer"],
+  "common.edit": ["Edit", "Modifier"],
+  "common.add": ["Add", "Ajouter"],
+  "common.create": ["Create", "Créer"],
+  "common.retry": ["Retry", "Réessayer"],
+  "common.refresh": ["Refresh", "Actualiser"],
+  "common.loading": ["Loading…", "Chargement…"],
+  "common.unavailable": ["Unavailable", "Indisponible"],
+  "common.none": ["None", "Aucun"],
+  "common.yes": ["Yes", "Oui"],
+  "common.no": ["No", "Non"],
+  "common.ok": ["OK", "OK"],
+  "common.back": ["Back", "Retour"],
+  "common.next": ["Next", "Suivant"],
+  "common.done": ["Done", "Terminé"],
+  "common.open": ["Open", "Ouvrir"],
+  "common.copy": ["Copy", "Copier"],
+  "common.copied": ["Copied", "Copié"],
+  "common.search": ["Search", "Rechercher"],
+  "common.enabled": ["Enabled", "Activé"],
+  "common.disabled": ["Disabled", "Désactivé"],
+  "common.never": ["never", "jamais"],
+  "common.justNow": ["just now", "à l’instant"],
+  "common.auto": ["Auto", "Auto"],
+  "common.default": ["Default", "Par défaut"],
+  "common.error": ["Error", "Erreur"],
+  "common.readOnly": ["Compatibility mode: this project is read-only", "Mode compatibilité : ce projet est en lecture seule"],
+});

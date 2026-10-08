@@ -9,11 +9,13 @@ import { characters } from '../../data/characters';
 import { NEXUS_SKIN_PREFIX } from '../../data/nexusSkins';
 import { NEXUS_TOKEN_PREFIX } from '../../convex/aiTown/nexusInputs';
 import type { SpritesheetData } from '../../data/spritesheets/types';
+import { DEFAULT_CHARACTER, WorldWarning, validateWorld } from './validate';
 
 export type NexusState = FunctionReturnType<typeof api.nexus.state>;
 export type NexusAgentRow = NexusState['agents'][number];
 export type NexusSpeech = NexusState['speech'][number];
 export type NexusSkin = NexusState['skins'][number];
+export type NexusRoom = NexusState['rooms'][number];
 
 /** Visual state of a character, derived only from the real agent row. */
 export type VisualState =
@@ -145,11 +147,20 @@ export type CharacterLook = {
   speed: number;
 };
 
-/** Built-in character (folk or NEXUS sprite) or a skin imported in NEXUS. */
-export function resolveCharacter(name: string, skins: NexusSkin[] | undefined): CharacterLook | undefined {
+/**
+ * Built-in character (folk or NEXUS sprite) or a skin imported in NEXUS.
+ * Safe Mode draws built-in sprites only (imported skins are the most
+ * recently added, least proven assets).
+ */
+export function resolveCharacter(
+  name: string,
+  skins: NexusSkin[] | undefined,
+  safeMode = false,
+): CharacterLook | undefined {
   const builtin = characters.find((c) => c.name === name);
   if (builtin) return builtin;
-  if (!name.startsWith(NEXUS_SKIN_PREFIX)) return undefined;
+  if (name === 'default-agent') return characters.find((c) => c.name === DEFAULT_CHARACTER);
+  if (safeMode || !name.startsWith(NEXUS_SKIN_PREFIX)) return undefined;
   const skin = skins?.find((s) => s.name === name.slice(NEXUS_SKIN_PREFIX.length));
   if (!skin?.textureUrl) return undefined;
   return {
@@ -160,7 +171,14 @@ export function resolveCharacter(name: string, skins: NexusSkin[] | undefined): 
 }
 
 export type NexusWorld = {
+  /** The state with validated / repaired agent rows. */
   state: NexusState | undefined;
+  /** Repairs made by the validator (reported to NEXUS once). */
+  warnings: WorldWarning[];
+  /** Agents not drawn (invalid; in Safe Mode, any repaired one). */
+  hidden: Set<string>;
+  /** Their AI Town players. */
+  hiddenPlayers: Set<string>;
   /** AI Town player id → NEXUS agent. */
   byPlayer: Map<string, NexusAgentRow>;
   byId: Map<string, NexusAgentRow>;
@@ -171,15 +189,33 @@ export type NexusWorld = {
 export function useNexusWorld(
   worldId: Id<'worlds'> | undefined,
   players: { id: string; human?: string }[],
+  safeMode = false,
 ): NexusWorld {
   const state = useQuery(api.nexus.state, worldId ? { worldId } : 'skip');
-  return useMemo(() => indexAgents(state, players), [state, players]);
+  return useMemo(() => indexAgents(state, players, safeMode), [state, players, safeMode]);
 }
 
+/** Validates the agent rows (WorldStateValidator + RepairManager), then indexes them. */
 export function indexAgents(
-  state: NexusState | undefined,
+  raw: NexusState | undefined,
   players: { id: string; human?: string }[],
+  safeMode = false,
 ): NexusWorld {
+  let state = raw;
+  let warnings: WorldWarning[] = [];
+  const hidden = new Set<string>();
+  if (raw) {
+    const hasLook = (c: string) => !!resolveCharacter(c, raw.skins, safeMode);
+    const checked = validateWorld(
+      raw.agents,
+      hasLook,
+      raw.rooms.map((r) => r.id),
+      safeMode,
+    );
+    warnings = checked.warnings;
+    checked.hidden.forEach((h) => hidden.add(h));
+    state = { ...raw, agents: checked.rows };
+  }
   const byPlayer = new Map<string, NexusAgentRow>();
   const byId = new Map<string, NexusAgentRow>();
   const tokenPlayer = new Map<string, string>();
@@ -193,8 +229,16 @@ export function indexAgents(
     const pid = tokenPlayer.get(a.nexusId) ?? a.playerId;
     if (pid) byPlayer.set(pid, a);
   }
+  const hiddenPlayers = new Set<string>();
+  for (const h of hidden) {
+    const pid = tokenPlayer.get(h);
+    if (pid) hiddenPlayers.add(pid);
+  }
   return {
     state,
+    warnings,
+    hidden,
+    hiddenPlayers,
     byPlayer,
     byId,
     playerOf: (nexusId) => tokenPlayer.get(nexusId) ?? byId.get(nexusId)?.playerId,

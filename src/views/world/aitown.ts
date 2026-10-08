@@ -1,17 +1,16 @@
 // Integrated AI Town: what NEXUS does with the messages of the embedded world
-// (pure, tested), and the skins it offers. Zones, presets and built-in
-// characters come straight from ai-town/data so both sides agree.
+// (pure, tested), and the skins it offers. Presets and built-in characters
+// come straight from ai-town/data so both sides agree; NEXUS HQ's rooms are
+// in ./hq.ts.
 
 import { characters as aiTownCharacters } from "../../../ai-town/data/characters";
 import { BUILTIN_SKINS, NEXUS_SKIN_PREFIX, NEXUS_SKIN_PRESETS } from "../../../ai-town/data/nexusSkins";
-import { NEXUS_ZONES } from "../../../ai-town/data/nexusZones";
-import type { AiTownStatus, AiTownToNexus, NexusToAiTown, NexusZoneKind } from "../../lib/types";
-import type { ViewName } from "../../store";
+import type { AiTownCameraMode, AiTownStatus, AiTownToNexus, AiWorldWarning } from "../../lib/types";
+import { isRoomId } from "./hq";
 
-export { BUILTIN_SKINS, NEXUS_SKIN_PREFIX, NEXUS_SKIN_PRESETS, NEXUS_ZONES };
+export { BUILTIN_SKINS, NEXUS_SKIN_PREFIX, NEXUS_SKIN_PRESETS };
 
 type AgentAction = Extract<AiTownToNexus, { type: "action" }>["action"];
-type CameraMode = Extract<NexusToAiTown, { type: "camera" }>["mode"];
 
 const ACTIONS: AgentAction[] = [
   "assignMission",
@@ -32,10 +31,18 @@ const ACTIONS: AgentAction[] = [
   "viewTasks",
   "viewTools",
 ];
-const CAMERA_MODES: CameraMode[] = ["free", "follow", "cinematic", "overview"];
-const ZONE_IDS = NEXUS_ZONES.map((z) => z.id) as string[];
+const CAMERA_MODES: AiTownCameraMode[] = ["free", "follow", "cinematic", "overview", "mission"];
 
 const isId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length < 200;
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+
+/** A repair warning of the world validator (journaled as is, so clipped and checked). */
+function parseWarning(v: unknown): AiWorldWarning | null {
+  if (!v || typeof v !== "object") return null;
+  const w = v as Record<string, unknown>;
+  if (typeof w.code !== "string" || !/^AI_WORLD_[A-Z_]{1,60}$/.test(w.code)) return null;
+  return { code: w.code, nexusId: str(w.nexusId, 200), detail: str(w.detail, 300), repair: str(w.repair, 200) };
+}
 
 /** Validates a message posted by the AI Town iframe; anything else is ignored. */
 export function parseAiTownMessage(data: unknown): AiTownToNexus | null {
@@ -44,22 +51,33 @@ export function parseAiTownMessage(data: unknown): AiTownToNexus | null {
   if (m.source !== "ai-town") return null;
   switch (m.type) {
     case "ready":
-      return { source: "ai-town", type: "ready" };
+      return { source: "ai-town", type: "ready", safeMode: m.safeMode === true };
     case "select":
       return m.nexusId === null || isId(m.nexusId) ? { source: "ai-town", type: "select", nexusId: m.nexusId as string | null } : null;
     case "talk":
     case "viewWork":
       return isId(m.nexusId) ? { source: "ai-town", type: m.type, nexusId: m.nexusId } : null;
-    case "openBuilding":
-      return ZONE_IDS.includes(m.zone as string) ? { source: "ai-town", type: "openBuilding", zone: m.zone as NexusZoneKind } : null;
+    case "openRoom":
+      return isRoomId(m.roomId) ? { source: "ai-town", type: "openRoom", roomId: m.roomId } : null;
     case "action":
       return isId(m.nexusId) && ACTIONS.includes(m.action as AgentAction)
         ? { source: "ai-town", type: "action", nexusId: m.nexusId, action: m.action as AgentAction }
         : null;
     case "camera":
-      return CAMERA_MODES.includes(m.mode as CameraMode)
-        ? { source: "ai-town", type: "camera", mode: m.mode as CameraMode, nexusId: isId(m.nexusId) ? m.nexusId : undefined }
+      return CAMERA_MODES.includes(m.mode as AiTownCameraMode)
+        ? { source: "ai-town", type: "camera", mode: m.mode as AiTownCameraMode, nexusId: isId(m.nexusId) ? m.nexusId : undefined }
         : null;
+    case "warning": {
+      const warning = parseWarning(m.warning);
+      return warning ? { source: "ai-town", type: "warning", warning } : null;
+    }
+    case "crash": {
+      if (!m.context || typeof m.context !== "object" || Array.isArray(m.context)) return null;
+      const context = m.context as Record<string, unknown>;
+      // Size-bounded: the context becomes a crash report.
+      if (JSON.stringify(context).length > 20_000) return null;
+      return { source: "ai-town", type: "crash", context: { ...context, message: str(context.message, 500) } };
+    }
     default:
       return null;
   }
@@ -68,27 +86,6 @@ export function parseAiTownMessage(data: unknown): AiTownToNexus | null {
 /** Only the embedded frontend, served by NEXUS itself, may talk to NEXUS. */
 export function isTrustedEvent(e: Pick<MessageEvent, "origin" | "source">, frame: Window | null | undefined, origin: string): boolean {
   return !!frame && e.source === frame && e.origin === origin;
-}
-
-/** Where a building leads in NEXUS. */
-export type BuildingTarget = { kind: "view"; view: ViewName } | { kind: "central" };
-
-export const BUILDING_TARGET: Record<NexusZoneKind, BuildingTarget> = {
-  central_hq: { kind: "central" },
-  coding_office: { kind: "view", view: "swarm" },
-  testing_lab: { kind: "view", view: "swarm" },
-  design_studio: { kind: "view", view: "swarm" },
-  roblox_studio: { kind: "view", view: "connections" },
-  github_office: { kind: "view", view: "github" },
-  server_room: { kind: "view", view: "connections" },
-  mcp_lab: { kind: "view", view: "mcp" },
-  skill_shop: { kind: "view", view: "market" },
-  review_room: { kind: "view", view: "tasks" },
-  archive: { kind: "view", view: "agents" },
-};
-
-export function zoneName(zone: NexusZoneKind): string {
-  return NEXUS_ZONES.find((z) => z.id === zone)?.name ?? zone;
 }
 
 /** What the AI World page should show for a runtime status. */

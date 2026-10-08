@@ -4,7 +4,9 @@ import { useLoad } from "../../lib/useLoad";
 import { useClaudeEnv, useSkills } from "../../state/claude";
 import { useProviders } from "../../workspace/hooks";
 import { Loading, PageHeader, Section, Spinner } from "../../components/Common";
+import { platformApi } from "../../lib/platform";
 import { DetectionList, ProjectSection, SystemSection } from "./EnvSections";
+import { CapabilityMatrixSection, PlatformSection } from "./PlatformSections";
 
 function AiSection() {
   const { env, loading } = useClaudeEnv();
@@ -50,11 +52,15 @@ export function EnvironmentView() {
   const system = useLoad(() => api.systemReport());
   const tools = useLoad(() => api.environment());
   const insights = useLoad(() => api.projectInsights());
-  const loading = system.loading || tools.loading || insights.loading;
+  const platform = useLoad(() => platformApi.info());
+  const capabilities = useLoad(() => platformApi.capabilities());
+  const loading = system.loading || tools.loading || insights.loading || platform.loading || capabilities.loading;
   const reload = () => {
     void system.reload();
     void tools.reload();
     void insights.reload();
+    void platform.reload();
+    void capabilities.reload();
   };
   return (
     <div className="page">
@@ -77,6 +83,8 @@ export function EnvironmentView() {
         <AiSection />
         <ProjectSection insights={insights.data} loading={insights.loading} error={insights.error} />
       </div>
+      <PlatformSection info={platform.data} loading={platform.loading} error={platform.error} />
+      <CapabilityMatrixSection matrix={capabilities.data} loading={capabilities.loading} error={capabilities.error} />
     </div>
   );
 }

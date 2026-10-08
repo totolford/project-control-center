@@ -3,8 +3,9 @@
 //! Setup wizard and AI Town's local townspeople.
 //!
 //! Nothing is installed or downloaded here without a command the UI only
-//! sends after the user confirmed the exact action (winget command, model and
-//! download size).
+//! sends after the user confirmed the exact action (the installer command —
+//! winget on Windows, the official script or apt via pkexec on Linux —, model
+//! and download size).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -23,6 +24,7 @@ use pcc_ai::router::{self, Journal, JournalEntry, LocalCapacity, RouteDecision, 
 use pcc_ai::runtime::{self, Benchmark, RuntimeKind, RuntimeStatus};
 use pcc_ai::TownspeopleReadiness;
 use pcc_core::{AiEngineSettings, AiMode, EngineProvider, Error, Event, EventKind, FallbackPolicy, Severity};
+use pcc_platform::install::InstallPlan;
 
 use crate::state::{AppState, EVENT_CHANNEL};
 
@@ -62,7 +64,7 @@ fn save_app(state: &AppState, s: &AiAppSettings) -> CmdResult<()> {
 }
 
 /// Settings in force: the open project's, else the application default.
-async fn current(state: &AppState) -> AiEngineSettings {
+pub(crate) async fn current(state: &AppState) -> AiEngineSettings {
     match state.orch().await {
         Ok(o) => o.store.settings().ai,
         Err(_) => load_app(state).ai,
@@ -79,7 +81,7 @@ async fn journal(state: &AppState) -> Journal {
 
 /// Journals in the open project (Activity) or, without a project, sends the
 /// event to the window only.
-async fn emit(app: &AppHandle, e: Event) {
+pub(crate) async fn emit(app: &AppHandle, e: Event) {
     let state = app.state::<AppState>();
     match state.orch().await {
         Ok(o) => o.lock().await.emit(e),
@@ -201,6 +203,8 @@ pub struct AiOverview {
     pub setup_at: Option<String>,
     pub setup_skipped: bool,
     pub winget: bool,
+    /// How runtimes are installed here: `winget`, `apt / official install scripts`.
+    pub installer: String,
     pub runtimes: Vec<RuntimeStatus>,
     /// Models of the configured runtime.
     pub models: Vec<LocalModel>,
@@ -236,6 +240,7 @@ pub async fn ai_overview(state: State<'_, AppState>) -> CmdResult<AiOverview> {
             setup_at: app.setup_at,
             setup_skipped: app.setup_skipped,
             winget: runtime::winget_available(),
+            installer: if cfg!(windows) { "winget".into() } else { "apt / official install scripts".into() },
             runtimes,
             models,
             models_error,
@@ -248,25 +253,31 @@ pub async fn ai_overview(state: State<'_, AppState>) -> CmdResult<AiOverview> {
 
 // ---------------------------------------------------------------- runtimes
 
-/// The exact command NEXUS would run (shown before the user confirms).
+/// The exact command NEXUS would run, or why it cannot here (shown before the
+/// user confirms; nothing runs).
 #[tauri::command]
-pub fn ai_runtime_command(runtime: String, action: String) -> CmdResult<String> {
+pub async fn ai_runtime_plan(runtime: String, action: String) -> CmdResult<InstallPlan> {
     let kind = RuntimeKind::parse(&runtime)?;
-    Ok(format!("winget {}", runtime::winget_args(kind, &action)?.join(" ")))
+    blocking(move || runtime::install_plan(kind, &action)).await?
 }
 
-/// Install / update / uninstall through winget. Called only after the user
-/// confirmed the command shown by `ai_runtime_command`.
+/// Install / update / uninstall with this OS's installer. Called only after
+/// the user confirmed the command shown by `ai_runtime_plan`; the plan is
+/// recomputed here, the UI never sends a command line.
 #[tauri::command]
-pub async fn ai_runtime_winget(app: AppHandle, runtime: String, action: String) -> CmdResult<String> {
+pub async fn ai_runtime_install(app: AppHandle, runtime: String, action: String) -> CmdResult<String> {
     let kind = RuntimeKind::parse(&runtime)?;
-    runtime::winget_args(kind, &action)?;
+    let a = action.clone();
+    let plan = blocking(move || runtime::install_plan(kind, &a)).await??;
+    if !plan.available {
+        return Err(Error::invalid(plan.reason.unwrap_or_else(|| "not available on this machine".into())));
+    }
     if action != "install" {
         // Never pull the files from under a server NEXUS started.
         let _ = pcc_ai::manager().stop(kind);
     }
     let a = action.clone();
-    let result = blocking(move || runtime::RuntimeManager::winget(kind, &a)).await?;
+    let result = blocking(move || runtime::RuntimeManager::run_plan(kind, &a)).await?;
     let (name, verb) = match action.as_str() {
         "install" => ("runtime.installed", "installed"),
         "update" => ("runtime.updated", "updated"),
@@ -274,8 +285,17 @@ pub async fn ai_runtime_winget(app: AppHandle, runtime: String, action: String) 
     };
     match &result {
         Ok(_) => {
-            emit(&app, runtime_event(name, kind, format!("{} {verb} (winget)", kind.name()), None, Severity::Info))
-                .await
+            emit(
+                &app,
+                runtime_event(
+                    name,
+                    kind,
+                    format!("{} {verb} ({})", kind.name(), plan.method_label()),
+                    None,
+                    Severity::Info,
+                ),
+            )
+            .await
         }
         Err(e) => {
             let e = runtime_event(
@@ -291,7 +311,7 @@ pub async fn ai_runtime_winget(app: AppHandle, runtime: String, action: String) 
     result
 }
 
-/// Version winget would install (network).
+/// Newest version the installer offers (network).
 #[tauri::command]
 pub async fn ai_runtime_latest(runtime: String) -> CmdResult<Option<String>> {
     let kind = RuntimeKind::parse(&runtime)?;
@@ -520,7 +540,23 @@ pub async fn ai_load_model(state: State<'_, AppState>, model: String, load: bool
 #[tauri::command]
 pub async fn ai_benchmark(state: State<'_, AppState>, model: String) -> CmdResult<Benchmark> {
     let settings = current(&state).await;
-    blocking(move || runtime::benchmark(pcc_ai::provider_for(&settings).as_ref(), &model)).await?
+    blocking(move || {
+        let b = runtime::benchmark(pcc_ai::provider_for(&settings).as_ref(), &model)?;
+        record_benchmark(&settings, &b);
+        Ok(b)
+    })
+    .await?
+}
+
+/// A benchmark is a real local generation: it counts as AI usage.
+fn record_benchmark(settings: &AiEngineSettings, b: &Benchmark) {
+    use pcc_core::usage::{self, UsageCategory, UsageRecord};
+    let mut r = UsageRecord::new(settings.local.runtime.clone(), UsageCategory::BackgroundAgent, "benchmark")
+        .tokens(b.prompt_tokens, b.completion_tokens, None, None)
+        .local_run();
+    r.model = Some(b.model.clone());
+    r.latency_ms = Some(b.total_ms);
+    usage::record(r);
 }
 
 #[derive(Serialize)]
@@ -544,6 +580,7 @@ pub async fn ai_validate(state: State<'_, AppState>, model: String) -> CmdResult
     blocking(move || {
         let p = pcc_ai::provider_for(&settings);
         let benchmark = runtime::benchmark(p.as_ref(), &model)?;
+        record_benchmark(&settings, &benchmark);
         let capabilities =
             p.list_models().ok().and_then(|ms| ms.into_iter().find(|m| m.name == model).and_then(|m| m.capabilities));
         let tools = match &capabilities {

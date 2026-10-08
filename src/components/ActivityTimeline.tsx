@@ -10,6 +10,7 @@ import type { PccEvent } from "../lib/types";
 import { useAgents, useTimeline } from "../store";
 import { Loading, Spinner } from "./Common";
 import { Chip } from "./StatusBadge";
+import { useT } from "../i18n";
 
 const PAGE = 200;
 
@@ -76,6 +77,7 @@ export function ActivityTimeline({
   /** Receives the event kinds seen so far (for filter menus). */
   onKinds?: (kinds: string[]) => void;
 }) {
+  const t = useT();
   const agents = useAgents();
   const timeline = useTimeline();
   const [history, setHistory] = useState<PccEvent[] | null>(null);
@@ -154,7 +156,7 @@ export function ActivityTimeline({
       {history === null ? (
         <Loading />
       ) : rows.length === 0 ? (
-        <div className="muted pad">No events yet.</div>
+        <div className="muted pad">{t("comp.timeline.empty")}</div>
       ) : (
         <>
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
@@ -167,7 +169,7 @@ export function ActivityTimeline({
               );
             })}
           </div>
-          <div className="muted small pad center">{loadingMore ? <Spinner size={12} /> : hasMore ? "Scroll for older events" : "Beginning of timeline"}</div>
+          <div className="muted small pad center">{loadingMore ? <Spinner size={12} /> : hasMore ? t("comp.timeline.older") : t("comp.timeline.start")}</div>
         </>
       )}
     </div>

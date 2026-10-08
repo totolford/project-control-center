@@ -12,39 +12,42 @@ import { VISUAL_STATE } from "../workspace/agentState";
 import { useProviderName, useVisualState } from "../workspace/hooks";
 import { HeaderActions, type PanelHeaderProps } from "../workspace/PanelHeader";
 import { useAgent, useAgentNumber, useStore, useTask } from "../store";
+import { t, useT } from "../i18n";
 
 /** Start/stop/… actions for an agent, as menu entries. Retire asks for confirmation. */
 export function agentActions(agent: Agent, openDetails: () => void): MenuEntry[] {
   const live = isLive(agent.status);
   const retired = agent.status === "retired";
   const act = (fn: () => Promise<void>, text: string) => () => void run(fn, text);
+  const name = agent.name;
   return [
-    { label: "Start", icon: <Play size={13} />, disabled: live || retired, onSelect: act(() => api.startAgent(agent.id), `Starting ${agent.name}`) },
-    { label: "Stop", icon: <Square size={13} />, disabled: !live, onSelect: act(() => api.stopAgent(agent.id), `Stopping ${agent.name}`) },
-    { label: "Restart", icon: <RotateCw size={13} />, disabled: retired, onSelect: act(() => api.restartAgent(agent.id), `Restarting ${agent.name}`) },
+    { label: t("panel.act.start"), icon: <Play size={13} />, disabled: live || retired, onSelect: act(() => api.startAgent(agent.id), t("panel.act.starting", { name })) },
+    { label: t("panel.act.stop"), icon: <Square size={13} />, disabled: !live, onSelect: act(() => api.stopAgent(agent.id), t("panel.act.stopping", { name })) },
+    { label: t("panel.act.restart"), icon: <RotateCw size={13} />, disabled: retired, onSelect: act(() => api.restartAgent(agent.id), t("panel.act.restarting", { name })) },
     {
-      label: "Interrupt",
+      label: t("panel.act.interrupt"),
       icon: <Hand size={13} />,
       disabled: agent.status !== "working" && agent.status !== "awaiting_permission",
-      onSelect: act(() => api.interruptAgent(agent.id), `Interrupt sent to ${agent.name}`),
+      onSelect: act(() => api.interruptAgent(agent.id), t("panel.act.interrupted", { name })),
     },
     {
-      label: "Retire",
+      label: t("panel.act.retire"),
       icon: <Archive size={13} />,
       danger: true,
       disabled: agent.kind !== "worker" || retired,
       onSelect: () =>
-        void ask(`Retire ${agent.name}? Its session stops and it no longer receives tasks. History and memory are kept.`, {
-          title: "Retire agent",
+        void ask(t("panel.act.retireConfirm", { name }), {
+          title: t("panel.act.retireTitle"),
           kind: "warning",
-        }).then((ok) => ok && run(() => api.retireAgent(agent.id), `${agent.name} retired`)),
+        }).then((ok) => ok && run(() => api.retireAgent(agent.id), t("panel.act.retired", { name }))),
     },
     "separator",
-    { label: "Open details", icon: <ExternalLink size={13} />, onSelect: openDetails },
+    { label: t("panel.act.details"), icon: <ExternalLink size={13} />, onSelect: openDetails },
   ];
 }
 
 export const AgentHeader = memo(function AgentHeader({ spec, chrome }: PanelHeaderProps) {
+  const tr = useT();
   const agent = useAgent(spec.agentId);
   const task = useTask(agent?.currentTask);
   const state = useVisualState(spec.agentId);
@@ -55,7 +58,7 @@ export const AgentHeader = memo(function AgentHeader({ spec, chrome }: PanelHead
     return (
       <header className="panel-head">
         {chrome.grip}
-        <span className="panel-head-title muted">Agent not found</span>
+        <span className="panel-head-title muted">{tr("panel.agentNotFound")}</span>
         <HeaderActions chrome={chrome} />
       </header>
     );

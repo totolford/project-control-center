@@ -103,4 +103,8 @@ describe("clone helpers", () => {
     expect(joinPath("C:\\code", "D:\\other")).toBe("D:\\other");
     expect(gitCloneLine("https://gitlab.com/a/b.git", null, "C:\\My Code")).toBe("Set-Location -LiteralPath 'C:\\My Code'; git clone https://gitlab.com/a/b.git");
   });
+  it("uses Linux paths and a POSIX line for a Linux folder", () => {
+    expect(joinPath("/home/ada/code/", "rocket")).toBe("/home/ada/code/rocket");
+    expect(gitCloneLine("https://gitlab.com/a/b.git", "my app", "/home/ada/My Code")).toBe("cd -- '/home/ada/My Code' && git clone https://gitlab.com/a/b.git 'my app'");
+  });
 });

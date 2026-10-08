@@ -3,6 +3,7 @@
 //! with recommendations, and the `ModelRouter` that decides between Claude and
 //! the local model.
 
+pub mod capability;
 pub mod catalog;
 pub mod hardware;
 pub mod provider;
@@ -51,6 +52,10 @@ pub fn capacity(settings: &AiEngineSettings) -> LocalCapacity {
         Some(c) => c.iter().any(|c| c == "tools"),
         None => catalog::find(model).is_some_and(|m| m.tools),
     };
+    // A capability test measured on this machine wins over what the model declares.
+    if let Some(r) = capability::latest(&ep.runtime, model) {
+        cap.tools = r.central_mode == capability::CentralMode::Full;
+    }
     cap.context = catalog::find(model).map(|m| m.context).unwrap_or(8_192);
     cap.available = true;
     cap

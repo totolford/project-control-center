@@ -25,9 +25,10 @@ import {
   type WizardState,
 } from "./aiLogic";
 import { DownloadConsent } from "./ModelsPanel";
-import { WingetConsent } from "./RuntimesPanel";
+import { InstallConsent } from "./RuntimesPanel";
 import { PullBar, saveAi, usePulls } from "./shared";
 import { useAiSetup } from "./setupStore";
+import { rich, useT } from "../../i18n";
 
 const sameModel = (a: string, b: string) => a === b || a === `${b}:latest` || b === `${a}:latest`;
 
@@ -120,6 +121,7 @@ function Hardware({ hw }: { hw: HardwareInfo | null }) {
 
 /** First-launch AI Setup: hardware → runtime → model → install/download (with consent) → validate → configure → AI Town. */
 export function SetupWizard({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const [ws, setWs] = useState<WizardState>(initialWizard);
   const [hw, setHw] = useState<HardwareInfo | null>(null);
   const [o, setO] = useState<AiOverview | null>(null);
@@ -286,11 +288,11 @@ export function SetupWizard({ onClose }: { onClose: () => void }) {
       body = (
         <div className="stack">
           <p>
-            <strong>Ollama</strong> is not installed. NEXUS can install it with Windows Package Manager after you confirm the exact command.
+            {rich(t("platform.wizard.ollamaMissing", { method: o?.installer === "winget" ? t("platform.install.method.winget") : t("platform.wizard.methodScript") }), { name: <strong>Ollama</strong> })}
           </p>
-          {o && !o.winget && <div className="notice notice-warn">winget is not available: install Ollama from ollama.com, then click Check again.</div>}
+          {o && o.installer === "winget" && !o.winget && <div className="notice notice-warn">winget is not available: install Ollama from ollama.com, then click Check again.</div>}
           <div className="row">
-            <button className="btn btn-sm primary" disabled={!o?.winget || !ollama} onClick={() => setConsent("install")}>
+            <button className="btn btn-sm primary" disabled={!ollama} onClick={() => setConsent("install")}>
               <Download size={12} /> Install Ollama…
             </button>
             <button className="btn btn-sm ghost" onClick={() => void refresh()}>
@@ -577,7 +579,7 @@ export function SetupWizard({ onClose }: { onClose: () => void }) {
         </h3>
         {body}
       </div>
-      {consent === "install" && ollama && <WingetConsent runtime={ollama} action="install" onClose={() => setConsent(null)} onDone={() => void refresh()} />}
+      {consent === "install" && ollama && <InstallConsent runtime={ollama} action="install" onClose={() => setConsent(null)} onDone={() => void refresh()} />}
       {consent === "download" && chosen?.assessment && (
         <DownloadConsent a={chosen.assessment} diskFreeMb={hw?.diskFreeMb ?? null} modelsDir={o?.modelsDir ?? ""} onClose={() => setConsent(null)} onStarted={() => undefined} />
       )}

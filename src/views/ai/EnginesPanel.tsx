@@ -8,6 +8,7 @@ import { Field, Spinner } from "../../components/Common";
 import { Segmented } from "../../components/Tabs";
 import { engineLabel, engineWarnings, runtimeName } from "./aiLogic";
 import { saveAi } from "./shared";
+import { CapabilityPanel } from "./CapabilityPanel";
 
 const PROVIDERS: { value: EngineProvider; label: string }[] = [
   { value: "claude", label: "Claude" },
@@ -209,6 +210,8 @@ export function EnginesPanel({ data, onChanged }: { data: AiOverview; onChanged:
           </dl>
         </div>
       </section>
+
+      <CapabilityPanel data={data} onTested={onChanged} />
 
       {data.projectOpen && (
         <section className="panel">

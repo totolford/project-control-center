@@ -58,12 +58,10 @@ pub fn locate_source(resource_dir: Option<&Path>) -> Option<PathBuf> {
 }
 
 /// Fallback runtime folder when the app's data folder is unknown. Never the
-/// install folder (`%LOCALAPPDATA%\NEXUS`), which holds the bundled source.
+/// install folder (`%LOCALAPPDATA%\NEXUS`, `/usr/lib/NEXUS`, the AppImage
+/// mount), which holds the bundled source.
 pub fn default_runtime_dir() -> PathBuf {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
-        .unwrap_or_else(std::env::temp_dir);
+    let base = pcc_platform::paths::local_data_dir().unwrap_or_else(std::env::temp_dir);
     base.join("NEXUS-data").join("ai-town-runtime")
 }
 
@@ -98,12 +96,8 @@ fn version(program: &str) -> Option<String> {
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-fn npm_program() -> &'static str {
-    if cfg!(windows) {
-        "npm.cmd"
-    } else {
-        "npm"
-    }
+fn npm_program() -> String {
+    pcc_platform::paths::script("npm")
 }
 
 fn lock_hash(dir: &Path) -> Option<String> {
@@ -155,7 +149,60 @@ pub fn sync_source(source: &Path, runtime: &Path) -> Result<()> {
             std::fs::copy(&from, &to)?;
         }
     }
+    stamp_build(runtime)?;
     Ok(())
+}
+
+const BUILD_FILE: &str = "nexusBuild.ts";
+
+/// Hash of the copied Convex functions and data (FNV-1a over paths and bytes).
+fn source_fingerprint(runtime: &Path) -> String {
+    let mut files = Vec::new();
+    for dir in ["convex", "data"] {
+        let mut stack = vec![runtime.join(dir)];
+        while let Some(d) = stack.pop() {
+            for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                if path.is_dir() {
+                    if name != "_generated" {
+                        stack.push(path);
+                    }
+                } else if name != BUILD_FILE {
+                    files.push(path);
+                }
+            }
+        }
+    }
+    files.sort();
+    let mut h: u64 = 1469598103934665603;
+    for f in files {
+        let rel = f.strip_prefix(runtime).unwrap_or(&f).to_string_lossy().replace('\\', "/");
+        for b in rel.bytes().chain(std::fs::read(&f).unwrap_or_default()) {
+            h ^= b as u64;
+            h = h.wrapping_mul(1099511628211);
+        }
+    }
+    format!("{h:016x}")
+}
+
+/// Writes the fingerprint `nexus:ping` reports once these functions are deployed.
+fn stamp_build(runtime: &Path) -> Result<String> {
+    let build = source_fingerprint(runtime);
+    let file = runtime.join("convex").join(BUILD_FILE);
+    if file.parent().is_some_and(Path::is_dir) {
+        std::fs::write(
+            &file,
+            format!("// Written by NEXUS: fingerprint of this runtime copy.\nexport const NEXUS_BUILD = '{build}';\n"),
+        )?;
+    }
+    Ok(build)
+}
+
+/// The build the runtime copy expects `nexus:ping` to report.
+fn expected_build(runtime: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(runtime.join("convex").join(BUILD_FILE)).ok()?;
+    text.split('\'').nth(1).map(str::to_string)
 }
 
 pub struct AiTownRuntime {
@@ -191,7 +238,7 @@ impl AiTownRuntime {
         let installed_hash = self.installed_hash();
         RuntimeStatus {
             node: version("node"),
-            npm: version(npm_program()),
+            npm: version(&npm_program()),
             source: self.source.as_ref().map(|s| s.display().to_string()),
             upstream_commit,
             runtime_dir: self.runtime.display().to_string(),
@@ -259,21 +306,21 @@ impl AiTownRuntime {
         sync_source(&source, &self.runtime)?;
         self.last_error = None;
         let cli = self.runtime.join("node_modules").join("convex").join("bin").join("main.js");
-        let mut child = pcc_claude::process::std_command("node")
-            .arg(&cli)
+        let mut cmd = std::process::Command::new("node");
+        cmd.arg(&cli)
             .args(["dev", "--tail-logs", "disable", "--typecheck", "disable"])
             .env("CONVEX_AGENT_MODE", "anonymous")
             .current_dir(&self.runtime)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+        let mut child = pcc_platform::process::spawn_tied(cmd)?;
         pcc_claude::process::attach_pid_to_app_job(child.id());
         pcc_recovery::app().register(
             REC_KEY,
             pcc_recovery::Registration::new(pcc_recovery::ProcessKind::AiTown, "AI Town (convex dev)")
                 .pid(Some(child.id()))
-                .image("node.exe")
+                .image(pcc_platform::platform().executable_name("node"))
                 .command("node convex/bin/main.js dev"),
         );
         for pipe in [
@@ -309,8 +356,19 @@ impl AiTownRuntime {
             }
             if let Some(url) = read_env_url(&self.runtime) {
                 let client = ConvexClient::new(&url);
-                // Functions deployed when our query answers.
-                if client.query("nexus:ping", serde_json::json!({})).is_ok() {
+                // Ready once THIS build of the functions is deployed: right after an
+                // update the backend still answers with the previous version.
+                let expected = expected_build(&self.runtime);
+                let deployed = client
+                    .query("nexus:ping", serde_json::json!({}))
+                    .ok()
+                    .map(|v| v["build"].as_str().map(str::to_string));
+                let ready = match (deployed, &expected) {
+                    (Some(build), Some(want)) => build.as_deref() == Some(want.as_str()),
+                    (Some(_), None) => true,
+                    (None, _) => false,
+                };
+                if ready {
                     self.url = Some(url.clone());
                     let pid = self.backend.as_ref().map(Child::id).unwrap_or(0);
                     pcc_recovery::app().heartbeat(REC_KEY, "nexus:ping", Some("functions deployed"));
@@ -400,12 +458,8 @@ fn end_backend_records() {
 }
 
 fn kill_tree(child: &mut Child) {
-    #[cfg(windows)]
-    {
-        // `convex dev` starts the local backend as a child process.
-        let _ =
-            pcc_claude::process::std_command("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).output();
-    }
+    // `convex dev` starts the local backend as a child process.
+    pcc_platform::process::kill_tree(child.id(), true);
     let _ = child.kill();
     let _ = child.wait();
 }
@@ -459,6 +513,11 @@ mod tests {
         assert!(src.join("convex").join("nexus.ts").is_file(), "source untouched");
         let rt = dir.path().join("runtime");
         sync_source(&src, &rt).unwrap();
+        let build = expected_build(&rt).expect("build stamped");
+        assert_eq!(build, source_fingerprint(&rt), "stamp matches the copied code");
+        std::fs::write(src.join("convex").join("nexus.ts"), "changed").unwrap();
+        sync_source(&src, &rt).unwrap();
+        assert_ne!(expected_build(&rt).unwrap(), build, "a code change changes the build");
         assert!(rt.join("convex").join("nexus.ts").is_file());
     }
 

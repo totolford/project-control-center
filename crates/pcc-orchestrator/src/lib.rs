@@ -18,9 +18,13 @@
 //! * `dto`     – shapes shared with the UI.
 //! * `recovery` – process registry, mission checkpoints, interrupted missions, crash reports.
 //! * `watchdog` – periodic health checks, soft recovery, automatic restarts, MCP supervision.
+//! * `central` – RESUME pre-classifier, Central autonomy level, mission supervisor, MCP tool failure recovery.
+//! * `resume` – the resume service: verified recovery report, sessions brought back, Central briefed.
+//! * `usage`   – AI usage records of agent sessions and one-shot calls.
 
 mod admin;
 mod autonomy;
+pub mod central;
 mod connections;
 pub mod dto;
 pub mod engine;
@@ -36,9 +40,12 @@ pub mod policy;
 pub mod prompts;
 pub mod providers;
 pub mod recovery;
+pub mod resume;
 pub mod tools;
+pub mod usage;
 pub mod watchdog;
 mod work;
+pub mod world_tools;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -71,8 +78,11 @@ impl Orchestrator {
         project_types: Vec<String>,
     ) -> Result<Orchestrator> {
         let store = Arc::new(store);
+        usage::install_sink(&store);
         let (tx, mut rx) = mpsc::unbounded_channel();
         let mut core = Engine::new(store.clone(), bus.clone(), claude, project_types, tx)?;
+        // Settings → Missions → Recovery → auto-resume: interrupted missions continue now.
+        core.auto_resume_on_open();
         let mut jobs = core.take_jobs().expect("fresh engine");
         let engine = Arc::new(Mutex::new(core));
         // Jobs from background work (deferred tool answers, probes) run under the engine lock.

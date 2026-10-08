@@ -15,7 +15,9 @@ import { PositionIndicator } from './PositionIndicator.tsx';
 import { SHOW_DEBUG_UI } from './Game.tsx';
 import { ServerGame } from '../hooks/serverGame.ts';
 import type { NexusPixi } from '../nexus/NexusLayer.tsx';
-import { Buildings } from '../nexus/Buildings.tsx';
+import { Rooms } from '../nexus/Rooms.tsx';
+import { CharacterBoundary } from '../nexus/boundaries.tsx';
+import { mapSignature } from '../nexus/mapKey.ts';
 
 export const PixiGame = (props: {
   worldId: Id<'worlds'>;
@@ -25,7 +27,7 @@ export const PixiGame = (props: {
   width: number;
   height: number;
   setSelectedElement: SelectElement;
-  // NEXUS: buildings, decorations and camera of the embedded world.
+  // NEXUS: rooms, decorations and camera of the embedded world.
   nexus?: NexusPixi;
 }) => {
   // PIXI setup.
@@ -110,15 +112,21 @@ export const PixiGame = (props: {
       viewportRef={viewportRef}
     >
       <PixiStaticMap
+        // NEXUS: the static map is drawn once; a new building (rooms added,
+        // moved, archived) gives it a new key so it is drawn again.
+        key={props.nexus ? mapSignature(props.game.worldMap) : 'map'}
         map={props.game.worldMap}
         onpointerup={onMapPointerUp}
         onpointerdown={onMapPointerDown}
       />
       {props.nexus && (
-        <Buildings
-          zones={props.nexus.zones}
+        <Rooms
+          rooms={props.nexus.rooms}
+          connections={props.nexus.connections}
           counts={props.nexus.counts}
-          onOpen={props.nexus.onOpenBuilding}
+          focused={props.nexus.focusedRoom}
+          safeMode={props.nexus.safeMode}
+          onOpen={props.nexus.onOpenRoom}
         />
       )}
       {players.map(
@@ -129,17 +137,42 @@ export const PixiGame = (props: {
           ),
       )}
       {lastDestination && <PositionIndicator destination={lastDestination} tileDim={tileDim} />}
-      {players.map((p) => (
-        <Player
-          key={`player-${p.id}`}
-          game={props.game}
-          player={p}
-          isViewer={p.id === humanPlayerId}
-          onClick={props.setSelectedElement}
-          historicalTime={props.historicalTime}
-          nexus={props.nexus?.decorator}
-        />
-      ))}
+      {players.map((p) => {
+        const player = (
+          <Player
+            key={`player-${p.id}`}
+            game={props.game}
+            player={p}
+            isViewer={p.id === humanPlayerId}
+            onClick={props.setSelectedElement}
+            historicalTime={props.historicalTime}
+            nexus={props.nexus?.decorator}
+          />
+        );
+        if (!props.nexus) return player;
+        // NEXUS: one character that fails to render falls back to the plain
+        // default sprite; the rest of the world keeps rendering.
+        const fallback = (
+          <Player
+            game={props.game}
+            player={p}
+            isViewer={false}
+            onClick={props.setSelectedElement}
+            historicalTime={props.historicalTime}
+            nexus={props.nexus.fallbackDecorator}
+          />
+        );
+        return (
+          <CharacterBoundary
+            key={`player-${p.id}`}
+            playerId={p.id}
+            fallback={fallback}
+            onError={props.nexus.onCharacterError}
+          >
+            {player}
+          </CharacterBoundary>
+        );
+      })}
     </PixiViewport>
   );
 };

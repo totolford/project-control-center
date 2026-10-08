@@ -83,6 +83,18 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX events_ts ON events(ts);
     CREATE INDEX events_name ON events(name);
     "#,
+    // v5: AI usage records
+    r#"
+    CREATE TABLE usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, provider TEXT NOT NULL, model TEXT,
+        agent_id TEXT, mission_id TEXT, task_id TEXT, category TEXT NOT NULL, source TEXT NOT NULL,
+        input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cached_tokens INTEGER,
+        cache_creation_tokens INTEGER, reasoning_tokens INTEGER, cost_usd REAL, cost_source TEXT NOT NULL,
+        latency_ms INTEGER, local INTEGER NOT NULL, route_rule TEXT);
+    CREATE INDEX usage_ts ON usage(ts);
+    CREATE INDEX usage_agent ON usage(agent_id, ts);
+    CREATE INDEX usage_mission ON usage(mission_id, ts);
+    "#,
 ];
 
 /// Schema version written by this build.

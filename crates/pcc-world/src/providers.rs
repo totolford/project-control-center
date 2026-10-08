@@ -98,12 +98,7 @@ impl AIWorldProvider for AiTown {
                 true,
                 "Node 18 or newer required",
             ),
-            prereq(
-                "npm",
-                version_of("npm.cmd", &["--version"]).or_else(|| version_of("npm", &["--version"])),
-                true,
-                "not installed",
-            ),
+            prereq("npm", version_of(&pcc_platform::paths::script("npm"), &["--version"]), true, "not installed"),
         ]
     }
 }

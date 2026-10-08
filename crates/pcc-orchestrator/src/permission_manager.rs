@@ -435,8 +435,10 @@ impl Engine {
     /// Tool prompts died with their session (`lost`); merge and admin
     /// requests do not need a session and wait again (`recovered`).
     pub(crate) fn reconcile_permissions(&mut self) -> Result<()> {
+        // Settings → Missions → Recovery → "Recover permissions" off: nothing is restored.
+        let recover = self.store.settings().mission_recovery.recover_permissions;
         for mut r in self.store.open_permissions()? {
-            let resumable = r.resume_data.as_ref().and_then(kind_from_resume);
+            let resumable = r.resume_data.as_ref().and_then(kind_from_resume).filter(|_| recover);
             match resumable {
                 Some(kind) if r.kind != PermissionKind::Tool => {
                     r.status = PermissionStatus::Recovered;
@@ -463,7 +465,10 @@ impl Engine {
                         .flatten()
                         .and_then(|s| s.ended_at.map(|t| format!(" (session ended {})", pcc_core::human_time(&t))))
                         .unwrap_or_default();
-                    let why = if r.kind == PermissionKind::Tool {
+                    let why = if !recover {
+                        "NEXUS was restarted and \"Recover permissions\" is off (Settings → Missions → Recovery)"
+                            .to_string()
+                    } else if r.kind == PermissionKind::Tool {
                         format!("NEXUS was closed or restarted while it waited; the Claude Code session that asked is gone{ended}")
                     } else {
                         "NEXUS was restarted and the request could not be restored (it carried secret values)".into()

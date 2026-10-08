@@ -94,6 +94,10 @@ pub struct Engine {
     pub(crate) hier: crate::hierarchy::Runtime,
     /// Process registry, watchdog state, checkpoints and crash reports.
     pub(crate) rec: crate::recovery::RecoveryRuntime,
+    /// Central execution: mission supervisor, blocks, automatic resume notice.
+    pub(crate) central: crate::central::CentralRuntime,
+    /// Per-session AI usage trackers.
+    pub(crate) usage: crate::usage::UsageRuntime,
 }
 
 impl Engine {
@@ -129,6 +133,8 @@ impl Engine {
             compatibility: None,
             hier: Default::default(),
             rec,
+            central: Default::default(),
+            usage: Default::default(),
         };
         e.compatibility = pcc_store::compat::analyze(e.store.root()).ok();
         if e.store.read_only() {
@@ -227,7 +233,14 @@ impl Engine {
             connections: self.store.list_connections()?,
             pending_permissions: self.permissions.records(),
             repo: self.repo.as_ref().map(Repo::status),
-            recovery: self.recovery.clone(),
+            recovery: match (self.recovery.clone(), self.central.auto_resume.clone()) {
+                (Some(mut r), notice) => {
+                    r.auto_resumed = notice;
+                    Some(r)
+                }
+                (None, Some(notice)) => Some(RecoveryInfo { auto_resumed: Some(notice), ..Default::default() }),
+                (None, None) => None,
+            },
             emergency: self.emergency,
             user_requests: self.pending_user_requests(),
             compatibility: self.compatibility.clone(),
@@ -333,6 +346,7 @@ impl Engine {
     /// Drops the previous sessions. Tasks they were running are parked in
     /// `waiting` so nothing restarts without a decision.
     pub fn discard_recovery(&mut self) -> Result<()> {
+        self.dismiss_auto_resume();
         let Some(info) = self.recovery.take() else { return Ok(()) };
         for ra in info.agents {
             let mut a = self.store.agent(&ra.agent_id)?;
@@ -767,6 +781,13 @@ impl Engine {
     pub fn send_user_message(&mut self, to: &str, body: &str) -> Result<Message> {
         self.ensure_not_emergency()?;
         self.autopilot = true;
+        if to == CENTRAL_ID {
+            self.central.on_user_message();
+            // "reprends", "continue"…: NEXUS runs the resume flow itself.
+            if crate::central::is_resume_command(body) {
+                return self.resume_by_user(body);
+            }
+        }
         self.wake(to)?;
         self.post_message(USER_ID, to, MessageKind::User, body, None, None)
     }
@@ -790,6 +811,9 @@ impl Engine {
             SessionOutput::Message { msg, raw } => {
                 if let Err(e) = self.store.append_raw(&agent, row, &raw) {
                     tracing::warn!("raw log write failed: {e}");
+                }
+                if matches!(msg, Inbound::Result { .. } | Inbound::Init { .. }) {
+                    self.usage_observe(&agent, epoch, &raw);
                 }
                 self.handle_message(&agent, row, msg)?;
             }
@@ -881,6 +905,9 @@ impl Engine {
                         .get(agent)
                         .and_then(|l| l.tool_names.get(&r.tool_use_id).cloned())
                         .unwrap_or_default();
+                    if r.is_error && name.starts_with("mcp__") {
+                        self.on_mcp_tool_failure(agent, &name, &r.text);
+                    }
                     let marker = if r.is_error { "✗" } else { "✓" };
                     self.log(
                         agent,
@@ -975,7 +1002,9 @@ impl Engine {
                 )?;
             }
         }
-        self.schedule()
+        self.schedule()?;
+        // AgentExecutionLoop: a mission must not stall because Central's turn ended.
+        self.supervise_central(agent)
     }
 
     fn on_exit(&mut self, agent: &str, code: Option<i32>) -> Result<()> {

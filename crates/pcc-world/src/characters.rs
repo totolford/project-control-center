@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use pcc_ai::provider::{ChatMessage, ChatRequest};
 use pcc_ai::router::{self, Journal, Route, RouteDecision, RouteRequest, TaskKind};
+use pcc_core::usage::{self, UsageCategory, UsageRecord};
 use pcc_core::{AiEngineSettings, Error, Result};
 
 use crate::model::{Character, ConversationLine, Relationship};
@@ -77,7 +78,7 @@ pub fn from_agents(agents: &[AgentSeed]) -> Vec<Character> {
 }
 
 /// Runs a one-shot Claude Code prompt without tools and returns its text.
-fn ask_claude(claude: &Path, model: &str, prompt: &str, budget_usd: f64) -> Result<String> {
+fn ask_claude(claude: &Path, model: &str, prompt: &str, budget_usd: f64, category: UsageCategory) -> Result<String> {
     let dir = std::env::temp_dir();
     let out = pcc_claude::process::std_command(claude)
         .args([
@@ -101,6 +102,9 @@ fn ask_claude(claude: &Path, model: &str, prompt: &str, budget_usd: f64) -> Resu
     let v: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
         Error::Process(format!("unexpected Claude Code output: {}", String::from_utf8_lossy(&out.stderr).trim()))
     })?;
+    for r in usage::oneshot_records(&v, category, "ai-world", Some(model)) {
+        usage::record(r);
+    }
     if v.get("is_error").and_then(Value::as_bool).unwrap_or(false) {
         return Err(Error::Process(v.get("result").and_then(Value::as_str).unwrap_or("Claude Code error").into()));
     }
@@ -111,22 +115,30 @@ fn ask_claude(claude: &Path, model: &str, prompt: &str, budget_usd: f64) -> Resu
 /// call, or the local runtime, as decided by the ModelRouter.
 #[derive(Debug, Clone)]
 pub enum WorldLlm {
-    Claude { claude: PathBuf, model: String },
-    Local { ai: AiEngineSettings, model: String },
+    Claude {
+        claude: PathBuf,
+        model: String,
+    },
+    /// `rule`: the ModelRouter rule that chose the local runtime.
+    Local {
+        ai: AiEngineSettings,
+        model: String,
+        rule: String,
+    },
 }
 
 impl WorldLlm {
     pub fn label(&self) -> String {
         match self {
             WorldLlm::Claude { model, .. } => format!("Claude ({model})"),
-            WorldLlm::Local { ai, model } => format!("{} ({model})", pcc_ai::runtime_name(&ai.local.runtime)),
+            WorldLlm::Local { ai, model, .. } => format!("{} ({model})", pcc_ai::runtime_name(&ai.local.runtime)),
         }
     }
 
-    fn ask(&self, prompt: &str, budget_usd: f64) -> Result<String> {
+    fn ask(&self, prompt: &str, budget_usd: f64, category: UsageCategory) -> Result<String> {
         match self {
-            WorldLlm::Claude { claude, model } => ask_claude(claude, model, prompt, budget_usd),
-            WorldLlm::Local { ai, model } => {
+            WorldLlm::Claude { claude, model } => ask_claude(claude, model, prompt, budget_usd, category),
+            WorldLlm::Local { ai, model, rule } => {
                 let req = ChatRequest {
                     model: model.clone(),
                     messages: vec![ChatMessage::user(prompt)],
@@ -136,7 +148,15 @@ impl WorldLlm {
                     think: pcc_ai::catalog::find(model).filter(|m| m.thinking).map(|_| false),
                     ..Default::default()
                 };
-                let text = pcc_ai::provider_for(ai).chat(&req)?.content;
+                let resp = pcc_ai::provider_for(ai).chat(&req)?;
+                let mut r = UsageRecord::new(ai.local.runtime.clone(), category, "ai-world")
+                    .tokens(resp.prompt_tokens, resp.completion_tokens, None, None)
+                    .local_run();
+                r.model = Some(model.clone());
+                r.latency_ms = Some(resp.total_ms);
+                r.route_rule = Some(rule.clone());
+                usage::record(r);
+                let text = resp.content;
                 // Reasoning models may still print their thoughts first.
                 Ok(match text.rfind("</think>") {
                     Some(i) => text[i + "</think>".len()..].to_string(),
@@ -170,7 +190,11 @@ pub fn world_llm(
         j.record("ai-world", ai.mode, &req, &decision);
     }
     let llm = match decision.provider {
-        Route::Local => WorldLlm::Local { ai: ai.clone(), model: decision.model.clone().unwrap_or_default() },
+        Route::Local => WorldLlm::Local {
+            ai: ai.clone(),
+            model: decision.model.clone().unwrap_or_default(),
+            rule: decision.rule.clone(),
+        },
         Route::Claude => {
             let claude =
                 pcc_claude::find_claude().ok_or_else(|| Error::Process("Claude Code was not detected".into()))?;
@@ -195,7 +219,7 @@ pub fn generate(llm: &WorldLlm, description: &str, count: usize) -> Result<Vec<C
          Answer ONLY with a JSON array of objects with keys: name (string), personality (one sentence), \
          goals (array of 1-3 short strings), skills (array of strings)."
     );
-    let raw = llm.ask(&prompt, 0.25)?;
+    let raw = llm.ask(&prompt, 0.25, UsageCategory::AiWorld)?;
     let items = json_array(&raw)?;
     Ok(items
         .into_iter()
@@ -238,7 +262,7 @@ pub fn converse(
          Write their short conversation: 4 to 6 lines. Answer ONLY with a JSON array of {{\"speaker\": name, \"text\": line}}.",
         a.name, a.personality, a.goals.join("; "), b.name, b.personality, b.goals.join("; ")
     );
-    let raw = llm.ask(&prompt, 0.10)?;
+    let raw = llm.ask(&prompt, 0.10, UsageCategory::AgentConversation)?;
     Ok(json_array(&raw)?
         .into_iter()
         .filter_map(|v| {
@@ -306,7 +330,8 @@ mod tests {
         ai.local.model = Some("llama3".into());
         let (llm, d) = world_llm(&ai, TaskKind::NpcDialogue, "haiku", Some(&j)).unwrap();
         assert_eq!(d.provider, Route::Local, "{d:?}");
-        let text = llm.ask("Answer ONLY with a JSON array of one string: a greeting.", 0.0).unwrap();
+        let text =
+            llm.ask("Answer ONLY with a JSON array of one string: a greeting.", 0.0, UsageCategory::AiWorld).unwrap();
         assert!(json_array(&text).is_ok(), "{text}");
         assert_eq!(j.recent(1)[0].decision.rule, "hybrid-light-local");
     }

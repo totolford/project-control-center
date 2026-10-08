@@ -14,6 +14,7 @@ import { useAgent, useAgents, useMissions, useStore } from "../store";
 import { HeaderActions, type PanelHeaderProps } from "../workspace/PanelHeader";
 import { AgentInput } from "./AgentTerminal";
 import { agentActions } from "./AgentHeader";
+import { useT } from "../i18n";
 
 const WorkerRow = memo(function WorkerRow({ agent }: { agent: Agent }) {
   const state = useVisualState(agent.id);
@@ -30,6 +31,7 @@ const WorkerRow = memo(function WorkerRow({ agent }: { agent: Agent }) {
 });
 
 export const CentralPanel = memo(function CentralPanel({ spec }: PanelBodyProps) {
+  const t = useT();
   const id = spec.agentId ?? "central";
   const central = useAgent(id);
   const agents = useAgents();
@@ -39,15 +41,15 @@ export const CentralPanel = memo(function CentralPanel({ spec }: PanelBodyProps)
   const active = missions.filter((m) => m.status === "active" || m.status === "planning");
 
   if (!central) {
-    return <div className="muted pad">Central is offline — start it or create a mission.</div>;
+    return <div className="muted pad">{t("panel.central.offline")}</div>;
   }
   const live = isLive(central.status);
   return (
     <div className="central-panel">
       <div className="panel-scroll pad-sm">
-        <div className="section-label">Mission</div>
+        <div className="section-label">{t("panel.central.mission")}</div>
         {active.length === 0 ? (
-          <div className="muted small">No active mission.</div>
+          <div className="muted small">{t("shell.strip.noMission")}</div>
         ) : (
           active.map((m) => (
             <div key={m.id} className="central-mission">
@@ -56,11 +58,11 @@ export const CentralPanel = memo(function CentralPanel({ spec }: PanelBodyProps)
             </div>
           ))
         )}
-        <div className="section-label">Latest from Central</div>
-        <div className="central-latest">{latest ? latest.text : <span className="muted">{live ? "No output yet." : "Central is not running."}</span>}</div>
-        <div className="section-label">Workers ({workers.length})</div>
+        <div className="section-label">{t("panel.central.latest")}</div>
+        <div className="central-latest">{latest ? latest.text : <span className="muted">{live ? t("panel.central.noOutput") : t("panel.central.notRunning")}</span>}</div>
+        <div className="section-label">{t("panel.central.workers", { count: workers.length })}</div>
         {workers.length === 0 ? (
-          <div className="muted small">No worker agents yet — Central creates them when it plans a mission.</div>
+          <div className="muted small">{t("panel.central.noWorkers")}</div>
         ) : (
           <div className="worker-list">
             {workers.map((w) => (
@@ -68,7 +70,7 @@ export const CentralPanel = memo(function CentralPanel({ spec }: PanelBodyProps)
             ))}
           </div>
         )}
-        <div className="section-label">Recent communication</div>
+        <div className="section-label">{t("panel.central.recent")}</div>
         <MessageList agentId={null} limit={8} compact />
       </div>
       <AgentInput agentId={id} name="Central" disabled={central.status === "retired"} />
@@ -78,6 +80,7 @@ export const CentralPanel = memo(function CentralPanel({ spec }: PanelBodyProps)
 
 /** Header of the Central panel: identity, derived state, start button, agent + panel menus. */
 export const CentralHeader = memo(function CentralHeader({ spec, chrome }: PanelHeaderProps) {
+  const t = useT();
   const id = spec.agentId ?? "central";
   const central = useAgent(id);
   const state = useVisualState(id);
@@ -87,13 +90,13 @@ export const CentralHeader = memo(function CentralHeader({ spec, chrome }: Panel
     <header className="panel-head central-head">
       {chrome.grip}
       <Sparkles size={14} className="tone-accent-fg" />
-      <span className="central-title">CENTRAL AGENT</span>
-      <span className="muted small ellipsis">· Project orchestrator</span>
+      <span className="central-title">{t("panel.central.title")}</span>
+      <span className="muted small ellipsis">· {t("panel.central.sub")}</span>
       <span className="spacer" />
       {state && <StatusIndicator state={state} />}
       {canStart && (
-        <button className="btn btn-sm" onClick={() => void run(() => api.startAgent(id), "Starting Central")}>
-          <Play size={12} /> Start
+        <button className="btn btn-sm" onClick={() => void run(() => api.startAgent(id), t("panel.central.starting"))}>
+          <Play size={12} /> {t("panel.act.start")}
         </button>
       )}
       <HeaderActions chrome={chrome} extra={central ? agentActions(central, () => openAgent(id)) : undefined} />

@@ -7,7 +7,7 @@ import { useUi } from "../../state/ui";
 import type { AiTownStatus, World } from "../../lib/types";
 import { useRightContext } from "../../state/context";
 import { useAiTown } from "./aiTownStore";
-import { makeCharacter, makeWorld } from "./fixtures";
+import { makeCharacter, makeHqRoom, makeHqView, makeWorld } from "./fixtures";
 import { AiWorldPanel, AiWorldView } from "./index";
 import { CharacterDetail } from "./CharacterDetail";
 import { WorldFeed } from "./WorldFeed";
@@ -44,6 +44,8 @@ function respond(cmd: string, args?: Record<string, unknown>): unknown {
   switch (cmd) {
     case "world_get":
       return world;
+    case "ai_world_hq":
+      return makeHqView([makeHqRoom("central_hq", "central_hq", { name: "NEXUS HQ" }), makeHqRoom("skill_shop", "skill_shop", { name: "Skill Shop" })]);
     case "world_providers":
       return [
         { id: "nexus_native", name: "NEXUS Native", description: "Inside NEXUS", prerequisites: [], ready: true },
@@ -158,7 +160,10 @@ describe("AiWorldView: integrated AI Town", () => {
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("promote_agent", { id: "w1" });
     await post({ source: "ai-town", type: "action", nexusId: "w1", action: "customize" });
     expect(screen.getByText("Customize Character — Builder")).toBeTruthy();
-    await post({ source: "ai-town", type: "openBuilding", zone: "skill_shop" });
+    await post({ source: "ai-town", type: "openRoom", roomId: "skill_shop" });
+    expect(screen.getByRole("complementary", { name: "Skill Shop" })).toBeTruthy();
+    expect(screen.getByText("No agent in this room now.")).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByText("Open Skill Market")));
     expect(useStore.getState().view.name).toBe("market");
   });
 

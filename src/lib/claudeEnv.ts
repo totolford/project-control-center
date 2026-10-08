@@ -2,6 +2,7 @@
 // these helpers only extract fields that are really present and never fill gaps.
 
 import type { ClaudeEnvironment, CliOption, Connection } from "./types";
+import { lazyLabels } from "../i18n";
 
 type Obj = Record<string, unknown>;
 
@@ -41,13 +42,13 @@ export interface RateLimit {
  * Documented subscription windows. get_usage also returns internal keys (code
  * names) without meaning for the user: those are not shown.
  */
-const LIMIT_LABEL: Record<string, string> = {
-  five_hour: "5-hour window",
-  seven_day: "7-day window",
-  seven_day_opus: "7-day window · Opus",
-  seven_day_sonnet: "7-day window · Sonnet",
-  seven_day_oauth_apps: "7-day window · OAuth apps",
-};
+const LIMIT_LABEL: Record<string, string> = lazyLabels({
+  five_hour: "claudeEnv.limit.five_hour",
+  seven_day: "claudeEnv.limit.seven_day",
+  seven_day_opus: "claudeEnv.limit.seven_day_opus",
+  seven_day_sonnet: "claudeEnv.limit.seven_day_sonnet",
+  seven_day_oauth_apps: "claudeEnv.limit.seven_day_oauth_apps",
+});
 
 /** Documented rate-limit windows reported in usage.rate_limits that carry a utilization. */
 export function rateLimits(usage: Obj | null | undefined): RateLimit[] {

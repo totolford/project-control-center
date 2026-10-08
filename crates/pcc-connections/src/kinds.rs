@@ -1,7 +1,7 @@
 //! Typed configuration and health checks per connection kind.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -181,8 +181,11 @@ pub fn validate(kind: ConnectionKind, config: &Value) -> Result<()> {
         ConnectionKind::Terminal => {
             let c: TerminalConfig =
                 serde_json::from_value(config.clone()).map_err(|e| Error::invalid(e.to_string()))?;
-            if !matches!(c.shell.as_str(), "powershell" | "pwsh" | "cmd" | "wsl" | "bash" | "wt") {
-                return Err(Error::invalid("shell must be powershell, pwsh, cmd, wsl, bash or wt"));
+            if !matches!(
+                c.shell.as_str(),
+                "powershell" | "pwsh" | "cmd" | "wsl" | "bash" | "zsh" | "fish" | "sh" | "wt"
+            ) {
+                return Err(Error::invalid("shell must be powershell, pwsh, cmd, wsl, bash, zsh, fish, sh or wt"));
             }
         }
         _ => {}
@@ -444,9 +447,26 @@ fn check_terminal(cfg: &TerminalConfig) -> CheckResult {
         "cmd" => ("cmd", vec!["/C", "ver"]),
         "wsl" => ("wsl", vec!["--status"]),
         "bash" => ("bash", vec!["--version"]),
-        "wt" => ("where", vec!["wt"]),
+        "zsh" => ("zsh", vec!["--version"]),
+        "fish" => ("fish", vec!["--version"]),
+        "sh" => {
+            return match pcc_platform::find_program("sh") {
+                Some(p) => CheckResult::ok(format!("sh · {}", p.display())),
+                None => CheckResult::down("sh is not installed"),
+            }
+        }
+        "wt" => {
+            return match pcc_platform::find_program("wt") {
+                Some(p) => CheckResult::ok(format!("wt · {}", p.display())),
+                None if !cfg!(windows) => CheckResult::down("Windows Terminal is only available on Windows"),
+                None => CheckResult::down("wt is not installed"),
+            }
+        }
         other => return CheckResult::err(format!("unknown shell `{other}`")),
     };
+    if !cfg!(windows) && matches!(program, "powershell" | "cmd" | "wsl") {
+        return CheckResult::down(format!("{} is only available on Windows", cfg.shell));
+    }
     match std_command(program).args(&args).output() {
         Ok(o) if o.status.success() => {
             let text = String::from_utf8_lossy(&o.stdout).replace('\0', "");
@@ -517,10 +537,12 @@ pub struct RobloxDetection {
     pub mcp_candidates: Vec<McpCandidate>,
 }
 
+/// Roblox Studio exists only on Windows: elsewhere it is reported as not
+/// installed (MCP candidates are still listed).
 pub fn roblox_detect() -> RobloxDetection {
     let mut d = RobloxDetection::default();
-    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-        let versions = PathBuf::from(local).join("Roblox").join("Versions");
+    if let Some(local) = pcc_platform::paths::local_data_dir().filter(|_| cfg!(windows)) {
+        let versions = local.join("Roblox").join("Versions");
         if let Ok(rd) = std::fs::read_dir(&versions) {
             for e in rd.flatten() {
                 let exe = e.path().join("RobloxStudioBeta.exe");
@@ -532,11 +554,8 @@ pub fn roblox_detect() -> RobloxDetection {
             }
         }
     }
-    d.studio_running = std_command("tasklist")
-        .args(["/FI", "IMAGENAME eq RobloxStudioBeta.exe", "/NH"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("RobloxStudioBeta.exe"))
-        .unwrap_or(false);
+    d.studio_running = d.studio_installed
+        && pcc_platform::process::list().iter().any(|p| p.name.eq_ignore_ascii_case("RobloxStudioBeta.exe"));
     d.mcp_candidates = known_mcp_servers()
         .into_iter()
         .filter(|c| {
@@ -579,13 +598,10 @@ pub fn mcp_config_from_claude(s: &Value) -> Option<McpConfig> {
 /// MCP servers registered in the user's Claude Code (`~/.claude.json`) and Claude Desktop configs.
 pub fn known_mcp_servers() -> Vec<McpCandidate> {
     let mut out = Vec::new();
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
-    let mut files = Vec::new();
-    if let Some(h) = &home {
-        files.push((h.join(".claude.json"), "Claude Code"));
-    }
-    if let Some(a) = std::env::var_os("APPDATA") {
-        files.push((PathBuf::from(a).join("Claude").join("claude_desktop_config.json"), "Claude Desktop"));
+    let mut files = vec![(pcc_platform::paths::home_dir().join(".claude.json"), "Claude Code")];
+    // %APPDATA%\Claude on Windows, ~/.config/Claude on Linux.
+    if let Some(a) = pcc_platform::paths::config_dir() {
+        files.push((a.join("Claude").join("claude_desktop_config.json"), "Claude Desktop"));
     }
     for (f, source) in files {
         let Some(v) = std::fs::read_to_string(&f).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) else {
@@ -638,7 +654,8 @@ mod tests {
         assert!(validate(ConnectionKind::Http, &json!({"baseUrl": "https://api.example.com"})).is_ok());
         assert!(validate(ConnectionKind::Http, &json!({"baseUrl": "api.example.com"})).is_err());
         assert!(validate(ConnectionKind::Terminal, &json!({"shell": "pwsh"})).is_ok());
-        assert!(validate(ConnectionKind::Terminal, &json!({"shell": "zsh"})).is_err());
+        assert!(validate(ConnectionKind::Terminal, &json!({"shell": "zsh"})).is_ok());
+        assert!(validate(ConnectionKind::Terminal, &json!({"shell": "tcsh"})).is_err());
         assert!(validate(ConnectionKind::Sftp, &json!({"host": "h", "user": "u", "auth": "key"})).is_ok());
     }
 

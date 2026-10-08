@@ -1,12 +1,14 @@
 import { Info, Lock } from "lucide-react";
 import { compatBanner } from "../lib/compat";
 import { useStore } from "../store";
+import { useT } from "../i18n";
 
 /** Compatibility mode (read-only, amber, persistent) or "newer format" information under the top bar. */
 export function CompatBanner() {
   const readOnly = useStore((s) => s.project?.readOnly ?? false);
   const report = useStore((s) => s.project?.compatibility ?? null);
   const navigate = useStore((s) => s.navigate);
+  const t = useT();
   const banner = compatBanner(readOnly, report);
   if (!banner) return null;
   const readOnlyMode = banner.kind === "read_only";
@@ -16,8 +18,8 @@ export function CompatBanner() {
       <div className="grow">
         <strong>
           {readOnlyMode
-            ? `Compatibility mode — this project requires NEXUS ≥ ${banner.minimum}; it is opened read-only`
-            : "This project uses a newer format — unknown fields are preserved"}
+            ? t("msg.compatReadOnly", { version: banner.minimum })
+            : t("msg.compatNewer")}
         </strong>
         {banner.notes.length > 0 && (
           <ul className="compat-notes">
@@ -28,7 +30,7 @@ export function CompatBanner() {
         )}
       </div>
       <button className="btn btn-sm ghost" onClick={() => navigate({ name: "settings", section: "compatibility" })}>
-        Details
+        {t("msg.details")}
       </button>
     </div>
   );

@@ -13,7 +13,7 @@ export const nexusAgentFields = {
   status: v.string(),
   /** Human readable status, e.g. "Running Bash". */
   statusLabel: v.string(),
-  /** Zone the agent is working in (data/nexusZones.ts). */
+  /** Room of NEXUS HQ the agent is in (resolved by NEXUS from its real activity). */
   zone: v.string(),
   emoji: v.optional(v.string()),
   mission: v.optional(v.string()),
@@ -32,6 +32,38 @@ export const nexusAgentFields = {
   paused: v.optional(v.boolean()),
 };
 
+/** NEXUS HQ: the building NEXUS sends (data/nexusHq.ts `HqLayout`). */
+export const hqRoomFields = {
+  id: v.string(),
+  name: v.string(),
+  kind: v.string(),
+  purpose: v.string(),
+  x: v.number(),
+  y: v.number(),
+  w: v.number(),
+  h: v.number(),
+  door: v.object({
+    x: v.number(),
+    y: v.number(),
+    side: v.union(v.literal('bottom'), v.literal('top'), v.literal('left'), v.literal('right')),
+  }),
+  decor: v.array(v.string()),
+  floor: v.optional(v.string()),
+  wall: v.optional(v.string()),
+  temporary: v.optional(v.boolean()),
+  createdAt: v.optional(v.string()),
+};
+
+export const hqLayoutFields = {
+  version: v.number(),
+  revision: v.number(),
+  locale: v.string(),
+  width: v.number(),
+  height: v.number(),
+  rooms: v.array(v.object(hqRoomFields)),
+  connections: v.array(v.object({ from: v.string(), to: v.string() })),
+};
+
 export const nexusTables = {
   nexusWorlds: defineTable({
     projectKey: v.string(),
@@ -43,7 +75,7 @@ export const nexusTables = {
     worldId: v.id('worlds'),
     ...nexusAgentFields,
     playerId: v.optional(v.string()),
-    /** Zone the character was last sent to. */
+    /** Room the character was last sent to. */
     sentTo: v.optional(v.string()),
     movedAt: v.optional(v.number()),
     updatedAt: v.number(),
@@ -61,6 +93,18 @@ export const nexusTables = {
     ts: v.number(),
     delivered: v.boolean(),
   }).index('worldId', ['worldId', 'ts']),
+
+  // NEXUS HQ: the project's building and where characters stand in each room.
+  nexusLayouts: defineTable({
+    worldId: v.id('worlds'),
+    layout: v.object(hqLayoutFields),
+    /** Room id → standing tiles (data/nexusHq.ts `generateHqMap`). */
+    spots: v.any(),
+    /** Furniture that did not fit, rooms that could not be drawn. */
+    skipped: v.any(),
+    dropped: v.array(v.string()),
+    updatedAt: v.number(),
+  }).index('worldId', ['worldId']),
 
   // Spritesheets imported in NEXUS ("Customize Character").
   nexusSkins: defineTable({

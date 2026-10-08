@@ -1,0 +1,32 @@
+import { defineMessages } from "../define";
+
+// Columns: en, fr.
+export default defineMessages({
+  "term.new": ["New terminal", "Nouveau terminal"],
+  "term.resume": ["Resume agent session", "Reprendre une session d’agent"],
+  "term.noResumable": ["No stopped agent with a Claude session", "Aucun agent arrêté avec une session Claude"],
+  "term.newShort": ["New", "Nouveau"],
+  "term.closeAria": ["Close {title}", "Fermer {title}"],
+  "term.killClose": ["Kill and close", "Tuer et fermer"],
+  "term.noSession": ["No terminal session", "Aucune session de terminal"],
+  "term.loading": ["Loading sessions…", "Chargement des sessions…"],
+  "term.emptyHint": ["Real ConPTY sessions on this machine: Claude Code (interactive), PowerShell, CMD or WSL. Use “New”.", "De vraies sessions ConPTY sur cette machine : Claude Code (interactif), PowerShell, CMD ou WSL. Utilisez « Nouveau »."],
+  "term.find": ["Find", "Rechercher"],
+  "term.findIn": ["Find in terminal", "Rechercher dans le terminal"],
+  "term.prev": ["Previous match", "Résultat précédent"],
+  "term.next": ["Next match", "Résultat suivant"],
+  "term.closeSearch": ["Close search", "Fermer la recherche"],
+  "term.copyTitle": ["Copy selection (Ctrl+Shift+C)", "Copier la sélection (Ctrl+Maj+C)"],
+  "term.pasteTitle": ["Paste (Ctrl+Shift+V)", "Coller (Ctrl+Maj+V)"],
+  "term.paste": ["Paste", "Coller"],
+  "term.findTitle": ["Find (Ctrl+F)", "Rechercher (Ctrl+F)"],
+  "term.clearTitle": ["Clear the display", "Effacer l’affichage"],
+  "term.clear": ["Clear", "Effacer"],
+  "term.resumeTitle": ["Resume display (buffered output is shown)", "Reprendre l’affichage (la sortie en tampon s’affiche)"],
+  "term.pauseTitle": ["Pause display (the process keeps running; output is buffered)", "Mettre l’affichage en pause (le processus continue ; la sortie est mise en tampon)"],
+  "term.resumeAria": ["Resume display", "Reprendre l’affichage"],
+  "term.pauseAria": ["Pause display", "Mettre l’affichage en pause"],
+  "term.paused": ["Display paused — output is buffered and shown on resume.", "Affichage en pause — la sortie est mise en tampon et affichée à la reprise."],
+  "term.exited": ["Process exited with code {code}", "Le processus s’est terminé avec le code {code}"],
+  "term.unknown": ["unknown", "inconnu"],
+});

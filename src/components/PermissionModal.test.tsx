@@ -5,7 +5,7 @@ import { makeAgent, makeSnapshot } from "../test/fixtures";
 import { useStore } from "../store";
 import { useUi } from "../state/ui";
 import { PermissionModal } from "./PermissionModal";
-import { appliedText, expiryText, reportDetails, riskLabel, STALE_HEADLINE } from "../lib/permissionState";
+import { appliedText, expiryText, reportDetails, riskLabel, staleHeadline } from "../lib/permissionState";
 import { isOpenPermission } from "../state/reducer";
 
 const invoke = vi.fn((_cmd: string, _args?: unknown): Promise<unknown> => Promise.resolve(null));
@@ -121,7 +121,7 @@ describe("PermissionModal", () => {
       fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
     });
     // Immediately: no raw "not found", a clear headline and the lookup in progress.
-    expect(screen.getByText(STALE_HEADLINE)).toBeTruthy();
+    expect(screen.getByText(staleHeadline())).toBeTruthy();
     expect(screen.getByText("Checking the agent's real state…")).toBeTruthy();
     expect(screen.queryByText(/not found/i)).toBeNull();
     await act(async () => {
@@ -135,7 +135,7 @@ describe("PermissionModal", () => {
       fireEvent.click(screen.getByRole("button", { name: /Ask the agent again/ }));
     });
     expect(invoke).toHaveBeenCalledWith("rerequest_permission", { id: "perm-1325d8236e24" });
-    expect(screen.queryByText(STALE_HEADLINE)).toBeNull();
+    expect(screen.queryByText(staleHeadline())).toBeNull();
   });
 
   it("says when the state cannot be checked", async () => {
