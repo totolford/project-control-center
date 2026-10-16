@@ -84,6 +84,8 @@ pub struct ProjectSettings {
     pub ai_world_language: String,
     /// Settings → Missions → Recovery: what NEXUS does by itself after a crash or restart.
     pub mission_recovery: MissionRecoverySettings,
+    /// Settings → Token saver: limits what NEXUS spends when it (re)starts agents.
+    pub token_saver: TokenSaverSettings,
     /// Settings written by other NEXUS versions, preserved on rewrite.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
@@ -139,6 +141,28 @@ impl Default for AutonomySettings {
             manual_for_outside_workspace: true,
             manual_capabilities: vec![Capability::GithubAdmin],
         }
+    }
+}
+
+/// Token saver (Settings → Token saver). Measured on real projects, most of the
+/// spend came right after NEXUS (re)started: every agent's session was resumed
+/// and re-cached its whole history, then Central re-briefed every worker.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TokenSaverSettings {
+    /// After a restart only Central is resumed (when a mission was running); the
+    /// other agents stay asleep and get their recovery brief with their next real
+    /// message or task instead of spending a turn on it.
+    pub lazy_wake: bool,
+    /// Above this context size (tokens) an agent restarts in a fresh Claude Code
+    /// session with a compact handoff brief instead of reloading (and re-caching)
+    /// its whole conversation. 0 = always resume.
+    pub fresh_session_above_tokens: u64,
+}
+
+impl Default for TokenSaverSettings {
+    fn default() -> Self {
+        Self { lazy_wake: true, fresh_session_above_tokens: 60_000 }
     }
 }
 
@@ -237,6 +261,7 @@ impl Default for ProjectSettings {
             ui_language: "auto".into(),
             ai_world_language: "auto".into(),
             mission_recovery: MissionRecoverySettings::default(),
+            token_saver: TokenSaverSettings::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -356,6 +381,11 @@ pub struct Agent {
     /// Paused by the user: nothing is delivered until resumed.
     #[serde(default)]
     pub paused_at: Option<String>,
+    /// Context size of the agent's last Claude Code API call (input + cache read +
+    /// cache write), as reported in its stream. Decides between resuming the
+    /// session and starting a fresh one with a handoff brief (token saver).
+    #[serde(default)]
+    pub context_tokens: Option<u64>,
 }
 
 impl Agent {

@@ -679,6 +679,11 @@ impl Engine {
         })
     }
 
+    /// Labels of the uncommitted files in an agent's workspace.
+    pub(crate) fn agent_dirty_files(&self, a: &pcc_core::Agent) -> Vec<String> {
+        self.workdir_dirty(a).iter().map(FileState::label).collect()
+    }
+
     /// Uncommitted files in an agent's own worktree (or the project folder).
     fn workdir_dirty(&self, a: &pcc_core::Agent) -> Vec<FileState> {
         if a.isolation == Isolation::Worktree && Path::new(&a.workdir).is_dir() {
@@ -972,7 +977,7 @@ impl Engine {
         if ra.agent_id == CENTRAL_ID {
             let mut s = format!("[RECOVERY] {previous}. Your Claude Code session was resumed.\n");
             if self.rec.interrupted.is_empty() {
-                s.push_str("No mission was running. Review the current state with list_tasks and list_agents and continue coordinating.");
+                s.push_str("No mission was running. Nothing to do until the user or a task asks for it.");
             } else {
                 for im in &self.rec.interrupted {
                     s.push('\n');
@@ -980,6 +985,7 @@ impl Engine {
                     s.push('\n');
                 }
                 s.push_str("\nReview the state with list_tasks and list_agents, verify the files listed above, then continue coordinating. Do not redo completed work.");
+                s.push_str("\nTo save tokens the workers stay asleep: each already has its own recovery brief. Do not send them restart or status notices; message a worker only to give it its next step.");
             }
             return s;
         }

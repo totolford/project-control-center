@@ -763,6 +763,7 @@ mod tests {
             parent_agent: None,
             rank: pcc_core::AgentRank::Commander,
             paused_at: None,
+            context_tokens: None,
         };
         assert_eq!(autonomy_level(&a), None);
         assert_eq!(autonomy_label(autonomy_level(&a)), "CUSTOM");

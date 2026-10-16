@@ -53,11 +53,16 @@ fn turn_start(duration_ms: Option<u64>) -> String {
 impl Engine {
     /// Observes a raw stream-json line of `agent`'s session (`epoch`).
     pub(crate) fn usage_observe(&mut self, agent: &str, epoch: u64, raw: &str) {
+        self.observe_context(agent, raw);
         // Cheap pre-filter: only init and result lines matter.
         if !raw.contains("\"result\"") && !raw.contains("\"init\"") {
             return;
         }
         let Ok(v) = serde_json::from_str::<Value>(raw) else { return };
+        if v.get("type").and_then(Value::as_str) == Some("result") {
+            // Token saver: the turn ended, keep its last context size.
+            self.save_context(agent);
+        }
         let entry = self.usage.sessions.entry(agent.to_string()).or_default();
         if entry.epoch != epoch {
             *entry = SessionUsage { epoch, ..Default::default() };

@@ -250,6 +250,7 @@ mod tests {
             parent_agent: None,
             rank: Default::default(),
             paused_at: None,
+            context_tokens: None,
         }
     }
 

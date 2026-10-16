@@ -1373,6 +1373,7 @@ mod tests {
             parent_agent: None,
             rank: Default::default(),
             paused_at: None,
+            context_tokens: None,
         };
         s.upsert_agent(&mk("alpha", AgentKind::Worker)).unwrap();
         s.upsert_agent(&mk("central", AgentKind::Central)).unwrap();

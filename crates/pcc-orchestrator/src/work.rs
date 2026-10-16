@@ -97,6 +97,7 @@ impl Engine {
             parent_agent: Some(parent),
             rank,
             paused_at: None,
+            context_tokens: None,
         };
         self.store.upsert_agent(&a)?;
         self.emit_agent(EventKind::AgentCreated, &a, format!("{created_by} created agent {} ({})", a.name, a.role));

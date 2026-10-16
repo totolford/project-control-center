@@ -23,8 +23,9 @@ import ws from "./ws";
 import panel from "./panel";
 import lib from "./lib";
 import comp from "./comp";
+import tokens from "./tokens";
 
-export const NAMESPACES = [common, settings, usage, worldhq, platform, central, status, nav, shell, cmd, bar, msg, health, comp, lib, panel, ws, term, act] as const;
+export const NAMESPACES = [common, settings, usage, worldhq, platform, central, status, nav, shell, cmd, bar, msg, health, comp, lib, panel, ws, term, act, tokens] as const;
 
 type KeysOf<N> = N extends unknown ? keyof N & string : never;
 type RawKey = KeysOf<(typeof NAMESPACES)[number]>;

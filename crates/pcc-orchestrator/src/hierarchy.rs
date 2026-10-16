@@ -806,6 +806,7 @@ mod tests {
             parent_agent: parent.map(str::to_string),
             rank,
             paused_at: None,
+            context_tokens: None,
         }
     }
 

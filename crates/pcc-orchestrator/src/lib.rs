@@ -41,6 +41,7 @@ pub mod prompts;
 pub mod providers;
 pub mod recovery;
 pub mod resume;
+pub mod token_saver;
 pub mod tools;
 pub mod usage;
 pub mod watchdog;

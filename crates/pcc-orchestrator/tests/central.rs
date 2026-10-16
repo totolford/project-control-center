@@ -192,9 +192,16 @@ async fn resume_command_continues_the_running_mission_from_a_verified_report() {
     assert!(turn.contains("reprends"));
     assert!(turn.contains("Previous state: running"));
     assert!(turn.contains("Claude: Central session"), "{turn}");
-    // The worker whose task was interrupted is brought back and briefed.
-    wait_for("builder briefed", || !inputs(&store, "builder", "[RECOVERY]").is_empty()).await;
     assert!(turn.contains("Builder (specialist)"), "{turn}");
+    // Token saver: the worker whose task was interrupted is not woken just to read
+    // a brief; it sleeps and gets the brief together with its next real turn.
+    wait_for("builder parked", || !journal(&store, "tokens.lazyWake").is_empty()).await;
+    assert_eq!(store.agent("builder").unwrap().status, pcc_core::AgentStatus::Sleeping);
+    assert!(inputs(&store, "builder", "[RECOVERY]").is_empty(), "no turn spent on the brief alone");
+    o.lock().await.send_user_message("builder", "please continue TASK-0001").unwrap();
+    wait_for("builder briefed with its next turn", || !inputs(&store, "builder", "[RECOVERY]").is_empty()).await;
+    let first = inputs(&store, "builder", "[RECOVERY]").remove(0);
+    assert!(first.contains("please continue TASK-0001"), "brief and message share one turn: {first}");
     let resumed = journal(&store, "mission.resumed");
     assert_eq!(resumed.len(), 1);
     assert_eq!(resumed[0].mission_id.as_deref(), Some("M-0002"));

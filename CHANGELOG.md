@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1
+
+- Token saver (Settings → Token saver, on by default). Measured on a real project, 88% of
+  a week's spend came in the 15 minutes after NEXUS (re)started: every agent's session was
+  resumed with `--resume`, re-cached its whole conversation (~150k tokens per turn) and
+  spent a turn on a recovery note, then Central re-briefed every worker.
+  - Lazy wake: after a restart only Central resumes, and only if a mission was running;
+    the other agents keep their session asleep and get their recovery brief together
+    with their next real message or task.
+  - Fresh sessions: an agent whose last context exceeded 60k tokens (configurable)
+    restarts in a new session with a compact handoff brief instead of reloading its
+    conversation. NEXUS now records each agent's last context size.
+  - Central no longer sends "NEXUS restarted" notices to workers.
+  - Settings show each agent's last context and what its next start will do, and flag
+    workers running on Opus.
+
 ## 0.5.0
 
 - Central acts instead of explaining: messages are classified (information / action /

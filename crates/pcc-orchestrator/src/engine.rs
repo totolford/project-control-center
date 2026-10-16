@@ -98,6 +98,11 @@ pub struct Engine {
     pub(crate) central: crate::central::CentralRuntime,
     /// Per-session AI usage trackers.
     pub(crate) usage: crate::usage::UsageRuntime,
+    /// Token saver: notes added in front of an agent's next turn (recovery or
+    /// handoff briefs) instead of costing a turn of their own.
+    pub(crate) pending_notes: HashMap<String, String>,
+    /// Token saver: last context size seen in each live session's stream.
+    pub(crate) context_seen: HashMap<String, u64>,
 }
 
 impl Engine {
@@ -135,6 +140,8 @@ impl Engine {
             rec,
             central: Default::default(),
             usage: Default::default(),
+            pending_notes: HashMap::new(),
+            context_seen: HashMap::new(),
         };
         e.compatibility = pcc_store::compat::analyze(e.store.root()).ok();
         if e.store.read_only() {
@@ -286,6 +293,7 @@ impl Engine {
             parent_agent: None,
             rank: pcc_core::AgentRank::Commander,
             paused_at: None,
+            context_tokens: None,
         };
         self.store.upsert_agent(&a)?;
         self.emit_agent(EventKind::AgentCreated, &a, "Central agent created");
@@ -321,9 +329,26 @@ impl Engine {
         let Some(info) = self.recovery.take() else { return Ok(()) };
         self.autopilot = true;
         let mut restarted = Vec::new();
+        let lazy = self.store.settings().token_saver.lazy_wake;
+        let mission_running = !self.rec.interrupted.is_empty();
         for ra in info.agents {
             // Precise brief: interrupted step, last action, files written since the checkpoint.
             let note = self.resume_note(&ra);
+            // Token saver: only Central is woken, and only when a mission was running.
+            // The others keep their session and get the brief with their next real turn.
+            if lazy && (ra.agent_id != CENTRAL_ID || !mission_running) {
+                let mut a = self.store.agent(&ra.agent_id)?;
+                a.status = AgentStatus::Sleeping;
+                self.save_agent(&mut a)?;
+                self.queue_note(&ra.agent_id, note);
+                self.note_saving(
+                    &ra.agent_id,
+                    "tokens.lazyWake",
+                    format!("{} stays asleep after the restart; its recovery brief waits for its next turn", ra.name),
+                    json!({}),
+                );
+                continue;
+            }
             if let Err(e) = self.start_agent(&ra.agent_id, true) {
                 self.set_status(&ra.agent_id, AgentStatus::Crashed)?;
                 self.emit(
@@ -466,6 +491,27 @@ impl Engine {
             return Err(Error::invalid(format!("{} is retired", agent.name)));
         }
         crate::providers::ensure_supported(&agent.provider)?;
+        // Token saver: a huge conversation is not reloaded (and re-cached); the
+        // agent starts fresh and gets a compact handoff brief with its next turn.
+        let mut resume = resume;
+        if resume && agent.claude_session_id.is_some() && !self.keep_session(&agent) {
+            resume = false;
+            let brief = self.handoff_brief(&agent);
+            self.queue_note(id, brief);
+            self.note_saving(
+                id,
+                "tokens.freshSession",
+                format!(
+                    "{} starts a fresh session (previous context ~{}k tokens not reloaded)",
+                    agent.name,
+                    agent.context_tokens.unwrap_or(0) / 1000
+                ),
+                json!({"contextTokens": agent.context_tokens}),
+            );
+        }
+        if !resume {
+            agent.context_tokens = None;
+        }
         let notes = launch::ensure_workdir(&self.store, self.repo.as_ref(), &mut agent);
         let connections = self.store.list_connections()?;
         let branch = self.repo.as_ref().and_then(Repo::current_branch);
@@ -639,6 +685,9 @@ impl Engine {
         }
 
         let mut parts: Vec<String> = Vec::new();
+        if let Some(note) = self.take_note(id) {
+            parts.push(note);
+        }
         let now = pcc_core::now();
         for m in &messages {
             parts.push(prompts::message_envelope(m));

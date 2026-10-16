@@ -42,7 +42,10 @@ Decide what each user message is before answering:
    `needs: user_decision`, then ask one precise question) · fatal error (`fail_mission`
    with the reason).
 4. Inspect what exists before re-doing it. After a restart or a crash, never redo a step
-   whose result is already on disk or in the external tool; verify it first.
+   whose result is already on disk or in the external tool; verify it first. NEXUS keeps
+   idle workers asleep to save tokens and gives each its own recovery brief: never send
+   "NEXUS restarted" or status notices; message a worker only to give it its next step,
+   with everything it needs in that message.
 5. When a tool or an MCP call fails, NEXUS checks the server, reconnects it and tells you
    when you can retry. Retry once it is back; distinguish a failed *tool/MCP server*
    from a failed *agent*. Involve the user only if NEXUS reports that the automatic

@@ -170,8 +170,19 @@ async fn reopening_after_crash_offers_recovery() {
     assert_eq!(o.store.agent("central").unwrap().status, AgentStatus::Disconnected);
     o.lock().await.recover().unwrap();
     let s = o.store.clone();
+    // Token saver: no mission was running, so Central keeps its session but is not
+    // woken just to read a recovery note; its next real message resumes it.
+    assert_eq!(s.agent("central").unwrap().status, AgentStatus::Sleeping);
+    assert!(s.agent("central").unwrap().claude_session_id.is_some());
+    o.lock().await.send_user_message("central", "what's next?").unwrap();
     wait_for("central resumed", || {
         s.list_logs("central", None, 200).unwrap().iter().any(|l| l.text.contains("Session resumed"))
+    })
+    .await;
+    wait_for("brief and message in one turn", || {
+        s.list_logs("central", None, 200).unwrap().iter().any(|l| {
+            l.kind == pcc_core::LogKind::Input && l.text.contains("[RECOVERY]") && l.text.contains("what's next?")
+        })
     })
     .await;
     o.close().await;
@@ -448,5 +459,35 @@ async fn start_now_runs_alongside_and_tick_starts_leftover_queue() {
     store.upsert_mission(&left).unwrap();
     o.lock().await.tick().unwrap();
     assert!(store.get_mission("M-0099").unwrap().unwrap().status.is_running());
+    o.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn huge_conversations_restart_fresh_with_a_handoff_brief() {
+    let tmp = tempfile::tempdir().unwrap();
+    let o = open(&tmp);
+    let s = o.store.clone();
+    o.lock().await.send_user_message("central", "hello").unwrap();
+    wait_for("central idle", || s.agent("central").unwrap().status == AgentStatus::Waiting).await;
+    let old_session = s.agent("central").unwrap().claude_session_id.clone().unwrap();
+    o.lock().await.stop_agent("central").unwrap();
+    wait_for("central stopped", || !matches!(s.agent("central").unwrap().status, AgentStatus::Waiting)).await;
+    // Its last context was far above the threshold (default 60k tokens).
+    let mut a = s.agent("central").unwrap();
+    a.context_tokens = Some(250_000);
+    a.status = AgentStatus::Sleeping;
+    s.upsert_agent(&a).unwrap();
+    o.lock().await.send_user_message("central", "status?").unwrap();
+    wait_for("handoff delivered with the message", || {
+        s.list_logs("central", None, 300)
+            .unwrap()
+            .iter()
+            .any(|l| l.kind == pcc_core::LogKind::Input && l.text.contains("[HANDOFF]") && l.text.contains("status?"))
+    })
+    .await;
+    let a = s.agent("central").unwrap();
+    assert_ne!(a.claude_session_id.as_deref(), Some(old_session.as_str()), "fresh session, not --resume");
+    let logs = s.list_logs("central", None, 300).unwrap();
+    assert!(!logs.iter().rev().take(20).any(|l| l.text.contains("Session resumed")));
     o.close().await;
 }

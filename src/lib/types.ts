@@ -62,6 +62,15 @@ export interface ProjectSettings {
   aiWorldLanguage?: string;
   /** Settings → Missions → Recovery; missing before 0.5 (every switch defaults to on). */
   missionRecovery?: import("./centralTypes").MissionRecoverySettings;
+  /** Settings → Token saver; missing before 0.5.1 (defaults: lazy wake on, fresh above 60k). */
+  tokenSaver?: TokenSaverSettings;
+}
+
+export interface TokenSaverSettings {
+  /** After a restart only Central resumes (when a mission was running); others wake with their next turn. */
+  lazyWake: boolean;
+  /** Above this context size an agent restarts fresh with a handoff brief; 0 = always resume. */
+  freshSessionAboveTokens: number;
 }
 
 export type AgentKind = "central" | "worker";
@@ -108,6 +117,8 @@ export interface Agent {
   rank: AgentRank;
   /** Paused by the user: nothing is delivered until resumed. */
   pausedAt: string | null;
+  /** Context size of the agent's last API call (tokens), when observed. */
+  contextTokens?: number | null;
 }
 
 /** Position in the delegation pyramid (Central is the commander). */

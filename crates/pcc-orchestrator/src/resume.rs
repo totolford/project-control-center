@@ -504,6 +504,23 @@ impl Engine {
         Ok(m)
     }
 
+    /// Token saver: leaves an agent asleep with its brief queued for its next turn.
+    fn park_for_next_turn(&mut self, id: &str, name: &str, note: String) -> Result<String> {
+        let mut a = self.store.agent(id)?;
+        if !matches!(a.status, AgentStatus::Retired) {
+            a.status = AgentStatus::Sleeping;
+            self.save_agent(&mut a)?;
+        }
+        self.queue_note(id, note);
+        self.note_saving(
+            id,
+            "tokens.lazyWake",
+            format!("{name} stays asleep; its recovery brief waits for its next turn"),
+            serde_json::json!({}),
+        );
+        Ok("asleep until Central gives it the next step (token saver)".into())
+    }
+
     /// Starts an agent for a resume; returns what was done.
     fn bring_back(&mut self, id: &str) -> String {
         let resume = self.store.agent(id).ok().and_then(|a| a.claude_session_id).is_some();
@@ -541,6 +558,9 @@ impl Engine {
             None => None,
         };
         let auto_restart = self.store.settings().mission_recovery.auto_restart_agents || trigger == "user";
+        // Token saver: workers are not woken just to read a recovery brief;
+        // Central resumes and wakes them when they have the next step to do.
+        let lazy = self.store.settings().token_saver.lazy_wake;
         let mut actions: Vec<(String, String)> = Vec::new();
 
         let info = self.recovery.take();
@@ -551,6 +571,10 @@ impl Engine {
             let mut restarted = Vec::new();
             for ra in &info.agents {
                 let note = (ra.agent_id != CENTRAL_ID).then(|| self.resume_note(ra));
+                if let (Some(note), true) = (&note, lazy) {
+                    actions.push((ra.agent_id.clone(), self.park_for_next_turn(&ra.agent_id, &ra.name, note.clone())?));
+                    continue;
+                }
                 let what = self.bring_back(&ra.agent_id);
                 if !what.starts_with("could not") {
                     restarted.push(ra.name.clone());
@@ -601,6 +625,11 @@ impl Engine {
                     task_id: Some(t.id.clone()),
                 };
                 let note = self.resume_note(&ra);
+                if lazy {
+                    let what = self.park_for_next_turn(&aid, &a.name, note)?;
+                    actions.push((aid, what));
+                    continue;
+                }
                 let what = self.bring_back(&aid);
                 if !what.starts_with("could not") {
                     self.post_message(SYSTEM_ID, &aid, MessageKind::System, &note, Some(t.id.clone()), None)?;

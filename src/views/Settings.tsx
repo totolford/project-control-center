@@ -1,3 +1,4 @@
+import { TokenSaverSettings } from "./settings/TokenSaverSettings";
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { api } from "../lib/api";
@@ -144,6 +145,10 @@ export function Settings() {
 
       <div id="settings-recovery">
         <RecoverySettings value={draft.missionRecovery} onChange={(v) => set("missionRecovery", v)} />
+      </div>
+
+      <div id="settings-tokens">
+        <TokenSaverSettings value={draft.tokenSaver} onChange={(v) => set("tokenSaver", v)} />
       </div>
 
       <div id="settings-improvement">
