@@ -2964,7 +2964,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-ai"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "pcc-claude",
  "pcc-core",
@@ -2981,7 +2981,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-claude"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "pcc-core",
  "pcc-platform",
@@ -2997,7 +2997,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-connections"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "keyring",
  "pcc-claude",
@@ -3015,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "regex",
@@ -3027,7 +3027,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-git"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "pcc-core",
  "serde",
@@ -3038,7 +3038,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-orchestrator"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "pcc-ai",
@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-platform"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "libc",
  "serde",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-pty"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "parking_lot",
  "pcc-claude",
@@ -3085,7 +3085,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-recovery"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "pcc-core",
@@ -3100,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-store"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "parking_lot",
@@ -3115,7 +3115,7 @@ dependencies = [
 
 [[package]]
 name = "pcc-world"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "pcc-ai",
  "pcc-claude",
@@ -3395,7 +3395,7 @@ dependencies = [
 
 [[package]]
 name = "project-control-center"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "pcc-ai",

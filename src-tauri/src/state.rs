@@ -102,6 +102,9 @@ pub struct AppState {
 pub struct AppSettings {
     /// Explicit Claude Code executable; auto-detected when empty.
     pub claude_path: Option<String>,
+    /// Claude Code account (`pcc_claude::account::ACCOUNTS` id) of new sessions; the folder NEXUS
+    /// was started with when empty.
+    pub claude_account: Option<String>,
     /// Interface language: "auto" (follow the system) or a locale ("fr", "en"). A project may
     /// override it.
     pub ui_language: String,
@@ -111,7 +114,7 @@ pub struct AppSettings {
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { claude_path: None, ui_language: "auto".into(), ai_world_language: "auto".into() }
+        Self { claude_path: None, claude_account: None, ui_language: "auto".into(), ai_world_language: "auto".into() }
     }
 }
 
@@ -138,8 +141,9 @@ impl AppState {
             .unwrap_or_default()
     }
 
-    /// Applies the Claude Code path override for this process (read by detection).
+    /// Applies the Claude Code path override (read by detection) and account for this process.
     pub fn apply_app_settings(s: &AppSettings) {
+        pcc_claude::account::apply(s.claude_account.as_deref());
         match s.claude_path.as_deref().filter(|p| !p.trim().is_empty()) {
             Some(p) => std::env::set_var("PCC_CLAUDE_PATH", p),
             None => std::env::remove_var("PCC_CLAUDE_PATH"),

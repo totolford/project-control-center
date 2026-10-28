@@ -156,6 +156,12 @@ where
     for (k, v) in &spec.env {
         cmd.env(k, v);
     }
+    // A session started on another account continues in the selected one.
+    if let Some(id) = &spec.resume {
+        if let Err(e) = crate::account::prepare_resume(id) {
+            tracing::warn!("cannot bring session {id} into the active Claude account: {e}");
+        }
+    }
     let mut child = cmd.spawn().map_err(|e| Error::Process(format!("cannot start {}: {e}", spec.program.display())))?;
     attach_to_app_job(&child);
     let pid = child.id().unwrap_or(0);

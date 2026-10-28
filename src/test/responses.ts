@@ -49,6 +49,7 @@ export const responses: Record<string, unknown> = {
   list_decisions: [],
   pty_list: [],
   app_settings: { claudePath: null },
+  claude_account: { activeId: null, activeDir: "C:/Users/test/.claude", startupDir: "C:/Users/test/.claude", accounts: [] },
   system_report: { os: "Windows", osVersion: "11", arch: "x86_64", cpu: "CPU", cpuCores: 8, memoryTotalBytes: 16e9, memoryUsedBytes: 8e9, gpus: [], disks: [] },
   project_insights: { languages: [{ language: "Rust", files: 10 }], frameworks: [], dependencies: {}, filesScanned: 10 },
   project_environment: { project: [], tools: [{ key: "git", label: "Git", detected: true, detail: "git 2.45" }], projectTypes: [] },

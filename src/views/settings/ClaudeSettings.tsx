@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, LockOpen, LogIn, Save } from "lucide-react";
+import { FolderOpen, LockOpen, LogIn, Save, UserRound } from "lucide-react";
 import { api } from "../../lib/api";
 import { useLoad } from "../../lib/useLoad";
-import { saveAppSettings } from "../../i18n/prefs";
+import { saveAppSettings, useAppLanguages } from "../../i18n/prefs";
+import { useT } from "../../i18n";
+import { activeAccountLabel, useClaudeAccount } from "../../lib/claudeAccount";
 import { attempt, run } from "../../lib/toast";
 import { useStore } from "../../store";
 import { openClaudeInTerminal } from "../../terminal/openInTerminal";
@@ -38,9 +40,44 @@ function ExecutableField({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+/** Account (CLAUDE_CONFIG_DIR) of new sessions; saved at once, kept across restarts. */
+function AccountField({ onSaved }: { onSaved: () => void }) {
+  const t = useT();
+  const app = useAppLanguages((s) => s.app);
+  const status = useClaudeAccount();
+  const [saving, setSaving] = useState(false);
+  const selected = app?.claudeAccount ?? "";
+  const missing = status?.accounts.find((a) => a.id === selected && !a.exists);
+  const save = async (id: string) => {
+    const label = status?.accounts.find((a) => a.id === id)?.label ?? t("settings.claude.accountDefault", { dir: status?.startupDir ?? "" });
+    setSaving(true);
+    const saved = await attempt(() => saveAppSettings({ claudeAccount: id || null }), t("settings.claude.accountSaved", { label }));
+    setSaving(false);
+    if (saved) onSaved();
+  };
+  return (
+    <Field label={t("settings.claude.account")} hint={t("settings.claude.accountHint")}>
+      <span className="row">
+        <select aria-label={t("settings.claude.account")} value={selected} onChange={(e) => void save(e.target.value)} disabled={!app || !status || saving}>
+          {status?.accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label} ({a.configDir})
+            </option>
+          ))}
+          <option value="">{t("settings.claude.accountDefault", { dir: status?.startupDir ?? "…" })}</option>
+        </select>
+        {saving && <Spinner size={12} />}
+      </span>
+      {missing && <span className="muted small">{t("settings.claude.accountMissing", { label: missing.label })}</span>}
+    </Field>
+  );
+}
+
 /** Machine-level Claude Code settings: executable, login, terminal, logs, autonomy shortcut. */
 export function ClaudeSettings() {
+  const t = useT();
   const claude = useClaudeInfo();
+  const account = useClaudeAccount();
   const info = useLoad(() => api.appInfo());
   const root = useStore((s) => s.project?.info.root ?? "");
   const navigate = useStore((s) => s.navigate);
@@ -53,12 +90,20 @@ export function ClaudeSettings() {
     <Section title="Claude Code">
       <ClaudeStatus info={claude.info} loading={claude.loading} onRecheck={() => void claude.reload()} />
       <dl className="kv">
+        <dt>{t("settings.claude.accountActive")}</dt>
+        <dd>
+          <span className="chip">
+            <UserRound size={12} /> {activeAccountLabel(account) ?? t("settings.claude.accountOther")}
+          </span>{" "}
+          <span className="mono small">{account?.activeDir ?? "—"}</span>
+        </dd>
         <dt>Detected path</dt>
         <dd className="mono small">{claude.info?.path ?? "—"}</dd>
         <dt>Version</dt>
         <dd className="mono">{claude.info?.version ?? "—"}</dd>
       </dl>
       <ExecutableField onSaved={() => void claude.reload()} />
+      <AccountField onSaved={() => void claude.reload()} />
       <div className="row">
         <button className="btn" onClick={() => void openClaudeInTerminal(["auth", "login"], claude.info?.path ?? null)} disabled={!claude.info?.installed}>
           <LogIn size={13} /> Log in (claude auth login in Raw Terminal)

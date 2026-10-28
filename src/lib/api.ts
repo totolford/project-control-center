@@ -143,6 +143,8 @@ export const api = {
   // ---------------------------------------------------------------- Claude Control Center
   appSettings: () => invoke<T.AppSettings>("app_settings"),
   saveAppSettings: (settings: T.AppSettings) => invoke<T.AppSettings>("save_app_settings", { settings }),
+  /** Claude Code account (config folder) of new sessions. */
+  claudeAccount: () => invoke<T.ClaudeAccountStatus>("claude_account"),
   /** Live snapshot of what Claude Code exposes (one short control session, no model call). Takes a few seconds. */
   claudeEnvironment: () => invoke<T.ClaudeEnvironment>("claude_environment"),
   /** CLI command tree parsed from the installed version's --help (cached per version). */

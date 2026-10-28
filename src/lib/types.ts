@@ -915,10 +915,30 @@ export interface ProjectInsights {
 export interface AppSettings {
   /** Explicit Claude Code executable; auto-detected when null/empty. */
   claudePath: string | null;
+  /** Claude Code account of new sessions ("10j", "pro"); the startup folder when null/missing. */
+  claudeAccount?: string | null;
   /** Interface language: "auto" (system) or a locale; missing before 0.5. */
   uiLanguage?: string;
   /** AI World language: "auto" (system) or a locale; missing before 0.5. */
   aiWorldLanguage?: string;
+}
+
+export interface ClaudeAccountOption {
+  id: string;
+  label: string;
+  configDir: string;
+  /** False until Claude Code creates the folder at the first login. */
+  exists: boolean;
+}
+
+/** Account (CLAUDE_CONFIG_DIR) used by new Claude Code sessions. */
+export interface ClaudeAccountStatus {
+  /** Known account matching the active folder, null for another folder. */
+  activeId: string | null;
+  activeDir: string;
+  /** Folder used when no account is selected (the one NEXUS was started with). */
+  startupDir: string;
+  accounts: ClaudeAccountOption[];
 }
 
 /** `shell` is the default shell of this OS; the others are shell ids from `platform_info`. */

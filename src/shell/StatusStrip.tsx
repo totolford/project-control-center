@@ -1,9 +1,10 @@
-import { CircleAlert, ShieldAlert } from "lucide-react";
+import { CircleAlert, ShieldAlert, UserRound } from "lucide-react";
 import { isLive } from "../lib/labels";
 import { useUi } from "../state/ui";
 import { useAgents, useMissions, usePendingPermissions, useStore } from "../store";
 import { MissionProgress } from "../components/ProgressBar";
 import { useT } from "../i18n";
+import { activeAccountLabel, useClaudeAccount } from "../lib/claudeAccount";
 
 /** One-line global status: mission progress, running agents, pending permissions, errors. */
 export function StatusStrip() {
@@ -14,6 +15,7 @@ export function StatusStrip() {
   const navigate = useStore((s) => s.navigate);
   const setDeferred = useUi((s) => s.setPermissionsDeferred);
   const t = useT();
+  const account = useClaudeAccount();
   const mission = [...missions].filter((m) => m.status === "active" || m.status === "planning").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const running = agents.filter((a) => isLive(a.status)).length;
   const errors = agents.filter((a) => a.status === "crashed" || turnErrors[a.id]).length;
@@ -38,6 +40,11 @@ export function StatusStrip() {
       <span className={`strip-item${errors > 0 ? " error" : ""}`} title={t("shell.strip.errorsTitle")}>
         <CircleAlert size={12} /> {t("shell.strip.errors", { count: errors })}
       </span>
+      {account && (
+        <button className="strip-item" onClick={() => navigate({ name: "settings" })} title={t("shell.strip.accountTitle", { dir: account.activeDir })}>
+          <UserRound size={12} /> {activeAccountLabel(account) ?? t("settings.claude.accountOther")}
+        </button>
+      )}
     </div>
   );
 }

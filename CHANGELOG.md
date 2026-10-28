@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+
+- Claude account selector (Settings → Claude Code): Claude 10J (`%USERPROFILE%\.claude-10j`)
+  or Claude Pro (`%USERPROFILE%\.claude-pro`). Every new Claude session uses the selected
+  account through `CLAUDE_CONFIG_DIR`; both accounts stay logged in and their settings are
+  left untouched. The choice is kept across restarts; the status bar shows the active account.
+- A session keeps its memory when the account changes: on resume, its newest conversation
+  is copied (never moved) from the other account into the selected one.
+
 ## 0.5.1
 
 - Token saver (Settings → Token saver, on by default). Measured on a real project, 88% of

@@ -26,6 +26,7 @@ export default defineMessages({
   "shell.strip.pending": ["{count} pending", "{count} en attente"],
   "shell.strip.errorsTitle": ["Agents crashed or whose last turn failed", "Agents plantés ou dont le dernier tour a échoué"],
   "shell.strip.errors_one": ["{count} error", "{count} erreur"],
+  "shell.strip.accountTitle": ["Claude account of new sessions ({dir})", "Compte Claude des nouvelles sessions ({dir})"],
   "shell.strip.errors_other": ["{count} errors", "{count} erreurs"],
   "right.resize": ["Resize the right panel", "Redimensionner le panneau de droite"],
   "right.back": ["Back to the Central agent", "Retour à l’agent Central"],

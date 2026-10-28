@@ -62,9 +62,18 @@ pub fn save_app_settings(state: State<'_, AppState>, settings: AppSettings) -> C
             return Err(Error::invalid(format!("{p} does not exist")));
         }
     }
+    if let Some(a) = settings.claude_account.as_deref().filter(|a| pcc_claude::account::account(a).is_none()) {
+        return Err(Error::invalid(format!("unknown Claude account `{a}`")));
+    }
     std::fs::write(state.app_settings_file(), serde_json::to_string_pretty(&settings)?)?;
     AppState::apply_app_settings(&settings);
     Ok(settings)
+}
+
+/// Claude Code account of new sessions and the available ones.
+#[tauri::command]
+pub fn claude_account() -> pcc_claude::account::AccountStatus {
+    pcc_claude::account::status()
 }
 
 // ---------------------------------------------------------------- Claude environment
@@ -562,6 +571,9 @@ pub async fn pty_spawn(app: AppHandle, state: State<'_, AppState>, request: Term
                 .claude_session_id
                 .clone()
                 .ok_or_else(|| Error::invalid(format!("{} has no Claude session yet", a.name)))?;
+            if let Err(e) = pcc_claude::account::prepare_resume(&session) {
+                tracing::warn!("cannot bring session {session} into the active Claude account: {e}");
+            }
             (
                 format!("Claude Code · {}", a.name),
                 claude_exe()?,

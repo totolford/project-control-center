@@ -188,6 +188,7 @@ pub fn run() {
             commands::reveal_path,
             control_commands::app_settings,
             control_commands::save_app_settings,
+            control_commands::claude_account,
             control_commands::claude_environment,
             control_commands::claude_command_tree,
             control_commands::run_claude_cli,
